@@ -282,17 +282,27 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .role-badge.guru { background: #d4edda; color: #155724; }
 .role-badge.siswa { background: var(--info-bg); color: var(--info-text); }
 
-/* SESI ROW - TABEL INPUT */
-.sesi-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-.sesi-table th, .sesi-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); font-size: 12px; }
-.sesi-table th { background: var(--primary-lighter); color: var(--primary); font-weight: bold; text-align: left; }
-.sesi-table input[type="time"] { width: 100px; padding: 5px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
-.sesi-table input[type="text"] { padding: 5px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
-.sesi-table .btn-remove { padding: 2px 8px; font-size: 14px; background: none; border: none; color: var(--danger); cursor: pointer; }
-.sesi-preview { background: var(--primary-lighter); padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; }
-.sesi-preview h5 { margin: 0 0 6px; color: var(--primary); font-size: 12px; }
-.sesi-preview ul { margin: 0; padding-left: 18px; }
-.sesi-preview li { margin-bottom: 3px; color: var(--text); }
+/* SESI - TABEL + PREVIEW */
+.sesi-preview-wrap {
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.sesi-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sesi-preview-table th { background: var(--primary-lighter); color: var(--primary); padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+.sesi-preview-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }
+.sesi-preview-table tr:last-child td { border-bottom: none; }
+.sesi-preview-table .btn-edit-sesi {
+  background: var(--warning); color: #333; border: none;
+  padding: 4px 10px; border-radius: 4px; font-size: 11px;
+  font-weight: 700; cursor: pointer; margin-right: 4px;
+}
+.sesi-preview-table .btn-hapus-sesi {
+  background: var(--danger); color: #fff; border: none;
+  padding: 4px 10px; border-radius: 4px; font-size: 11px;
+  font-weight: 700; cursor: pointer;
+}
 
 /* PENGATURAN TABS */
 .pengaturan-tabs {
@@ -628,14 +638,14 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <h4 style="margin-bottom:4px; color:var(--primary); font-size:13px;">Rekap Kehadiran Guru Hari Ini</h4>
         <div class="table-responsive">
           <table>
-            <thead id="theadDashGuru"><tr><th>No</th><th>Nama</th><th>Mapel</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
+            <thead id="theadDashGuru"><tr><th>No</th><th>Nama</th><th>Mapel</th><th>Jam Scan</th><th>Status</th></tr></thead>
             <tbody id="tableDashGuru"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
         <h4 style="margin-top:15px; margin-bottom:4px; color:var(--primary); font-size:13px;">Rekap Kehadiran Siswa Hari Ini</h4>
         <div class="table-responsive">
           <table>
-            <thead id="theadDashSiswa"><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
+            <thead id="theadDashSiswa"><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Jam Scan</th><th>Status</th></tr></thead>
             <tbody id="tableDashSiswa"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
@@ -770,8 +780,14 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="table-responsive">
         <p id="labelTotalHari" style="font-weight:bold; color:var(--primary); font-size:12px;"></p>
         <table id="tableRekap">
-          <thead><tr><th>ID</th><th>Nama</th><th>Unit</th><th>TW</th><th>TL</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>Hadir</th><th>%</th></tr></thead>
-          <tbody id="tableRekapBody"><tr><td colspan="10" style="text-align:center;">Pilih filter dan klik Tampilkan.</td></tr></tbody>
+          <thead>
+            <tr>
+              <th>ID</th><th>Nama</th><th>Unit</th>
+              <th>TW</th><th>TL</th><th>Izin</th><th>Sakit</th><th>Alpa</th><th>Bolos</th>
+              <th>Sesi Tercatat</th><th>Nilai Hadir</th><th>%</th>
+            </tr>
+          </thead>
+          <tbody id="tableRekapBody"><tr><td colspan="12" style="text-align:center;">Pilih filter dan klik Tampilkan.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -809,25 +825,64 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
       <!-- PANEL: SESI -->
       <div class="pengaturan-panel" id="panel-sesi">
-        <h4 class="panel-title">📋 Sesi Absensi & PIN</h4>
-        <div class="sesi-preview" id="sesiPreview"></div>
-        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-          <button class="btn-add" onclick="addSesiRow()">➕ Tambah Sesi</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px;" onclick="savePengaturan()">💾 Simpan</button>
+        <h4 class="panel-title">📋 Sesi Absensi</h4>
+
+        <div class="sesi-preview-wrap">
+          <div style="font-size:11px; font-weight:700; color:var(--primary); margin-bottom:6px;">
+            📊 Daftar Sesi Tersimpan
+          </div>
+          <div class="table-responsive" style="margin-top:0;">
+            <table class="sesi-preview-table">
+              <thead>
+                <tr>
+                  <th style="width:36px;">No</th>
+                  <th>Nama Sesi</th>
+                  <th>Mulai (TW)</th>
+                  <th>Batas TL</th>
+                  <th>Tutup</th>
+                  <th style="width:110px; text-align:center;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="sesiPreviewBody">
+                <tr><td colspan="6" style="text-align:center; color:var(--muted);">Memuat...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <table class="sesi-table" id="sesiTable">
-          <thead>
-            <tr>
-              <th style="width:30px;">No</th>
-              <th>Nama Sesi</th>
-              <th>Mulai (TW)</th>
-              <th>Batas TL</th>
-              <th>Tutup</th>
-              <th style="width:50px;">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="sesiTableBody"></tbody>
-        </table>
+
+        <div style="display:flex; gap:10px; margin:12px 0 14px; flex-wrap:wrap;">
+          <button class="btn-add" style="flex:1; min-width:140px;" onclick="openFormSesiBaru()">➕ Tambah Sesi</button>
+        </div>
+
+        <div id="formSesiWrap" style="display:none; background:var(--primary-lighter); padding:14px; border-radius:10px; border:1px solid var(--border); margin-bottom:12px;">
+          <div style="font-size:12px; font-weight:700; color:var(--primary); margin-bottom:10px;" id="formSesiTitle">
+            ➕ Tambah Sesi Baru
+          </div>
+          <input type="hidden" id="formSesiMode" value="add">
+          <input type="hidden" id="formSesiOriginal" value="">
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div class="form-group" style="flex:1; min-width:140px; margin-bottom:8px;">
+              <label style="font-size:11px;">Nama Sesi:</label>
+              <input type="text" id="formSesiNama" placeholder="Contoh: Sesi 1">
+            </div>
+            <div class="form-group" style="flex:1; min-width:120px; margin-bottom:8px;">
+              <label style="font-size:11px;">Mulai (TW):</label>
+              <input type="time" id="formSesiMulai">
+            </div>
+            <div class="form-group" style="flex:1; min-width:120px; margin-bottom:8px;">
+              <label style="font-size:11px;">Batas TL:</label>
+              <input type="time" id="formSesiBatas">
+            </div>
+            <div class="form-group" style="flex:1; min-width:120px; margin-bottom:8px;">
+              <label style="font-size:11px;">Tutup:</label>
+              <input type="time" id="formSesiTutup">
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button style="background:#6c757d; color:#fff; border:none; padding:8px 18px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="closeFormSesi()">Batal</button>
+            <button class="btn-primary" style="width:auto; padding:8px 22px;" onclick="submitFormSesi()">💾 Simpan Sesi</button>
+          </div>
+        </div>
       </div>
 
       <!-- PANEL: IZIN SIDIK JARI -->
@@ -856,7 +911,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           </div>
         </div>
         <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
-          Total user: <b id="totalAllowedUsers">0</b> (Guru + Siswa)
+          Total user: <b id="totalAllowedUsers">0</b>
         </div>
         <div class="table-responsive">
           <table>
@@ -872,7 +927,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="pengaturan-panel" id="panel-reset-fingerprint">
         <h4 class="panel-title">👆 Reset Sidik Jari</h4>
         <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
-          Pilih user yang akan direset data sidik jarinya. Setelah direset, user harus mendaftar ulang.
+          Pilih user yang akan direset data sidik jarinya.
         </p>
         <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-primary btn-sm" style="width:auto; padding:6px 14px;" onclick="loadResetFingerprintList()">🔄 Muat Ulang</button>
@@ -891,7 +946,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="pengaturan-panel" id="panel-reset-pin">
         <h4 class="panel-title">🔑 Reset PIN Guru</h4>
         <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
-          Reset PIN guru (akan dikosongkan). Guru tidak bisa login sampai PIN diisi ulang oleh Super Admin.
+          Reset PIN guru (akan dikosongkan).
         </p>
         <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-primary btn-sm" style="width:auto; padding:6px 14px;" onclick="loadResetPinList()">🔄 Muat Ulang</button>
@@ -968,12 +1023,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <h4 class="panel-title">📦 Manajemen Historis</h4>
         <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
           Data kehadiran <b>lama</b> (bukan hari ini) akan dipindahkan ke sheet <b>Historis</b>.
-          Data hari ini <b>TIDAK</b> dipindahkan agar tetap bisa diproses.
-          Trigger otomatis berjalan setiap hari jam 23:59.
+          Data hari ini <b>TIDAK</b> dipindahkan.
         </p>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Data Lama</button>
-          <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger Otomatis 23:59</button>
+          <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="jalankanAutoAbsenManual()">⚡ Jalankan Auto Absen Sekarang</button>
+          <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger 23:59</button>
         </div>
         <div id="historisInfo" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
       </div>
@@ -1057,9 +1112,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; By M TAUPIK</div>
 
-<script>
+<!-- ============================================== -->
+<!-- SCRIPT JAVASCRIPT DIMULAI DI BAGIAN 2 -->
+<!-- ============================================== -->
+  <script>
 // ================= KONFIGURASI =================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwv5yfliTwcgk1XFuD1LWnvsz7vN3cWMg2-fNnyDMJIPZ9IMyzTG0wwSPAUG30sa3mvNQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyuvmYSRnsa95PN7HSUqgSVecJDYmTmItkMDwBSqgmee1VJb84R2CoV_P_yDRYYuYkOog/exec";
 const MAX_RETRY = 3;
 
 // ================= DOM HELPERS =================
@@ -1093,7 +1151,8 @@ let activePengaturanPanel = null;
 let resetFingerprintData = [];
 let resetPinData = [];
 let pinGuruData = [];
-let lastScanTime = 0; // anti-spam scan
+let lastScanTime = 0;
+let sesiDataCache = [];
 
 // ================= SEND REQUEST =================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1140,12 +1199,13 @@ function showScanPopup(type, title, message) { showBigPopup(type, title, message
 
 // ================= PROFILE DROPDOWN =================
 function toggleProfileDropdown(e) {
-  e.stopPropagation();
+  if (e) e.stopPropagation();
   const dd = $('profileDropdown');
   dd.classList.toggle('show');
 }
 function closeProfileDropdown() {
-  $('profileDropdown')?.classList.remove('show');
+  const dd = $('profileDropdown');
+  if (dd) dd.classList.remove('show');
 }
 document.addEventListener('click', (e) => {
   const wrapper = document.querySelector('.profile-dropdown-wrapper');
@@ -1159,7 +1219,6 @@ preloadPinConfig();
 startRealtimeDashboard();
 loadOpsiKelas();
 updateTopbarUserInfo();
-updateProfileDropdown();
 sendRequest({ action: 'get_pengaturan' }, res => {
   if (res.status !== 'success') showBigPopup("warning", "Koneksi", "Gagal terhubung ke server.");
 });
@@ -1231,7 +1290,7 @@ function updateProfileDropdown() {
   const pdLoginSiswaBtn = $('pdLoginSiswaBtn');
   const pdLogoutBtn = $('pdLogoutBtn');
   const pdDivider = $('pdDivider');
-  
+
   if (siswaUserData) {
     pdName.innerText = siswaUserData.nama || 'Siswa';
     pdRole.innerText = 'Siswa';
@@ -1523,6 +1582,7 @@ function updateDashboardTables(guruList, siswaList, sesiList) {
   const render = (theadId, tbodyId, list, extraKey) => {
     const thead = $(theadId);
     const tbody = $(tbodyId);
+    if (!thead || !tbody) return;
     if (sesiNames.length > 0) {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th>${sesiNames.map(s => `<th>${s}</th>`).join('')}</tr>`;
     } else {
@@ -1647,7 +1707,8 @@ function switchMenu(menuName, el) {
   $$('.sidebar .nav-item').forEach(b => b.classList.remove('active'));
   $$('.section').forEach(s => s.classList.remove('active'));
   if (el) el.classList.add('active');
-  $(`menu-${menuName}`)?.classList.add('active');
+  const target = $(`menu-${menuName}`);
+  if (target) target.classList.add('active');
   if (menuName === 'scanner') setupScannerView();
   if (menuName === 'rekap') loadOpsiKelas();
   if (menuName === 'pengaturan') {
@@ -1680,6 +1741,7 @@ function toggleCamera() {
 function startCamera() {
   if (html5QrcodeScanner) {
     try { html5QrcodeScanner.clear(); } catch(e) {}
+    html5QrcodeScanner = null;
   }
   html5QrcodeScanner = new Html5Qrcode("reader");
   html5QrcodeScanner.start(
@@ -1717,7 +1779,6 @@ function stopCamera() {
   }
 }
 function onScanSuccess(code, sesiTarget) {
-  // Anti-spam: minimal 2.5 detik antar scan
   const now = Date.now();
   if (isProcessing) return;
   if (now - lastScanTime < 2500) return;
@@ -1757,7 +1818,7 @@ function cariKehadiran() {
   });
 }
 
-// ================= REKAP =================
+// ================= REKAP (PER SESI) =================
 function loadOpsiKelas() {
   sendRequest({ action: 'get_kelas' }, res => {
     if (res.status !== 'success') return;
@@ -1771,9 +1832,26 @@ function loadRekap() {
     tglMulai: $('rekapTglMulai').value, tglSelesai: $('rekapTglSelesai').value
   }, res => {
     const tbody = $('tableRekapBody');
-    setText('labelTotalHari', `Total Hari: ${res.totalHari} Hari`);
-    if (!res.data || !res.data.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Tidak ada data.</td></tr>'; return; }
-    tbody.innerHTML = res.data.map(s => `<tr><td>${s.id}</td><td>${s.nama}</td><td>${s.unit}</td><td>${s.tw}</td><td>${s.tl}</td><td>${s.izin}</td><td>${s.sakit}</td><td>${s.alpa}</td><td>${s.totalHadir}</td><td>${s.persentase}%</td></tr>`).join('');
+    setText('labelTotalHari', `Total: ${res.totalHari} Hari • ${res.jumlahSesiPerHari} Sesi/Hari • ${res.totalSesiEfektif} Sesi Efektif`);
+    if (!res.data || !res.data.length) {
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Tidak ada data.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = res.data.map(s => `
+      <tr>
+        <td>${s.id}</td>
+        <td>${s.nama}</td>
+        <td>${s.unit}</td>
+        <td>${s.tw}</td>
+        <td>${s.tl}</td>
+        <td>${s.izin}</td>
+        <td>${s.sakit}</td>
+        <td>${s.alpa}</td>
+        <td>${s.bolos}</td>
+        <td><b>${s.totalSesiTercatat}</b></td>
+        <td><b>${s.nilaiHadir}</b></td>
+        <td><b>${s.persentase}%</b></td>
+      </tr>`).join('');
   });
 }
 function toggleRekapFilter() {
@@ -1828,18 +1906,42 @@ function renderSyaratResult(d) {
         <div class="syarat-kelas">Kelas ${d.kelas} • NISN ${d.nisn}</div>
         <div class="syarat-periode">📅 ${formatTanggal(d.periodeMulai)} s/d ${formatTanggal(d.periodeAkhir)}</div>
       </div>
+
+      <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0;">
+          <span style="color:var(--text); font-weight:600;">📅 Jumlah Hari Sekolah</span>
+          <span style="color:var(--primary); font-weight:800;">${d.jumlahHariEfektif} hari</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0;">
+          <span style="color:var(--text); font-weight:600;">🕐 Jumlah Sesi per Hari</span>
+          <span style="color:var(--primary); font-weight:800;">${d.jumlahSesiPerHari} sesi</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-top:1px dashed var(--border); margin-top:4px; padding-top:6px;">
+          <span style="color:var(--text); font-weight:700;">🧮 Total Sesi Efektif</span>
+          <span style="color:var(--primary); font-weight:800;">${d.totalSesiEfektif} sesi</span>
+        </div>
+      </div>
+
       <ul class="syarat-list">
-        <li><span class="label">✅ Tepat Waktu (TW)</span><span class="value">${d.tw} hari</span></li>
-        <li><span class="label">⏰ Terlambat (TL)</span><span class="value">${d.tl} hari</span></li>
-        <li><span class="label">🤒 Sakit</span><span class="value">${d.sakit} hari</span></li>
-        <li><span class="label">📝 Izin</span><span class="value">${d.izin} hari</span></li>
-        <li><span class="label">❌ Alpa</span><span class="value">${d.alpa} hari</span></li>
-        <li><span class="label">🚫 Bolos</span><span class="value">${d.bolos} hari</span></li>
+        <li><span class="label">✅ Tepat Waktu (TW)</span><span class="value">${d.tw} sesi</span></li>
+        <li><span class="label">⏰ Terlambat (TL)</span><span class="value">${d.tl} sesi</span></li>
+        <li><span class="label">🤒 Sakit <small style="color:#28a745;">(hadir)</small></span><span class="value">${d.sakit} sesi</span></li>
+        <li><span class="label">📝 Izin <small style="color:#ff9800;">(0.5 hadir)</small></span><span class="value">${d.izin} sesi</span></li>
+        <li><span class="label">❌ Alpa <small style="color:#dc3545;">(tidak hadir)</small></span><span class="value">${d.alpa} sesi</span></li>
+        <li><span class="label">🚫 Bolos <small style="color:#dc3545;">(tidak hadir)</small></span><span class="value">${d.bolos} sesi</span></li>
+        <li style="background:#f8f9fa !important; border-top:2px solid var(--border); margin-top:6px; padding-top:10px;">
+          <span class="label" style="color:var(--primary); font-weight:800;">📊 Total Sesi Tercatat</span>
+          <span class="value" style="color:var(--primary); font-weight:800;">${d.totalSesiTercatat} sesi</span>
+        </li>
       </ul>
+
       <div class="syarat-total">
-        <div class="total-label">Persentase Kehadiran</div>
+        <div class="total-label">Persentase Kehadiran (Berbobot)</div>
         <div class="total-value">${d.persen}%</div>
-        <div class="total-sub">Hadir: ${d.totalHadir} dari ${d.totalHariEfektif} hari efektif • Batas minimal: ${d.batasPersen}%</div>
+        <div class="total-sub">
+          Nilai Hadir: <b>${d.nilaiHadir} sesi</b> dari <b>${d.totalSesiEfektif} sesi efektif</b><br>
+          Batas minimal: <b>${d.batasPersen}%</b>
+        </div>
       </div>
       <div class="syarat-status ${d.warna}">${statusIcon} ${statusText}</div>
       <div class="syarat-actions">
@@ -1903,103 +2005,130 @@ function togglePengaturanPanel(tab) {
   if (tab === 'izin') loadAllowedUsers();
 }
 
-// ================= PENGATURAN SESI (DIPERBAIKI - TABEL + PREVIEW) =================
+// ================= PENGATURAN SESI (TABEL TUNGGAL + EDIT/HAPUS) =================
 function renderSesiConfig(dataList) {
-  const tbody = $('sesiTableBody');
-  const preview = $('sesiPreview');
+  sesiDataCache = (dataList || []).filter(item =>
+    item.sesi && item.sesi.toLowerCase().startsWith('sesi')
+  );
+  renderSesiPreviewTable();
+}
+function renderSesiPreviewTable() {
+  const tbody = $('sesiPreviewBody');
   if (!tbody) return;
-  let sesiList = (dataList || []).filter(item => item.sesi && !item.sesi.startsWith('PIN_'));
-  if (!sesiList.length) {
-    sesiList = [
-      { sesi: 'Sesi 1', mulai: '07:00', batasTW: '07:15', tutup: '12:00' },
-      { sesi: 'Sesi 2', mulai: '12:00', batasTW: '12:15', tutup: '15:00' }
-    ];
+  if (!sesiDataCache.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Belum ada sesi. Klik "Tambah Sesi" untuk menambahkan.</td></tr>';
+    return;
   }
-  tbody.innerHTML = sesiList.map((item, index) => `
-    <tr class="sesi-row" data-index="${index}">
-      <td>${index + 1}.</td>
-      <td><input type="text" class="sesi-name-input" value="${item.sesi}" placeholder="Nama Sesi" style="width:100%;"></td>
-      <td><input type="time" class="sesi-mulai" value="${item.mulai}"></td>
-      <td><input type="time" class="sesi-batas" value="${item.batasTW}"></td>
-      <td><input type="time" class="sesi-tutup" value="${item.tutup}"></td>
-      <td style="text-align:center;"><button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button></td>
+  tbody.innerHTML = sesiDataCache.map((item, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td><b>${item.sesi}</b></td>
+      <td>${item.mulai || '-'}</td>
+      <td>${item.batasTW || '-'}</td>
+      <td>${item.tutup || '-'}</td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button class="btn-edit-sesi" onclick="editSesiByIndex(${idx})">✏️ Edit</button>
+        <button class="btn-hapus-sesi" onclick="hapusSesiByIndex(${idx})">🗑️ Hapus</button>
+      </td>
     </tr>
   `).join('');
-  renderSesiPreview();
 }
-function renderSesiPreview() {
-  const preview = $('sesiPreview');
-  if (!preview) return;
-  const rows = $$('#sesiTableBody .sesi-row');
-  if (!rows.length) { preview.innerHTML = '<em>Belum ada sesi.</em>'; return; }
-  let html = '<h5>📋 Preview Sesi:</h5><ul>';
-  rows.forEach((row, i) => {
-    const nama = row.querySelector('.sesi-name-input').value || `Sesi ${i+1}`;
-    const mulai = row.querySelector('.sesi-mulai').value || '--:--';
-    const batas = row.querySelector('.sesi-batas').value || '--:--';
-    const tutup = row.querySelector('.sesi-tutup').value || '--:--';
-    html += `<li><b>${nama}</b>: TW ${mulai} • TL batas ${batas} • Tutup ${tutup}</li>`;
-  });
-  html += '</ul>';
-  preview.innerHTML = html;
+function openFormSesiBaru() {
+  $('formSesiMode').value = 'add';
+  $('formSesiOriginal').value = '';
+  $('formSesiNama').value = `Sesi ${sesiDataCache.length + 1}`;
+  $('formSesiMulai').value = '07:00';
+  $('formSesiBatas').value = '07:15';
+  $('formSesiTutup').value = '12:00';
+  $('formSesiTitle').innerText = '➕ Tambah Sesi Baru';
+  $('formSesiWrap').style.display = 'block';
+  $('formSesiNama').focus();
 }
-function addSesiRow() {
-  const tbody = $('sesiTableBody');
-  const count = tbody.querySelectorAll('.sesi-row').length + 1;
-  const row = document.createElement('tr');
-  row.className = 'sesi-row';
-  row.innerHTML = `
-    <td>${count}.</td>
-    <td><input type="text" class="sesi-name-input" value="Sesi ${count}" placeholder="Nama Sesi" style="width:100%;"></td>
-    <td><input type="time" class="sesi-mulai" value="07:00"></td>
-    <td><input type="time" class="sesi-batas" value="07:15"></td>
-    <td><input type="time" class="sesi-tutup" value="12:00"></td>
-    <td style="text-align:center;"><button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button></td>
-  `;
-  tbody.appendChild(row);
-  updateSesiNumbers();
-  renderSesiPreview();
-  showBigPopup('success', 'Sesi Ditambahkan', `Sesi ${count} berhasil ditambahkan.`);
+function editSesiByIndex(idx) {
+  const item = sesiDataCache[idx];
+  if (!item) return;
+  $('formSesiMode').value = 'edit';
+  $('formSesiOriginal').value = item.sesi;
+  $('formSesiNama').value = item.sesi;
+  $('formSesiMulai').value = item.mulai || '';
+  $('formSesiBatas').value = item.batasTW || '';
+  $('formSesiTutup').value = item.tutup || '';
+  $('formSesiTitle').innerText = `✏️ Edit Sesi: ${item.sesi}`;
+  $('formSesiWrap').style.display = 'block';
 }
-function removeSesiRow(btn) {
-  const tbody = $('sesiTableBody');
-  if (tbody.querySelectorAll('.sesi-row').length <= 1) return showBigPopup('warning', 'Peringatan', 'Minimal harus ada 1 sesi!');
-  if (confirm('Hapus sesi ini?')) {
-    btn.closest('.sesi-row').remove();
-    updateSesiNumbers();
-    renderSesiPreview();
-    showBigPopup('success', 'Sesi Dihapus', 'Sesi berhasil dihapus.');
+function closeFormSesi() {
+  $('formSesiWrap').style.display = 'none';
+}
+function submitFormSesi() {
+  const mode = $('formSesiMode').value;
+  const original = $('formSesiOriginal').value.trim();
+  const nama = $('formSesiNama').value.trim();
+  const mulai = $('formSesiMulai').value;
+  const batas = $('formSesiBatas').value;
+  const tutup = $('formSesiTutup').value;
+
+  if (!nama) return showBigPopup('warning', 'Peringatan', 'Nama Sesi wajib diisi!');
+  if (!nama.toLowerCase().startsWith('sesi'))
+    return showBigPopup('warning', 'Peringatan', 'Nama sesi harus diawali "Sesi" (contoh: Sesi 1).');
+  if (!mulai || !batas || !tutup)
+    return showBigPopup('warning', 'Peringatan', 'Semua waktu wajib diisi!');
+  if (parseJamToMin(batas) < parseJamToMin(mulai))
+    return showBigPopup('warning', 'Peringatan', 'Batas TL tidak boleh lebih awal dari Mulai (TW).');
+  if (parseJamToMin(tutup) < parseJamToMin(batas))
+    return showBigPopup('warning', 'Peringatan', 'Tutup tidak boleh lebih awal dari Batas TL.');
+
+  const dup = sesiDataCache.find((s) =>
+    s.sesi.toLowerCase() === nama.toLowerCase() &&
+    !(mode === 'edit' && s.sesi === original)
+  );
+  if (dup) return showBigPopup('warning', 'Peringatan', `Nama sesi "${nama}" sudah ada!`);
+
+  let newConfig;
+  if (mode === 'edit') {
+    newConfig = sesiDataCache.map(s =>
+      s.sesi === original
+        ? { sesi: nama, mulai, batasTW: batas, tutup, alpa: 'Alpa' }
+        : { sesi: s.sesi, mulai: s.mulai, batasTW: s.batasTW, tutup: s.tutup, alpa: 'Alpa' }
+    );
+  } else {
+    newConfig = sesiDataCache.map(s => ({
+      sesi: s.sesi, mulai: s.mulai, batasTW: s.batasTW, tutup: s.tutup, alpa: 'Alpa'
+    }));
+    newConfig.push({ sesi: nama, mulai, batasTW: batas, tutup, alpa: 'Alpa' });
   }
+  newConfig.sort((a, b) => parseJamToMin(a.mulai) - parseJamToMin(b.mulai));
+  savePengaturanConfig(newConfig, mode === 'edit' ? 'Sesi berhasil diperbarui!' : 'Sesi berhasil ditambahkan!');
 }
-function updateSesiNumbers() {
-  $$('#sesiTableBody .sesi-row').forEach((row, index) => {
-    const td = row.querySelector('td:first-child');
-    if (td) td.textContent = (index + 1) + '.';
+function hapusSesiByIndex(idx) {
+  const item = sesiDataCache[idx];
+  if (!item) return;
+  if (sesiDataCache.length <= 1)
+    return showBigPopup('warning', 'Peringatan', 'Minimal harus ada 1 sesi!');
+  if (!confirm(`Yakin hapus "${item.sesi}"?`)) return;
+  const newConfig = sesiDataCache
+    .filter((_, i) => i !== idx)
+    .map(s => ({ sesi: s.sesi, mulai: s.mulai, batasTW: s.batasTW, tutup: s.tutup, alpa: 'Alpa' }));
+  savePengaturanConfig(newConfig, 'Sesi berhasil dihapus!');
+}
+function savePengaturanConfig(config, successMsg) {
+  showBigPopup('info', 'Menyimpan', 'Sedang menyimpan pengaturan sesi...');
+  sendRequest({ action: 'save_pengaturan', config }, res => {
+    if (res.status === 'success') {
+      showBigPopup('success', 'Berhasil', successMsg || res.message);
+      closeFormSesi();
+      loadPengaturanDataFromServer();
+      preloadPinConfig();
+    } else {
+      showBigPopup('danger', 'Gagal', res.message);
+    }
   });
 }
-function getSesiConfigFromUI() {
-  return Array.from($$('#sesiTableBody .sesi-row')).map(row => ({
-    sesi: row.querySelector('.sesi-name-input').value.trim() || 'Sesi',
-    mulai: row.querySelector('.sesi-mulai').value,
-    batasTW: row.querySelector('.sesi-batas').value,
-    tutup: row.querySelector('.sesi-tutup').value,
-    alpa: 'Alpa'
-  }));
-}
-// Preview update on input change
-document.addEventListener('input', (e) => {
-  if (e.target.closest('#sesiTableBody')) renderSesiPreview();
-});
 function loadPengaturanDataFromServer() {
   sendRequest({ action: 'get_pengaturan' }, res => {
-    if (res.status === 'success') { globalPengaturanData = res.data; renderSesiConfig(res.data); }
-  });
-}
-function savePengaturan() {
-  const config = getSesiConfigFromUI();
-  sendRequest({ action: 'save_pengaturan', config }, res => {
-    showBigPopup(res.status === 'success' ? 'success' : 'danger', "Info", res.message);
-    if (res.status === 'success') { globalPengaturanData = config; preloadPinConfig(); renderSesiPreview(); }
+    if (res.status === 'success') {
+      globalPengaturanData = res.data;
+      renderSesiConfig(res.data);
+    }
   });
 }
 
@@ -2316,6 +2445,14 @@ function moveToHistorisManual() {
     if (res.status === 'success') loadHistorisInfo();
   });
 }
+function jalankanAutoAbsenManual() {
+  if (!confirm('Proses auto absen akan menambahkan status Alpa/Bolos untuk sesi yang sudah tutup dan belum ada absen. Lanjutkan?')) return;
+  showBigPopup('info', 'Proses', 'Menjalankan auto absen...');
+  sendRequest({ action: 'manual_auto_absen' }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Auto Absen', res.message);
+    fetchDashboardData();
+  });
+}
 function setupTriggerHistoris() {
   if (!confirm('Pasang trigger otomatis untuk memindahkan data ke Historis setiap hari jam 23:59?')) return;
   showBigPopup('info', 'Proses', 'Sedang memasang trigger...');
@@ -2451,6 +2588,7 @@ function updateFingerprintUI() {
   const statusBadge = $('fingerprintStatusBadge');
   const btnAbsen = $('btnAbsenFingerprint');
   const btnRegister = $('btnRegisterFingerprint');
+  if (!statusBadge) return;
   if (fingerprintRegistered) {
     statusBadge.className = 'fingerprint-badge active';
     statusBadge.innerText = 'Terdaftar';
