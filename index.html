@@ -1117,7 +1117,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <!-- ============================================== -->
   <script>
 // ================= KONFIGURASI =================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxTPIOls-eMvO1AIth2KGQ2iZigXGXqknj_-0QNGqAOrXs4VE_w4oI6-I37E_SHv-hwIA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby37HtqR8btkXu9L77Xp4J8LUk7jZk8hq1O8TuknNdr71d5KNf4O_hDqioXMWyqZxPAZQ/exec";
 const MAX_RETRY = 3;
 
 // ================= DOM HELPERS =================
@@ -1806,42 +1806,72 @@ function stopCamera() {
     });
   }
 }
-
-    function onScanSuccess(code, sesiTarget) {
+function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
-  
-  // Anti-spam: minimal 3 detik antar scan
   if (isProcessing) return;
-  if (now - lastScanTime < 3000) return;
-  
-  // Validasi input
+  if (now - lastScanTime < 2500) return;
+
   if (!code || String(code).trim() === '') return;
   if (!sesiTarget || String(sesiTarget).trim() === '') {
-    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif saat ini.');
+    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif saat ini.', 1500);
     return;
   }
-  
+
   lastScanTime = now;
   isProcessing = true;
+
+  // === TAMPILKAN POPUP "MEMPROSES" INSTAN ===
+  showBigPopup('info', 'Memproses...', 
+    `⏳ Sedang memverifikasi <b>${String(code).trim()}</b>...`, 0);
   
+  // Sembunyikan tombol OK sementara
+  const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
+  if (popupBtn) popupBtn.style.display = 'none';
+  const popupIcon = $('bigPopupIcon');
+  if (popupIcon) popupIcon.innerText = '⏳';
+  const popupTitle = $('bigPopupTitle');
+  if (popupTitle) popupTitle.innerText = 'Memproses...';
+
+  // Kirim request ke server
   sendRequest(
     { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
-      // Guard: kalau response tidak valid, jangan crash
+      // === UPDATE POPUP DENGAN HASIL ===
       if (!res || typeof res !== 'object') {
-        showBigPopup('danger', 'Koneksi Error', 'Respons server tidak valid. Coba scan lagi.');
+        updatePopupResult('danger', 'Koneksi Error', 'Respons server tidak valid. Coba scan lagi.');
         isProcessing = false;
         return;
       }
-      const type = res.status === 'success' ? 'success' 
-                 : res.status === 'warning' ? 'warning' 
+      const type = res.status === 'success' ? 'success'
+                 : res.status === 'warning' ? 'warning'
                  : 'danger';
-      showBigPopup(type, "Hasil Scan", res.message || 'Terjadi kesalahan.');
-      setTimeout(() => { isProcessing = false; }, 3000);
+      updatePopupResult(type, 'Hasil Scan', res.message || 'Terjadi kesalahan.');
+      setTimeout(() => { isProcessing = false; }, 2000);
     }
   );
 }
 
+// Fungsi untuk update popup yang sudah terbuka
+function updatePopupResult(type, title, message) {
+  const box = $('bigPopupBox');
+  const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
+  
+  // Update class & warna sesuai tipe
+  box.className = 'modal-popup-box popup-' + type;
+  $('bigPopupIcon').innerText = POPUP_ICONS[type] || 'ℹ️';
+  $('bigPopupTitle').innerText = title;
+  $('bigPopupMessage').innerHTML = message;
+  
+  // Tampilkan tombol OK
+  if (popupBtn) popupBtn.style.display = 'inline-block';
+
+  // Auto-close untuk success/info
+  if (type === 'success' || type === 'info') {
+    if (popupTimeout) clearTimeout(popupTimeout);
+    popupTimeout = setTimeout(closeBigPopup, 2000);
+  }
+}
+    
 // ================= IZIN =================
 function simpanIzin() {
   const id = $('izinId').value;
