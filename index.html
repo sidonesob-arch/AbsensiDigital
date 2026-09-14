@@ -1117,7 +1117,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <!-- ============================================== -->
   <script>
 // ================= KONFIGURASI =================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyuvmYSRnsa95PN7HSUqgSVecJDYmTmItkMDwBSqgmee1VJb84R2CoV_P_yDRYYuYkOog/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbygIskQ4AiLiqKLLgdp8ArxQbBc0G5dlLTY7cygyTQyXlJTQjVnKP9vtQEoyoEcTGR64Q/exec";
 const MAX_RETRY = 3;
 
 // ================= DOM HELPERS =================
@@ -2552,26 +2552,54 @@ function loadFilterDaftarNilaiWithGuru() {
     });
   }
 }
+
 function loadDaftarNilaiData() {
   const mapel = $('filterDaftarNilaiMapel').value;
   const kelas = $('filterDaftarNilaiKelas').value;
-  const guru = $('guruNamaDisplayDaftar').innerText;
+  let guru = ($('guruNamaDisplayDaftar').innerText || '').trim();
+  if (['Admin', 'Administrator', 'Super Admin', '-', ''].includes(guru)) guru = '';
+
   sendRequest({ action: 'get_daftar_nilai', guru, mapel, kelas }, res => {
     const thead = $('tableDaftarNilaiHead');
     const tbody = $('tableDaftarNilaiBody');
+
     if (res.status === 'success' && res.data && res.data.length > 0) {
       const headers = res.headers || [];
-      thead.innerHTML = `<tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Guru</th><th>Mapel</th>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+      // Kolom: No, Nama, NH1..NHn, Rata-rata
+      thead.innerHTML = `<tr>
+        <th style="width:40px;">No</th>
+        <th>Nama Siswa</th>
+        ${headers.map(h => `<th style="text-align:center;">${h}</th>`).join('')}
+        <th style="text-align:center; background:#fef3c7;">Rata-rata</th>
+      </tr>`;
+
       tbody.innerHTML = res.data.map((item, idx) => {
-        const nilaiCells = headers.map((_, hIdx) => `<td>${item.nilaiList[hIdx] !== undefined ? item.nilaiList[hIdx] : ''}</td>`).join('');
-        return `<tr><td>${idx + 1}</td><td>${item.nisn}</td><td><b>${item.nama}</b></td><td>${item.kelas}</td><td>${item.guru}</td><td>${item.mapel}</td>${nilaiCells}</tr>`;
+        const nilaiCells = headers.map((_, hIdx) => {
+          const v = item.nilaiList[hIdx];
+          return `<td style="text-align:center;">${v !== undefined ? v : '-'}</td>`;
+        }).join('');
+        return `<tr>
+          <td>${idx + 1}</td>
+          <td><b>${item.nama}</b></td>
+          ${nilaiCells}
+          <td style="text-align:center; font-weight:800; color:var(--primary); background:#fffbeb;">${item.rataRata || '0.00'}</td>
+        </tr>`;
       }).join('');
     } else {
-      thead.innerHTML = '<tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Guru</th><th>Mapel</th></tr>';
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data nilai.</td></tr>';
+      // Fallback aman: cek res.debug dulu sebelum diakses
+      const dbg = (res && res.debug) ? res.debug : {};
+      let pesan = 'Belum ada data nilai untuk filter ini.';
+      if (dbg.totalDiperiksa !== undefined) {
+        pesan = `Tidak ada nilai yang cocok dengan filter.<br>
+        <small>Total baris diperiksa: <b>${dbg.totalDiperiksa}</b> • Cocok: <b>${dbg.totalCocok || 0}</b></small><br>
+        <small style="color:#666;">Filter → Guru: "<b>${dbg.filterGuru || '(kosong)'}</b>", Kelas: "<b>${dbg.filterKelas || '(kosong)'}</b>", Mapel: "<b>${dbg.filterMapel || '(kosong)'}</b>"</small>`;
+      }
+      thead.innerHTML = `<tr><th>No</th><th>Nama Siswa</th><th>NH1</th><th>Rata-rata</th></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:15px;">${pesan}</td></tr>`;
     }
   });
 }
+    
 function exportDaftarNilaiToExcel() {
   const wb = XLSX.utils.table_to_book($('tableDaftarNilaiResult'), { sheet: "Daftar Nilai" });
   XLSX.writeFile(wb, "Daftar_Nilai_Siswa.xlsx");
