@@ -7,6 +7,10 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+  const ASSETS_BASE_URL = './assets/';
+  const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
+</script>
 <style>
 :root {
   --primary: #05285e;
@@ -45,9 +49,12 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .topbar-center { text-align: center; flex: 1; min-width: 0; }
 .topbar-title { font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-clock { font-size: 10px; color: #b2ccf3; font-weight: 500; margin-top: 1px; letter-spacing: 0.3px; }
-.topbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.topbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; }
+
+/* PROFILE DROPDOWN */
+.profile-dropdown-wrapper { position: relative; }
 .profile-avatar {
-  height: 32px; width: 32px; border-radius: 50%;
+  height: 36px; width: 36px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.3);
   background: var(--primary-hover); display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: bold; color: #fff; text-transform: uppercase;
@@ -63,6 +70,40 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .avatar-bg-9 { background: #e84393; } .avatar-bg-10 { background: #00b894; }
 .avatar-bg-admin { background: #e74c3c; }
 .avatar-bg-super { background: #f1c40f; color: #2c3e50; }
+
+.profile-dropdown {
+  position: absolute; top: 45px; right: 0;
+  background: #fff; border-radius: 10px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+  min-width: 230px; padding: 0;
+  display: none; z-index: 2000;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.profile-dropdown.show { display: block; animation: dropdownIn 0.2s ease-out; }
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.profile-dropdown-header {
+  background: linear-gradient(135deg, var(--primary) 0%, #0a3a7a 100%);
+  padding: 14px 16px; color: #fff;
+}
+.profile-dropdown-header .pd-name { font-size: 13px; font-weight: 700; }
+.profile-dropdown-header .pd-role { font-size: 10px; color: #b2ccf3; margin-top: 2px; }
+.profile-dropdown-header .pd-id { font-size: 10px; color: #8fa8d4; margin-top: 1px; }
+.profile-dropdown-menu { padding: 6px 0; }
+.profile-dropdown-item {
+  padding: 10px 16px; font-size: 12px; font-weight: 600;
+  color: var(--text); cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  transition: background 0.15s;
+}
+.profile-dropdown-item:hover { background: var(--primary-lighter); color: var(--primary); }
+.profile-dropdown-item.danger { color: var(--danger); }
+.profile-dropdown-item.danger:hover { background: #fde8ea; }
+.profile-dropdown-divider { height: 1px; background: var(--border-light); margin: 4px 0; }
+
 .topbar-user {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 2px 0 3px; border-top: 1px solid rgba(255,255,255,0.08);
@@ -80,9 +121,10 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
   .sidebar-toggle-btn { font-size: 18px; }
   .topbar-title { font-size: 10px; }
   .topbar-clock { font-size: 9px; }
-  .profile-avatar { height: 28px; width: 28px; font-size: 10px; }
+  .profile-avatar { height: 30px; width: 30px; font-size: 10px; }
   .topbar-user .user-name-display { font-size: 10px; max-width: 120px; }
   .topbar-user .user-role-display { font-size: 8px; padding: 1px 8px; }
+  .profile-dropdown { min-width: 200px; right: -5px; }
 }
 @media (max-width: 400px) {
   .topbar-user .user-name-display { max-width: 80px; }
@@ -109,7 +151,7 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .section.active { display: block; }
 .footer { position: fixed; bottom: 0; left: 0; width: 100%; height: 40px; background: var(--primary); border-top: 1px solid var(--primary-border); display: flex; justify-content: center; align-items: center; font-size: 11px; color: #d0dbe8; z-index: 999; font-weight: 500; }
 
-/* MODAL POPUP BESAR (Ganti scanPopup) */
+/* MODAL POPUP */
 .modal-popup {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
@@ -240,20 +282,19 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .role-badge.guru { background: #d4edda; color: #155724; }
 .role-badge.siswa { background: var(--info-bg); color: var(--info-text); }
 
-/* SESI ROW */
-.sesi-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap; }
-.sesi-row .sesi-number { font-size: 12px; color: var(--muted); min-width: 20px; }
-.sesi-row input, .sesi-row select { padding: 5px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
-.sesi-row input[type="time"] { width: 100px; }
-.sesi-row select { width: 80px; }
-.sesi-row .btn-remove { padding: 2px 8px; font-size: 14px; background: none; border: none; color: var(--danger); cursor: pointer; }
-.sesi-row .sesi-name-input { width: 80px; font-weight: 600; }
-@media (max-width: 600px) {
-  .sesi-row input[type="time"] { width: 80px; }
-  .sesi-row .sesi-name-input { width: 70px; }
-}
+/* SESI ROW - TABEL INPUT */
+.sesi-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.sesi-table th, .sesi-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+.sesi-table th { background: var(--primary-lighter); color: var(--primary); font-weight: bold; text-align: left; }
+.sesi-table input[type="time"] { width: 100px; padding: 5px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
+.sesi-table input[type="text"] { padding: 5px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
+.sesi-table .btn-remove { padding: 2px 8px; font-size: 14px; background: none; border: none; color: var(--danger); cursor: pointer; }
+.sesi-preview { background: var(--primary-lighter); padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; }
+.sesi-preview h5 { margin: 0 0 6px; color: var(--primary); font-size: 12px; }
+.sesi-preview ul { margin: 0; padding-left: 18px; }
+.sesi-preview li { margin-bottom: 3px; color: var(--text); }
 
-/* PENGATURAN - TOGGLE FORM */
+/* PENGATURAN TABS */
 .pengaturan-tabs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -455,8 +496,23 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="topbar-clock" id="topbarClock">Memuat Waktu...</div>
     </div>
     <div class="topbar-right">
-      <div class="profile-avatar" id="topbarAvatar" onclick="toggleSidebar()">
-        <span class="avatar-initials" id="avatarText">👤</span>
+      <div class="profile-dropdown-wrapper">
+        <div class="profile-avatar" id="topbarAvatar" onclick="toggleProfileDropdown(event)">
+          <span class="avatar-initials" id="avatarText">👤</span>
+        </div>
+        <div class="profile-dropdown" id="profileDropdown">
+          <div class="profile-dropdown-header">
+            <div class="pd-name" id="pdName">Tamu</div>
+            <div class="pd-role" id="pdRole">Belum Login</div>
+            <div class="pd-id" id="pdId"></div>
+          </div>
+          <div class="profile-dropdown-menu">
+            <div class="profile-dropdown-item" id="pdLoginBtn" onclick="openLoginModal()">🔑 Login Sistem</div>
+            <div class="profile-dropdown-item" id="pdLoginSiswaBtn" onclick="openLoginSiswaModal()">👤 Login Siswa</div>
+            <div class="profile-dropdown-divider" id="pdDivider" style="display:none;"></div>
+            <div class="profile-dropdown-item danger" id="pdLogoutBtn" onclick="logoutSession()" style="display:none;">🚪 Keluar</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -511,12 +567,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
     <div class="nav-category">ORANG TUA / TAMU</div>
     <a class="nav-item" onclick="switchMenu('cari', this)">🔍 Cari Data Siswa</a>
-    <a class="nav-item" id="nav-login-siswa" onclick="openLoginSiswaModal()">👤 Login Siswa</a>
     <a class="nav-item" id="nav-siswa-fingerprint" onclick="switchMenu('siswa-fingerprint', this)">👆 Sidik Jari Siswa</a>
     <a class="nav-item" id="nav-cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
 
     <div class="nav-category">MENU UTAMA</div>
-    <a class="nav-item" id="nav-login" onclick="openLoginModal()">🔑 Login Sistem</a>
     <a class="nav-item locked" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
     <a class="nav-item locked" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
     <a class="nav-item locked" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
@@ -527,8 +581,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item locked" id="nav-input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
     <a class="nav-item locked" id="nav-daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
     <a class="nav-item locked" id="nav-kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
-
-    <a class="nav-item" id="nav-logout" style="display:none; color:#ff8a8a; margin-top:15px;" onclick="logoutSession()">🚪 Keluar</a>
   </div>
 
   <div class="content-container" id="appContent">
@@ -576,14 +628,14 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <h4 style="margin-bottom:4px; color:var(--primary); font-size:13px;">Rekap Kehadiran Guru Hari Ini</h4>
         <div class="table-responsive">
           <table>
-            <thead><tr><th>No</th><th>Nama</th><th>Mapel</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
+            <thead id="theadDashGuru"><tr><th>No</th><th>Nama</th><th>Mapel</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
             <tbody id="tableDashGuru"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
         <h4 style="margin-top:15px; margin-bottom:4px; color:var(--primary); font-size:13px;">Rekap Kehadiran Siswa Hari Ini</h4>
         <div class="table-responsive">
           <table>
-            <thead><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
+            <thead id="theadDashSiswa"><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Jam Scan</th><th>Sesi</th><th>Status</th></tr></thead>
             <tbody id="tableDashSiswa"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
@@ -724,17 +776,16 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
-    <!-- PENGATURAN (TATA LETAK BARU - TOGGLE) -->
+    <!-- PENGATURAN -->
     <div id="menu-pengaturan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⚙️ Pengaturan</h3>
 
-      <!-- TOMBOL TOGGLE -->
       <div class="pengaturan-tabs">
         <button class="pengaturan-tab-btn" data-tab="sesi" onclick="togglePengaturanPanel('sesi')">
           <span class="tab-icon">📋</span>Sesi Absensi
         </button>
         <button class="pengaturan-tab-btn" data-tab="izin" onclick="togglePengaturanPanel('izin')">
-          <span class="tab-icon">📝</span>Izin / Sakit
+          <span class="tab-icon">👆</span>Izin Sidik Jari
         </button>
         <button class="pengaturan-tab-btn" data-tab="reset-fingerprint" onclick="togglePengaturanPanel('reset-fingerprint')">
           <span class="tab-icon">👆</span>Reset Sidik Jari
@@ -759,16 +810,29 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <!-- PANEL: SESI -->
       <div class="pengaturan-panel" id="panel-sesi">
         <h4 class="panel-title">📋 Sesi Absensi & PIN</h4>
+        <div class="sesi-preview" id="sesiPreview"></div>
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-add" onclick="addSesiRow()">➕ Tambah Sesi</button>
           <button class="btn-primary" style="width:auto; padding:6px 16px;" onclick="savePengaturan()">💾 Simpan</button>
         </div>
-        <div id="sesiConfigContainer"></div>
+        <table class="sesi-table" id="sesiTable">
+          <thead>
+            <tr>
+              <th style="width:30px;">No</th>
+              <th>Nama Sesi</th>
+              <th>Mulai (TW)</th>
+              <th>Batas TL</th>
+              <th>Tutup</th>
+              <th style="width:50px;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sesiTableBody"></tbody>
+        </table>
       </div>
 
-      <!-- PANEL: IZIN / SAKIT (dulu ada di form) -->
+      <!-- PANEL: IZIN SIDIK JARI -->
       <div class="pengaturan-panel" id="panel-izin">
-        <h4 class="panel-title">📝 Pengaturan Izin / Sakit</h4>
+        <h4 class="panel-title">👆 Izin Sidik Jari</h4>
         <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
           Pengaturan user yang diizinkan melakukan absensi sidik jari.
         </p>
@@ -790,6 +854,9 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             <label style="font-size:11px;">Cari:</label>
             <input type="text" id="searchAllowedUser" placeholder="Cari nama atau ID..." oninput="loadAllowedUsers()">
           </div>
+        </div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+          Total user: <b id="totalAllowedUsers">0</b> (Guru + Siswa)
         </div>
         <div class="table-responsive">
           <table>
@@ -900,11 +967,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="pengaturan-panel" id="panel-historis">
         <h4 class="panel-title">📦 Manajemen Historis</h4>
         <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">
-          Data kehadiran otomatis dipindahkan ke sheet <b>Historis</b> setiap hari jam 23:59.
-          Gunakan tombol di bawah untuk memindahkan manual atau memasang trigger otomatis.
+          Data kehadiran <b>lama</b> (bukan hari ini) akan dipindahkan ke sheet <b>Historis</b>.
+          Data hari ini <b>TIDAK</b> dipindahkan agar tetap bisa diproses.
+          Trigger otomatis berjalan setiap hari jam 23:59.
         </p>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Sekarang</button>
+          <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Data Lama</button>
           <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger Otomatis 23:59</button>
         </div>
         <div id="historisInfo" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
@@ -991,7 +1059,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <script>
 // ================= KONFIGURASI =================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbz_QHbJhTURvedc5lkxSnCoXLPrFolfH9vygN5J60ip9HwBHKl_WrLx3kKFZIB4f4g3bg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwv5yfliTwcgk1XFuD1LWnvsz7vN3cWMg2-fNnyDMJIPZ9IMyzTG0wwSPAUG30sa3mvNQ/exec";
 const MAX_RETRY = 3;
 
 // ================= DOM HELPERS =================
@@ -1025,6 +1093,7 @@ let activePengaturanPanel = null;
 let resetFingerprintData = [];
 let resetPinData = [];
 let pinGuruData = [];
+let lastScanTime = 0; // anti-spam scan
 
 // ================= SEND REQUEST =================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1038,7 +1107,7 @@ function sendRequest(payload, callback, retryCount = 0) {
   .catch(err => {
     console.error('Fetch error:', err);
     if (retryCount < MAX_RETRY) {
-      setTimeout(() => sendRequest(payload, callback, retryCount + 1), 2000 * (retryCount + 1));
+      setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500 * (retryCount + 1));
     } else {
       showBigPopup("danger", "Koneksi Error", "Gagal terhubung ke server! Error: " + err.message);
       callback({ status: "error", message: "Koneksi gagal: " + err.message });
@@ -1046,13 +1115,8 @@ function sendRequest(payload, callback, retryCount = 0) {
   });
 }
 
-// ================= BIG POPUP (MODAL TENGAH) =================
-const POPUP_ICONS = {
-  success: "✅",
-  warning: "⚠️",
-  danger: "❌",
-  info: "ℹ️"
-};
+// ================= BIG POPUP =================
+const POPUP_ICONS = { success: "✅", warning: "⚠️", danger: "❌", info: "ℹ️" };
 function showBigPopup(type, title, message, autoClose = null) {
   const popup = $('bigPopup');
   const box = $('bigPopupBox');
@@ -1063,7 +1127,7 @@ function showBigPopup(type, title, message, autoClose = null) {
   setText('bigPopupMessage', message);
   popup.classList.add('show');
   closeSidebar();
-  // Auto-close: success & info = 2 detik, warning & danger = tunggu klik OK
+  closeProfileDropdown();
   let delay = autoClose;
   if (delay === null) delay = (type === 'success' || type === 'info') ? 2000 : 0;
   if (delay > 0) popupTimeout = setTimeout(closeBigPopup, delay);
@@ -1072,8 +1136,21 @@ function closeBigPopup() {
   if (popupTimeout) { clearTimeout(popupTimeout); popupTimeout = null; }
   $('bigPopup').classList.remove('show');
 }
-// Alias agar semua panggilan showScanPopup lama tetap berfungsi
 function showScanPopup(type, title, message) { showBigPopup(type, title, message); }
+
+// ================= PROFILE DROPDOWN =================
+function toggleProfileDropdown(e) {
+  e.stopPropagation();
+  const dd = $('profileDropdown');
+  dd.classList.toggle('show');
+}
+function closeProfileDropdown() {
+  $('profileDropdown')?.classList.remove('show');
+}
+document.addEventListener('click', (e) => {
+  const wrapper = document.querySelector('.profile-dropdown-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) closeProfileDropdown();
+});
 
 // ================= INIT =================
 $('izinTanggal').value = new Date().toISOString().split('T')[0];
@@ -1082,6 +1159,7 @@ preloadPinConfig();
 startRealtimeDashboard();
 loadOpsiKelas();
 updateTopbarUserInfo();
+updateProfileDropdown();
 sendRequest({ action: 'get_pengaturan' }, res => {
   if (res.status !== 'success') showBigPopup("warning", "Koneksi", "Gagal terhubung ke server.");
 });
@@ -1144,6 +1222,53 @@ function updateProfileAvatar(name, nip, role) {
   } else setFallback();
 }
 
+// ================= PROFILE DROPDOWN UPDATE =================
+function updateProfileDropdown() {
+  const pdName = $('pdName');
+  const pdRole = $('pdRole');
+  const pdId = $('pdId');
+  const pdLoginBtn = $('pdLoginBtn');
+  const pdLoginSiswaBtn = $('pdLoginSiswaBtn');
+  const pdLogoutBtn = $('pdLogoutBtn');
+  const pdDivider = $('pdDivider');
+  
+  if (siswaUserData) {
+    pdName.innerText = siswaUserData.nama || 'Siswa';
+    pdRole.innerText = 'Siswa';
+    pdId.innerText = 'NISN: ' + (siswaUserData.nisn || '-');
+    pdLoginBtn.style.display = 'none';
+    pdLoginSiswaBtn.style.display = 'none';
+    pdLogoutBtn.style.display = 'flex';
+    pdDivider.style.display = 'block';
+    return;
+  }
+  if (userRole === 'tamu' || !userRole) {
+    pdName.innerText = 'Tamu';
+    pdRole.innerText = 'Belum Login';
+    pdId.innerText = '';
+    pdLoginBtn.style.display = 'flex';
+    pdLoginSiswaBtn.style.display = 'flex';
+    pdLogoutBtn.style.display = 'none';
+    pdDivider.style.display = 'none';
+    return;
+  }
+  const map = {
+    guru: { name: userData?.nama || 'Guru', role: 'Guru', id: 'NIP: ' + (userData?.nip || '-') },
+    admin: { name: 'Administrator', role: 'Admin', id: '' },
+    super_admin: { name: 'Super Admin', role: 'Super Admin', id: '' }
+  };
+  const info = map[userRole];
+  if (info) {
+    pdName.innerText = info.name;
+    pdRole.innerText = info.role;
+    pdId.innerText = info.id;
+    pdLoginBtn.style.display = 'none';
+    pdLoginSiswaBtn.style.display = 'none';
+    pdLogoutBtn.style.display = 'flex';
+    pdDivider.style.display = 'block';
+  }
+}
+
 // ================= TOPBAR USER INFO =================
 function updateTopbarUserInfo() {
   const nameEl = $('topbarUserName');
@@ -1153,6 +1278,7 @@ function updateTopbarUserInfo() {
     roleEl.innerText = 'Siswa';
     roleEl.className = 'user-role-display siswa';
     updateProfileAvatar(siswaUserData.nama, siswaUserData.nisn, 'siswa');
+    updateProfileDropdown();
     return;
   }
   if (userRole === 'tamu' || !userRole) {
@@ -1160,6 +1286,7 @@ function updateTopbarUserInfo() {
     roleEl.innerText = 'Tamu';
     roleEl.className = 'user-role-display';
     updateProfileAvatar(null, null, 'tamu');
+    updateProfileDropdown();
     return;
   }
   const map = {
@@ -1173,6 +1300,7 @@ function updateTopbarUserInfo() {
     roleEl.innerText = info.role;
     roleEl.className = `user-role-display ${info.cls}`;
     updateProfileAvatar(info.name, info.nip, userRole);
+    updateProfileDropdown();
   }
 }
 
@@ -1229,6 +1357,7 @@ function resetSiswaUI() {
 
 // ================= SISWA LOGIN =================
 function openLoginSiswaModal() {
+  closeProfileDropdown();
   if (siswaUserData) return showBigPopup('warning', 'Info', 'Anda sudah login sebagai siswa.');
   $('inputNISNModal').value = '';
   setText('modalSiswaInfo', 'Masukkan NISN Anda untuk login.');
@@ -1349,7 +1478,7 @@ function parseJamToMin(s) {
 function startRealtimeDashboard() {
   fetchDashboardData();
   if (dashboardTimer) clearInterval(dashboardTimer);
-  dashboardTimer = setInterval(fetchDashboardData, 10000);
+  dashboardTimer = setInterval(fetchDashboardData, 15000);
 }
 function fetchDashboardData() {
   sendRequest({ action: 'get_dashboard_data' }, res => {
@@ -1375,7 +1504,7 @@ function fetchDashboardData() {
     } else {
       containerTabel.style.display = 'block';
       pesanNonAktif.style.display = 'none';
-      updateDashboardTables(res.guruList, res.siswaList);
+      updateDashboardTables(res.guruList, res.siswaList, res.sesiList);
     }
     updateStatsUI(res.stats);
   });
@@ -1389,18 +1518,34 @@ function updateStatsUI(stats) {
     setText(id, stats[role]?.[key] || '0');
   });
 }
-function updateDashboardTables(guruList, siswaList) {
-  const render = (tbodyId, list, extraKey, cols) => {
+function updateDashboardTables(guruList, siswaList, sesiList) {
+  const sesiNames = sesiList || [];
+  const render = (theadId, tbodyId, list, extraKey) => {
+    const thead = $(theadId);
     const tbody = $(tbodyId);
-    if (!list || !list.length) { tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;">Tidak ada data.</td></tr>`; return; }
-    tbody.innerHTML = list.map((item, idx) => `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td>${item.sesi}</td><td><b>${item.status}</b></td></tr>`).join('');
+    if (sesiNames.length > 0) {
+      thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th>${sesiNames.map(s => `<th>${s}</th>`).join('')}</tr>`;
+    } else {
+      thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th><th>Status</th></tr>`;
+    }
+    if (!list || !list.length) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Tidak ada data.</td></tr>`; return; }
+    tbody.innerHTML = list.map((item, idx) => {
+      const statusArr = String(item.status || '').split(' / ');
+      if (sesiNames.length > 0) {
+        const sesiCells = sesiNames.map((_, i) => `<td><b>${statusArr[i] || '-'}</b></td>`).join('');
+        return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td>${sesiCells}</tr>`;
+      } else {
+        return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td><b>${item.status}</b></td></tr>`;
+      }
+    }).join('');
   };
-  render('tableDashGuru', guruList, 'mapel', 6);
-  render('tableDashSiswa', siswaList, 'kelas', 6);
+  render('theadDashGuru', 'tableDashGuru', guruList, 'mapel');
+  render('theadDashSiswa', 'tableDashSiswa', siswaList, 'kelas');
 }
 
 // ================= LOGIN GURU/ADMIN =================
 function openLoginModal() {
+  closeProfileDropdown();
   if (userRole !== 'tamu') return showBigPopup("warning", "Info", "Anda sudah login.");
   closeSidebar();
   $('inputPinModal').value = '';
@@ -1439,8 +1584,6 @@ function submitLogin() {
   });
 }
 function applyRoleAccessUI() {
-  $('nav-logout').style.display = 'block';
-  $('nav-login').style.display = 'none';
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isSuperAdmin = userRole === 'super_admin';
   ['nav-scanner','nav-izin','nav-rekap'].forEach(id => $(id)?.classList.remove('locked'));
@@ -1456,6 +1599,7 @@ function applyRoleAccessUI() {
 }
 function logoutSession() {
   closeSidebar();
+  closeProfileDropdown();
   if (isCameraOn) stopCamera();
   userRole = 'tamu';
   userData = null;
@@ -1463,10 +1607,8 @@ function logoutSession() {
   sessionStorage.removeItem('userSession');
   if (siswaUserData) logoutSiswaSession();
   $$('.sidebar .nav-item').forEach(b => {
-    if (b.id === 'nav-login') b.style.display = 'block';
-    else if (b.id !== 'nav-logout') b.classList.add('locked');
+    if (b.id !== 'nav-logout') b.classList.add('locked');
   });
-  $('nav-logout').style.display = 'none';
   setText('guruNamaDisplay', '-');
   setText('guruNamaDisplayDaftar', '-');
   updateTopbarUserInfo();
@@ -1477,7 +1619,14 @@ function logoutSession() {
 }
 function checkMenuAccess(menuName, el) {
   closeSidebar();
-  if (userRole === 'tamu') { pendingMenu = { name: menuName, el }; openLoginModal(); return; }
+  if (userRole === 'tamu') {
+    if (menuName === 'cari' || menuName === 'cek-syarat' || menuName === 'siswa-fingerprint') {
+      switchMenu(menuName, el);
+      return;
+    }
+    showBigPopup("warning", "Akses Ditolak", "Silakan Login Dulu untuk mengakses menu ini.");
+    return;
+  }
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isSuperAdmin = userRole === 'super_admin';
   if (menuName === 'pengaturan' && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
@@ -1493,7 +1642,8 @@ function checkMenuAccess(menuName, el) {
 // ================= SWITCH MENU =================
 function switchMenu(menuName, el) {
   closeSidebar();
-  if (isCameraOn) stopCamera();
+  closeProfileDropdown();
+  if (isCameraOn && menuName !== 'scanner') stopCamera();
   $$('.sidebar .nav-item').forEach(b => b.classList.remove('active'));
   $$('.section').forEach(s => s.classList.remove('active'));
   if (el) el.classList.add('active');
@@ -1512,7 +1662,7 @@ function switchMenu(menuName, el) {
   if (menuName === 'cek-syarat') loadCekSyarat();
 }
 
-// ================= SCANNER =================
+// ================= SCANNER (DIPERBAIKI) =================
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
   if (userRole === 'admin' || userRole === 'super_admin') adminSwitch.style.display = 'block';
@@ -1528,36 +1678,55 @@ function toggleCamera() {
   isCameraOn ? stopCamera() : startCamera();
 }
 function startCamera() {
+  if (html5QrcodeScanner) {
+    try { html5QrcodeScanner.clear(); } catch(e) {}
+  }
   html5QrcodeScanner = new Html5Qrcode("reader");
-  html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 220, height: 220 } },
+  html5QrcodeScanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
     code => onScanSuccess(code, currentActiveSesiName)
   ).then(() => {
     isCameraOn = true;
     const btn = $('btnCameraToggle');
     btn.innerText = "Tutup Kamera";
     btn.classList.add('off');
-    showBigPopup("success", "Kamera Ready", "Kamera aktif.");
-  }).catch(err => showBigPopup("danger", "Error Kamera", err));
+    showBigPopup("success", "Kamera Ready", "Kamera aktif. Arahkan ke barcode.");
+  }).catch(err => {
+    console.error('Camera error:', err);
+    showBigPopup("danger", "Error Kamera", "Gagal membuka kamera: " + err);
+  });
 }
 function stopCamera() {
   if (html5QrcodeScanner) {
     html5QrcodeScanner.stop().then(() => {
-      html5QrcodeScanner.clear();
+      try { html5QrcodeScanner.clear(); } catch(e) {}
+      html5QrcodeScanner = null;
       isCameraOn = false;
       const btn = $('btnCameraToggle');
       btn.innerText = "Buka Kamera";
       btn.classList.remove('off');
-      showBigPopup("warning", "Kamera Tutup", "Kamera dimatikan.");
+    }).catch(err => {
+      console.error('Stop camera error:', err);
+      html5QrcodeScanner = null;
+      isCameraOn = false;
+      const btn = $('btnCameraToggle');
+      btn.innerText = "Buka Kamera";
+      btn.classList.remove('off');
     });
   }
 }
 function onScanSuccess(code, sesiTarget) {
+  // Anti-spam: minimal 2.5 detik antar scan
+  const now = Date.now();
   if (isProcessing) return;
+  if (now - lastScanTime < 2500) return;
+  lastScanTime = now;
   isProcessing = true;
   sendRequest({ action: 'absen_qr', role: currentRole, code, sesi: sesiTarget }, res => {
     const type = res.status === 'success' ? 'success' : (res.status === 'warning' ? 'warning' : 'danger');
     showBigPopup(type, "Hasil Scan", res.message);
-    setTimeout(() => { isProcessing = false; }, 1800);
+    setTimeout(() => { isProcessing = false; }, 2500);
   });
 }
 
@@ -1715,99 +1884,112 @@ function togglePengaturanPanel(tab) {
   const buttons = $$('.pengaturan-tab-btn');
   const targetPanel = $(`panel-${tab}`);
   const targetBtn = document.querySelector(`.pengaturan-tab-btn[data-tab="${tab}"]`);
-  // Jika panel yang sama diklik lagi, tutup
   if (activePengaturanPanel === tab) {
     panels.forEach(p => p.classList.remove('open'));
     buttons.forEach(b => b.classList.remove('active'));
     activePengaturanPanel = null;
     return;
   }
-  // Tutup semua, buka target
   panels.forEach(p => p.classList.remove('open'));
   buttons.forEach(b => b.classList.remove('active'));
   targetPanel?.classList.add('open');
   targetBtn?.classList.add('active');
   activePengaturanPanel = tab;
-  // Auto-load data sesuai tab
   if (tab === 'reset-fingerprint') loadResetFingerprintList();
   if (tab === 'reset-pin') loadResetPinList();
   if (tab === 'pin-guru') loadPinGuruList();
   if (tab === 'seting-absen') loadSettingAbsen();
   if (tab === 'historis') loadHistorisInfo();
+  if (tab === 'izin') loadAllowedUsers();
 }
 
-// ================= PENGATURAN SESI =================
+// ================= PENGATURAN SESI (DIPERBAIKI - TABEL + PREVIEW) =================
 function renderSesiConfig(dataList) {
-  const container = $('sesiConfigContainer');
-  if (!container) return;
+  const tbody = $('sesiTableBody');
+  const preview = $('sesiPreview');
+  if (!tbody) return;
   let sesiList = (dataList || []).filter(item => item.sesi && !item.sesi.startsWith('PIN_'));
   if (!sesiList.length) {
     sesiList = [
-      { sesi: 'Sesi 1', mulai: '07:00', batasTW: '07:15', tutup: '12:00', alpa: 'Alpa' },
-      { sesi: 'Sesi 2', mulai: '12:00', batasTW: '12:15', tutup: '15:00', alpa: 'Alpa' }
+      { sesi: 'Sesi 1', mulai: '07:00', batasTW: '07:15', tutup: '12:00' },
+      { sesi: 'Sesi 2', mulai: '12:00', batasTW: '12:15', tutup: '15:00' }
     ];
   }
-  container.innerHTML = sesiList.map((item, index) => `
-    <div class="sesi-row" data-index="${index}">
-      <span class="sesi-number">${index + 1}.</span>
-      <input type="text" class="sesi-name-input" value="${item.sesi}" placeholder="Nama Sesi">
-      <input type="time" class="sesi-mulai" value="${item.mulai}">
-      <span style="font-size:11px; color:#666;">-</span>
-      <input type="time" class="sesi-batas" value="${item.batasTW}">
-      <span style="font-size:11px; color:#666;">|</span>
-      <input type="time" class="sesi-tutup" value="${item.tutup}">
-      <select class="sesi-alpa">
-        <option value="Alpa" ${item.alpa === 'Alpa' ? 'selected' : ''}>Alpa</option>
-        <option value="Bolos" ${item.alpa === 'Bolos' ? 'selected' : ''}>Bolos</option>
-      </select>
-      <button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button>
-    </div>
+  tbody.innerHTML = sesiList.map((item, index) => `
+    <tr class="sesi-row" data-index="${index}">
+      <td>${index + 1}.</td>
+      <td><input type="text" class="sesi-name-input" value="${item.sesi}" placeholder="Nama Sesi" style="width:100%;"></td>
+      <td><input type="time" class="sesi-mulai" value="${item.mulai}"></td>
+      <td><input type="time" class="sesi-batas" value="${item.batasTW}"></td>
+      <td><input type="time" class="sesi-tutup" value="${item.tutup}"></td>
+      <td style="text-align:center;"><button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button></td>
+    </tr>
   `).join('');
+  renderSesiPreview();
+}
+function renderSesiPreview() {
+  const preview = $('sesiPreview');
+  if (!preview) return;
+  const rows = $$('#sesiTableBody .sesi-row');
+  if (!rows.length) { preview.innerHTML = '<em>Belum ada sesi.</em>'; return; }
+  let html = '<h5>📋 Preview Sesi:</h5><ul>';
+  rows.forEach((row, i) => {
+    const nama = row.querySelector('.sesi-name-input').value || `Sesi ${i+1}`;
+    const mulai = row.querySelector('.sesi-mulai').value || '--:--';
+    const batas = row.querySelector('.sesi-batas').value || '--:--';
+    const tutup = row.querySelector('.sesi-tutup').value || '--:--';
+    html += `<li><b>${nama}</b>: TW ${mulai} • TL batas ${batas} • Tutup ${tutup}</li>`;
+  });
+  html += '</ul>';
+  preview.innerHTML = html;
 }
 function addSesiRow() {
-  const container = $('sesiConfigContainer');
-  const count = container.querySelectorAll('.sesi-row').length + 1;
-  const row = document.createElement('div');
+  const tbody = $('sesiTableBody');
+  const count = tbody.querySelectorAll('.sesi-row').length + 1;
+  const row = document.createElement('tr');
   row.className = 'sesi-row';
   row.innerHTML = `
-    <span class="sesi-number">${count}.</span>
-    <input type="text" class="sesi-name-input" value="Sesi ${count}" placeholder="Nama Sesi">
-    <input type="time" class="sesi-mulai" value="07:00">
-    <span style="font-size:11px; color:#666;">-</span>
-    <input type="time" class="sesi-batas" value="07:15">
-    <span style="font-size:11px; color:#666;">|</span>
-    <input type="time" class="sesi-tutup" value="12:00">
-    <select class="sesi-alpa"><option value="Alpa">Alpa</option><option value="Bolos">Bolos</option></select>
-    <button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button>
+    <td>${count}.</td>
+    <td><input type="text" class="sesi-name-input" value="Sesi ${count}" placeholder="Nama Sesi" style="width:100%;"></td>
+    <td><input type="time" class="sesi-mulai" value="07:00"></td>
+    <td><input type="time" class="sesi-batas" value="07:15"></td>
+    <td><input type="time" class="sesi-tutup" value="12:00"></td>
+    <td style="text-align:center;"><button class="btn-remove" onclick="removeSesiRow(this)" title="Hapus Sesi">✕</button></td>
   `;
-  container.appendChild(row);
+  tbody.appendChild(row);
   updateSesiNumbers();
+  renderSesiPreview();
   showBigPopup('success', 'Sesi Ditambahkan', `Sesi ${count} berhasil ditambahkan.`);
 }
 function removeSesiRow(btn) {
-  const container = $('sesiConfigContainer');
-  if (container.querySelectorAll('.sesi-row').length <= 1) return showBigPopup('warning', 'Peringatan', 'Minimal harus ada 1 sesi!');
+  const tbody = $('sesiTableBody');
+  if (tbody.querySelectorAll('.sesi-row').length <= 1) return showBigPopup('warning', 'Peringatan', 'Minimal harus ada 1 sesi!');
   if (confirm('Hapus sesi ini?')) {
     btn.closest('.sesi-row').remove();
     updateSesiNumbers();
+    renderSesiPreview();
     showBigPopup('success', 'Sesi Dihapus', 'Sesi berhasil dihapus.');
   }
 }
 function updateSesiNumbers() {
-  $$('#sesiConfigContainer .sesi-row').forEach((row, index) => {
-    const numSpan = row.querySelector('.sesi-number');
-    if (numSpan) numSpan.textContent = (index + 1) + '.';
+  $$('#sesiTableBody .sesi-row').forEach((row, index) => {
+    const td = row.querySelector('td:first-child');
+    if (td) td.textContent = (index + 1) + '.';
   });
 }
 function getSesiConfigFromUI() {
-  return Array.from($$('#sesiConfigContainer .sesi-row')).map(row => ({
+  return Array.from($$('#sesiTableBody .sesi-row')).map(row => ({
     sesi: row.querySelector('.sesi-name-input').value.trim() || 'Sesi',
     mulai: row.querySelector('.sesi-mulai').value,
     batasTW: row.querySelector('.sesi-batas').value,
     tutup: row.querySelector('.sesi-tutup').value,
-    alpa: row.querySelector('.sesi-alpa').value
+    alpa: 'Alpa'
   }));
 }
+// Preview update on input change
+document.addEventListener('input', (e) => {
+  if (e.target.closest('#sesiTableBody')) renderSesiPreview();
+});
 function loadPengaturanDataFromServer() {
   sendRequest({ action: 'get_pengaturan' }, res => {
     if (res.status === 'success') { globalPengaturanData = res.data; renderSesiConfig(res.data); }
@@ -1817,7 +1999,7 @@ function savePengaturan() {
   const config = getSesiConfigFromUI();
   sendRequest({ action: 'save_pengaturan', config }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', "Info", res.message);
-    if (res.status === 'success') { globalPengaturanData = config; preloadPinConfig(); }
+    if (res.status === 'success') { globalPengaturanData = config; preloadPinConfig(); renderSesiPreview(); }
   });
 }
 
@@ -1887,7 +2069,7 @@ function hapusHariLibur(rowIndex) {
   });
 }
 
-// ================= ALLOWED USERS =================
+// ================= ALLOWED USERS (IZIN SIDIK JARI) =================
 function loadAllowedUsers() {
   const filterRole = $('filterAllowedRole').value;
   const searchText = $('searchAllowedUser').value.toLowerCase().trim();
@@ -1895,6 +2077,7 @@ function loadAllowedUsers() {
     const tbody = $('tableAllowedUsersBody');
     if (!tbody) return;
     if (res.status === 'success' && res.data && res.data.length > 0) {
+      setText('totalAllowedUsers', res.data.length);
       let filtered = res.data;
       if (filterRole) filtered = filtered.filter(u => u.role === filterRole);
       if (searchText) filtered = filtered.filter(u => u.id.toLowerCase().includes(searchText) || u.nama.toLowerCase().includes(searchText));
@@ -1912,7 +2095,7 @@ function loadAllowedUsers() {
             <span class="switch-label ${isAllowed ? 'allowed' : 'denied'}">${isAllowed ? 'Diizinkan' : 'Ditolak'}</span>
           </td></tr>`;
       }).join('');
-    } else tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada data. Klik "Sinkronisasi" untuk memuat data.</td></tr>';
+    } else { setText('totalAllowedUsers', 0); tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada data. Klik "Sinkronisasi" untuk memuat data.</td></tr>'; }
   });
 }
 function updateAllowedUser(userId, allowed, checkboxElement) {
@@ -2123,11 +2306,11 @@ function simpanPinGuru(userId) {
 function loadHistorisInfo() {
   const el = $('historisInfo');
   if (!el) return;
-  el.innerHTML = 'Klik salah satu tombol di atas untuk memproses data.';
+  el.innerHTML = 'ℹ️ Data <b>hari ini</b> tidak akan dipindahkan. Hanya data lama yang dipindahkan ke sheet Historis.';
 }
 function moveToHistorisManual() {
-  if (!confirm('Pindahkan SEMUA data dari sheet Kehadiran ke sheet Historis sekarang?')) return;
-  showBigPopup('info', 'Proses', 'Sedang memindahkan data...');
+  if (!confirm('Pindahkan data LAMA (bukan hari ini) dari sheet Kehadiran ke sheet Historis?')) return;
+  showBigPopup('info', 'Proses', 'Sedang memindahkan data lama...');
   sendRequest({ action: 'move_to_historis' }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Pindah Historis', res.message);
     if (res.status === 'success') loadHistorisInfo();
@@ -2262,9 +2445,8 @@ function exportDaftarNilaiToPDF() {
   showBigPopup("success", "Export PDF", "Silakan pilih 'Save as PDF' pada dialog print.");
 }
 
-// ================= FINGERPRINT (GURU & SISWA) =================
+// ================= FINGERPRINT =================
 function isWebAuthnSupported() { return window.PublicKeyCredential !== undefined; }
-
 function updateFingerprintUI() {
   const statusBadge = $('fingerprintStatusBadge');
   const btnAbsen = $('btnAbsenFingerprint');
@@ -2294,7 +2476,6 @@ function checkFingerprintStatus() {
     }
   });
 }
-
 async function createWebAuthnCredential(userId, userName) {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
@@ -2445,4 +2626,3 @@ async function absenSiswaWithFingerprint() {
 </script>
 </body>
 </html>
-
