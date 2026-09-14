@@ -1117,7 +1117,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <!-- ============================================== -->
   <script>
 // ================= KONFIGURASI =================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbygIskQ4AiLiqKLLgdp8ArxQbBc0G5dlLTY7cygyTQyXlJTQjVnKP9vtQEoyoEcTGR64Q/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxTPIOls-eMvO1AIth2KGQ2iZigXGXqknj_-0QNGqAOrXs4VE_w4oI6-I37E_SHv-hwIA/exec";
 const MAX_RETRY = 3;
 
 // ================= DOM HELPERS =================
@@ -1156,13 +1156,42 @@ let sesiDataCache = [];
 
 // ================= SEND REQUEST =================
 function sendRequest(payload, callback, retryCount = 0) {
+  // Pastikan payload punya action
+  if (!payload || !payload.action) {
+    console.error('sendRequest: payload.action tidak ada!', payload);
+    callback({ status: 'error', message: 'Payload tidak valid.' });
+    return;
+  }
+
+  // Selalu POST dengan body JSON
   fetch(GAS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+    redirect: 'follow',
+    cache: 'no-store'
   })
-  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-  .then(res => callback(res))
+  .then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.text(); // ambil text dulu untuk antisipasi HTML response
+  })
+  .then(text => {
+    // Coba parse JSON
+    try {
+      const res = JSON.parse(text);
+      callback(res);
+    } catch (e) {
+      console.error('Response bukan JSON:', text.substring(0, 300));
+      // Kalau respon bukan JSON (kemungkinan HTML "Method GET tidak didukung")
+      // berarti GAS menerima request sebagai GET → retry dengan POST eksplisit
+      if (retryCount < MAX_RETRY) {
+        setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500);
+      } else {
+        showBigPopup('danger', 'Koneksi Error', 'Server tidak merespon dengan benar. Coba refresh halaman.');
+        callback({ status: 'error', message: 'Response tidak valid.' });
+      }
+    }
+  })
   .catch(err => {
     console.error('Fetch error:', err);
     if (retryCount < MAX_RETRY) {
@@ -1173,7 +1202,6 @@ function sendRequest(payload, callback, retryCount = 0) {
     }
   });
 }
-
 // ================= BIG POPUP =================
 const POPUP_ICONS = { success: "✅", warning: "⚠️", danger: "❌", info: "ℹ️" };
 function showBigPopup(type, title, message, autoClose = null) {
@@ -1778,17 +1806,40 @@ function stopCamera() {
     });
   }
 }
-function onScanSuccess(code, sesiTarget) {
+
+    function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
+  
+  // Anti-spam: minimal 3 detik antar scan
   if (isProcessing) return;
-  if (now - lastScanTime < 2500) return;
+  if (now - lastScanTime < 3000) return;
+  
+  // Validasi input
+  if (!code || String(code).trim() === '') return;
+  if (!sesiTarget || String(sesiTarget).trim() === '') {
+    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif saat ini.');
+    return;
+  }
+  
   lastScanTime = now;
   isProcessing = true;
-  sendRequest({ action: 'absen_qr', role: currentRole, code, sesi: sesiTarget }, res => {
-    const type = res.status === 'success' ? 'success' : (res.status === 'warning' ? 'warning' : 'danger');
-    showBigPopup(type, "Hasil Scan", res.message);
-    setTimeout(() => { isProcessing = false; }, 2500);
-  });
+  
+  sendRequest(
+    { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
+    res => {
+      // Guard: kalau response tidak valid, jangan crash
+      if (!res || typeof res !== 'object') {
+        showBigPopup('danger', 'Koneksi Error', 'Respons server tidak valid. Coba scan lagi.');
+        isProcessing = false;
+        return;
+      }
+      const type = res.status === 'success' ? 'success' 
+                 : res.status === 'warning' ? 'warning' 
+                 : 'danger';
+      showBigPopup(type, "Hasil Scan", res.message || 'Terjadi kesalahan.');
+      setTimeout(() => { isProcessing = false; }, 3000);
+    }
+  );
 }
 
 // ================= IZIN =================
