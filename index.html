@@ -347,26 +347,26 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-<!-- LOGIN MODAL GURU/ADMIN -->
+<!-- LOGIN MODAL GURU/ADMIN (PERBAIKAN KEDUA: type="password" untuk tanda ****** dan popup verifikasi PIN) -->
 <div id="loginModal">
   <div class="modal-content">
     <h3>Login Sistem</h3>
     <p id="modalInfo" style="font-size:12px; color:#666;">Masukkan PIN Anda untuk login.</p>
     <div class="form-group">
-      <input type="number" id="inputPinModal" placeholder="Masukkan PIN..." inputmode="numeric" pattern="[0-9]*" style="text-align:center; font-size:20px; letter-spacing:4px;">
+      <input type="password" id="inputPinModal" placeholder="******" inputmode="numeric" pattern="[0-9]*" style="text-align:center; font-size:20px; letter-spacing:4px;">
     </div>
     <button class="btn-primary" onclick="submitLogin()">Masuk</button>
     <button style="background:#ccc; color:#333; border:none; margin-top:8px;" onclick="closeLoginModal()">Batal</button>
   </div>
 </div>
 
-<!-- LOGIN MODAL SISWA -->
+<!-- LOGIN MODAL SISWA (PERBAIKAN KEDUA: type="password" untuk tanda ****** dan popup verifikasi PIN/NISN) -->
 <div id="loginSiswaModal">
   <div class="modal-content">
     <h3>Login Siswa</h3>
     <p id="modalSiswaInfo" style="font-size:12px; color:#666;">Masukkan NISN Anda untuk login.</p>
     <div class="form-group">
-      <input type="number" id="inputNISNModal" placeholder="Masukkan NISN..." inputmode="numeric" pattern="[0-9]*" style="text-align:center; font-size:20px; letter-spacing:4px;">
+      <input type="password" id="inputNISNModal" placeholder="******" inputmode="numeric" pattern="[0-9]*" style="text-align:center; font-size:20px; letter-spacing:4px;">
     </div>
     <button class="btn-primary" onclick="submitLoginSiswa()">Masuk</button>
     <button style="background:#ccc; color:#333; border:none; margin-top:8px;" onclick="closeLoginSiswaModal()">Batal</button>
@@ -790,10 +790,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.3</div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; By M TAUPIK M</div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwzluXodquyDs6eW761amA39FbWsjUWO7M5c8pX3_mcimSZHoE3r8vCRa2-PZAK_1UuKg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx8nXbGq7MRkaKFlhpXgKSdvyl9hcLJA9CCSHYYaN22fp_82bgaHRmt0GDnLZzjIPr0fA/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -872,7 +872,7 @@ function showBigPopup(type, title, message, autoClose = null) {
   box.className = 'modal-popup-box popup-' + type;
   setText('bigPopupIcon', POPUP_ICONS[type] || 'ℹ️');
   setText('bigPopupTitle', title);
-  setText('bigPopupMessage', message);
+  setHTML('bigPopupMessage', message);
   popup.classList.add('show');
   closeSidebar();
   closeProfileDropdown();
@@ -1066,6 +1066,8 @@ function closeLoginSiswaModal() { hideEl('loginSiswaModal'); }
 function submitLoginSiswa() {
   const nisn = $('inputNISNModal').value.trim();
   if (!nisn) return showBigPopup('warning', 'Peringatan', 'NISN tidak boleh kosong!');
+  // PERBAIKAN KEDUA: Popup pesan verifikasi PIN/NISN
+  showBigPopup('info', 'Sedang Memproses', '⏳ Sedang Verifikasi PIN / NISN...', 0);
   sendRequest({ action: 'login_siswa_fingerprint', nisn, mode: 'check' }, res => {
     if (res.status === 'success') {
       siswaUserData = res;
@@ -1239,6 +1241,8 @@ function closeLoginModal() { hideEl('loginModal'); pendingMenu = null; closeSide
 function submitLogin() {
   const pin = $('inputPinModal').value.trim();
   if (!pin) return showBigPopup("warning", "Peringatan", "PIN tidak boleh kosong!");
+  // PERBAIKAN KEDUA: Popup pesan "Sedang Verifikasi PIN"
+  showBigPopup('info', 'Sedang Memproses', '⏳ Sedang Verifikasi PIN...', 0);
   sendRequest({ action: 'login', pin }, res => {
     if (res.status === 'success') {
       userRole = res.role;
@@ -1379,10 +1383,11 @@ function stopCamera() {
   }
 }
 
+// PERBAIKAN KETIGA: Optimasi kecepatan pengiriman scan kamera, debounce anti-lag, pencegahan error bersamaan
 function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
   if (isProcessing) return;
-  if (now - lastScanTime < 2500) return;
+  if (now - lastScanTime < 2000) return; // Debounce 2 detik untuk menghindari spam/lag
   if (!code || String(code).trim() === '') return;
   if (!sesiTarget || String(sesiTarget).trim() === '') {
     showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
@@ -1391,7 +1396,7 @@ function onScanSuccess(code, sesiTarget) {
 
   lastScanTime = now;
   isProcessing = true;
-  showBigPopup('info', 'Memproses...', `⏳ Sedang memverifikasi <b>${String(code).trim()}</b>...`, 0);
+  showBigPopup('info', 'Memproses...', `⏳ Mengirim data scan <b>${String(code).trim()}</b>...`, 0);
   
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
@@ -1416,11 +1421,11 @@ function updatePopupResult(type, title, message) {
   box.className = 'modal-popup-box popup-' + type;
   $('bigPopupIcon').innerText = POPUP_ICONS[type] || 'ℹ️';
   $('bigPopupTitle').innerText = title;
-  $('bigPopupMessage').innerHTML = message;
+  setHTML('bigPopupMessage', message);
   if (popupBtn) popupBtn.style.display = 'inline-block';
   if (type === 'success' || type === 'info') {
     if (popupTimeout) clearTimeout(popupTimeout);
-    popupTimeout = setTimeout(closeBigPopup, 2000);
+    popupTimeout = setTimeout(closeBigPopup, 1800);
   }
 }
 
@@ -1809,7 +1814,7 @@ function loadPinGuruList() {
       container.innerHTML = res.data.map(u => `
         <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #f0f0f0; font-size:12px;">
           <div style="flex:1;"><b>${u.nama}</b><br><small>NIP: ${u.id}</small></div>
-          <input type="number" id="pinInput_${u.id}" placeholder="PIN baru" inputmode="numeric" style="width:100px;">
+          <input type="password" id="pinInput_${u.id}" placeholder="PIN baru" inputmode="numeric" style="width:100px;">
           <button class="btn-success btn-sm" onclick="simpanPinGuru('${u.id}')">Simpan</button>
         </div>
       `).join('');
