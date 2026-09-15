@@ -793,7 +793,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.3</div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbz8V5M6q04g-A52iSxjJ7kk5U3tkNh5uW-C5NJzzNbDaJpSf75luFqKtTt-PJvtB0ZhUg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwzluXodquyDs6eW761amA39FbWsjUWO7M5c8pX3_mcimSZHoE3r8vCRa2-PZAK_1UuKg/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -1379,14 +1379,10 @@ function stopCamera() {
   }
 }
 
-let lastScanTime = 0;
-let isProcessingScan = false;
-
 function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
-  // Cegah eksekusi jika sedang memproses atau jeda scan kurang dari 2.5 detik (mencegah Lag / Duplicate Request)
-  if (isProcessingScan || (now - lastScanTime < 2500)) return;
-  
+  if (isProcessing) return;
+  if (now - lastScanTime < 2500) return;
   if (!code || String(code).trim() === '') return;
   if (!sesiTarget || String(sesiTarget).trim() === '') {
     showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
@@ -1394,17 +1390,16 @@ function onScanSuccess(code, sesiTarget) {
   }
 
   lastScanTime = now;
-  isProcessingScan = true;
+  isProcessing = true;
+  showBigPopup('info', 'Memproses...', `⏳ Sedang memverifikasi <b>${String(code).trim()}</b>...`, 0);
   
-  // Tampilkan popup loading non-blocking
-  showBigPopup('info', 'Memproses...', `⏳ Mengirim data untuk <b>${String(code).trim()}</b>...`, 0);
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
   sendRequest(
     { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
-      isProcessingScan = false;
+      isProcessing = false;
       if (!res || typeof res !== 'object') {
         updatePopupResult('danger', 'Koneksi Error', 'Respons server tidak valid.');
         return;
