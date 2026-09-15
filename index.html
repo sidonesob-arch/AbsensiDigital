@@ -793,7 +793,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.3</div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyRKjv3B-pyC2laL2WXzemzrCszgVpglfiBSNG6yQTPYyDLX_pKP6TYl6wCMbs7fYIL-A/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbz8V5M6q04g-A52iSxjJ7kk5U3tkNh5uW-C5NJzzNbDaJpSf75luFqKtTt-PJvtB0ZhUg/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -826,6 +826,7 @@ let resetFingerprintData = [];
 let resetPinData = [];
 let pinGuruData = [];
 let lastScanTime = 0;
+let isProcessingScan = false;
 let sesiDataCache = [];
 
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1379,10 +1380,14 @@ function stopCamera() {
   }
 }
 
+let lastScanTime = 0;
+let isProcessingScan = false;
+
 function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
-  if (isProcessing) return;
-  if (now - lastScanTime < 2500) return;
+  // Cegah eksekusi jika sedang memproses atau jeda scan kurang dari 2.5 detik (mencegah Lag / Duplicate Request)
+  if (isProcessingScan || (now - lastScanTime < 2500)) return;
+  
   if (!code || String(code).trim() === '') return;
   if (!sesiTarget || String(sesiTarget).trim() === '') {
     showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
@@ -1390,16 +1395,17 @@ function onScanSuccess(code, sesiTarget) {
   }
 
   lastScanTime = now;
-  isProcessing = true;
-  showBigPopup('info', 'Memproses...', `⏳ Sedang memverifikasi <b>${String(code).trim()}</b>...`, 0);
+  isProcessingScan = true;
   
+  // Tampilkan popup loading non-blocking
+  showBigPopup('info', 'Memproses...', `⏳ Mengirim data untuk <b>${String(code).trim()}</b>...`, 0);
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
   sendRequest(
     { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
-      isProcessing = false;
+      isProcessingScan = false;
       if (!res || typeof res !== 'object') {
         updatePopupResult('danger', 'Koneksi Error', 'Respons server tidak valid.');
         return;
