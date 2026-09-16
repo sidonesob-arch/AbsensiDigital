@@ -61,36 +61,24 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
   overflow: hidden; flex-shrink: 0; cursor: pointer; transition: all 0.2s;
 }
 .profile-avatar:hover { border-color: #fff; transform: scale(1.05); }
-.profile-avatar img { height: 100%; width: 100%; border-radius: 50%; object-fit: cover; }
-.profile-avatar .avatar-initials { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-
 .profile-dropdown {
   position: absolute; top: 45px; right: 0;
   background: #fff; border-radius: 10px;
   box-shadow: 0 8px 25px rgba(0,0,0,0.25);
   min-width: 230px; padding: 0;
-  display: none; z-index: 2000;
-  overflow: hidden;
+  display: none; z-index: 2000; overflow: hidden;
   border: 1px solid var(--border);
 }
 .profile-dropdown.show { display: block; animation: dropdownIn 0.2s ease-out; }
-@keyframes dropdownIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.profile-dropdown-header {
-  background: linear-gradient(135deg, var(--primary) 0%, #0a3a7a 100%);
-  padding: 14px 16px; color: #fff;
-}
+@keyframes dropdownIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.profile-dropdown-header { background: linear-gradient(135deg, var(--primary) 0%, #0a3a7a 100%); padding: 14px 16px; color: #fff; }
 .profile-dropdown-header .pd-name { font-size: 13px; font-weight: 700; }
 .profile-dropdown-header .pd-role { font-size: 10px; color: #b2ccf3; margin-top: 2px; }
 .profile-dropdown-header .pd-id { font-size: 10px; color: #8fa8d4; margin-top: 1px; }
 .profile-dropdown-menu { padding: 6px 0; }
 .profile-dropdown-item {
   padding: 10px 16px; font-size: 12px; font-weight: 600;
-  color: var(--text); cursor: pointer;
-  display: flex; align-items: center; gap: 8px;
-  transition: background 0.15s;
+  color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.15s;
 }
 .profile-dropdown-item:hover { background: var(--primary-lighter); color: var(--primary); }
 .profile-dropdown-item.danger { color: var(--danger); }
@@ -99,8 +87,7 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 
 .topbar-user {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 2px 0 3px; border-top: 1px solid rgba(255,255,255,0.08);
-  margin-top: 2px; width: 100%;
+  padding: 2px 0 3px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 2px; width: 100%;
 }
 .topbar-user .user-name-display { font-size: 11px; font-weight: 600; color: #e2e8f0; white-space: nowrap; max-width: 200px; }
 .topbar-user .user-role-display { font-size: 9px; background: rgba(255,255,255,0.12); padding: 1px 10px; border-radius: 10px; color: #b2ccf3; font-weight: 500; white-space: nowrap; }
@@ -132,41 +119,23 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 /* MODAL POPUP */
 .modal-popup {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
-  z-index: 4000;
+  background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 4000;
 }
 .modal-popup.show { display: flex; }
 .modal-popup-box {
   background: #fff; border-radius: 14px; padding: 28px 24px;
-  min-width: 300px; max-width: 420px; width: 88%;
-  text-align: center;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-  animation: popIn 0.25s ease-out;
-  border-top: 8px solid var(--primary);
+  min-width: 300px; max-width: 420px; width: 88%; text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35); animation: popIn 0.25s ease-out; border-top: 8px solid var(--primary);
 }
 .modal-popup-box.popup-success { border-top-color: var(--success); }
 .modal-popup-box.popup-warning { border-top-color: var(--warning); }
 .modal-popup-box.popup-danger { border-top-color: var(--danger); }
 .modal-popup-box.popup-info { border-top-color: #17a2b8; }
-@keyframes popIn {
-  from { transform: scale(0.85); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
+@keyframes popIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .modal-popup-icon { font-size: 54px; margin-bottom: 10px; line-height: 1; }
-.modal-popup-title {
-  font-size: 18px; font-weight: 800; margin-bottom: 8px;
-  color: var(--primary); letter-spacing: 0.3px;
-}
-.modal-popup-message {
-  font-size: 14px; line-height: 1.5; color: #333;
-  margin-bottom: 18px; word-wrap: break-word;
-}
-.modal-popup-btn {
-  background: var(--primary); color: #fff; border: none;
-  padding: 10px 30px; border-radius: 30px;
-  font-size: 14px; font-weight: 700; cursor: pointer;
-  min-width: 110px;
-}
+.modal-popup-title { font-size: 18px; font-weight: 800; margin-bottom: 8px; color: var(--primary); letter-spacing: 0.3px; }
+.modal-popup-message { font-size: 14px; line-height: 1.5; color: #333; margin-bottom: 18px; word-wrap: break-word; }
+.modal-popup-btn { background: var(--primary); color: #fff; border: none; padding: 10px 30px; border-radius: 30px; font-size: 14px; font-weight: 700; cursor: pointer; min-width: 110px; }
 .modal-popup-btn:hover { background: var(--primary-hover); }
 
 /* STATS */
@@ -215,7 +184,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .input-nilai-sm { width: 70px; text-align: center; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
 .jadwal-header { background: #e8f0fe; padding: 12px 15px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 15px; }
 .jadwal-header h4 { margin: 0; color: var(--primary); font-size: 14px; }
-.jadwal-header .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
 .export-section { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
 
 /* FINGERPRINT */
@@ -224,9 +192,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .fingerprint-section .btn-fingerprint { background: var(--primary); color: #fff; border: none; padding: 12px 30px; border-radius: 50px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin: 5px; width: auto; }
 .fingerprint-status { margin-top: 10px; padding: 10px; border-radius: 8px; font-size: 14px; display: none; }
 .fingerprint-status.show { display: block; }
-.fingerprint-status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.fingerprint-status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.fingerprint-status.info { background: var(--info-bg); color: var(--info-text); border: 1px solid #bee5eb; }
 .fingerprint-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 600; margin-left: 8px; }
 .fingerprint-badge.active { background: var(--success); color: #fff; }
 .fingerprint-badge.inactive { background: var(--danger); color: #fff; }
@@ -238,9 +203,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .switch .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; transition: .3s; border-radius: 50%; }
 .switch input:checked + .slider { background: var(--success); }
 .switch input:checked + .slider:before { transform: translateX(20px); }
-.switch-label { font-size: 10px; font-weight: 600; margin-left: 4px; }
-.switch-label.allowed { color: var(--success); }
-.switch-label.denied { color: var(--danger); }
 .role-badge { font-size: 10px; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
 .role-badge.guru { background: #d4edda; color: #155724; }
 .role-badge.siswa { background: var(--info-bg); color: var(--info-text); }
@@ -279,8 +241,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .syarat-status.hijau { background: #d4edda; color: #155724; border: 2px solid var(--success); }
 .syarat-status.merah { background: #f8d7da; color: #721c24; border: 2px solid var(--danger); }
 .syarat-status.kuning { background: #fff3cd; color: #856404; border: 2px solid var(--warning); }
-.syarat-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.syarat-actions button { padding: 10px 22px; border-radius: 30px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; width: auto; }
 .syarat-empty { text-align: center; padding: 40px 20px; color: var(--muted); }
 .syarat-empty .icon { font-size: 60px; display: block; margin-bottom: 12px; }
 
@@ -347,7 +307,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-<!-- LOGIN MODAL GURU/ADMIN (PERBAIKAN KEDUA: type="password" untuk tanda ****** dan popup verifikasi PIN) -->
+<!-- LOGIN MODAL GURU/ADMIN -->
 <div id="loginModal">
   <div class="modal-content">
     <h3>Login Sistem</h3>
@@ -360,7 +320,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<!-- LOGIN MODAL SISWA (PERBAIKAN KEDUA: type="password" untuk tanda ****** dan popup verifikasi PIN/NISN) -->
+<!-- LOGIN MODAL SISWA -->
 <div id="loginSiswaModal">
   <div class="modal-content">
     <h3>Login Siswa</h3>
@@ -384,16 +344,16 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" id="nav-cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
 
     <div class="nav-category">MENU UTAMA</div>
-    <a class="nav-item locked" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
-    <a class="nav-item locked" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
-    <a class="nav-item locked" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
-    <a class="nav-item locked" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
+    <a class="nav-item" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
+    <a class="nav-item" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
+    <a class="nav-item" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
+    <a class="nav-item" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
-    <a class="nav-item locked" id="nav-jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
-    <a class="nav-item locked" id="nav-input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
-    <a class="nav-item locked" id="nav-daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
-    <a class="nav-item locked" id="nav-kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
+    <a class="nav-item" id="nav-jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
+    <a class="nav-item" id="nav-input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
+    <a class="nav-item" id="nav-daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
+    <a class="nav-item" id="nav-kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
   </div>
 
   <div class="content-container" id="appContent">
@@ -716,7 +676,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <h3 style="color:var(--primary); font-size:15px;">📅 Jadwal Mapel</h3>
       <div class="jadwal-header">
         <h4>Hari: <span id="jadwalHariText">-</span></h4>
-        <div class="sub" id="jadwalInfoDisplay">Menampilkan jadwal hari ini</div>
+        <div class="sub" id="jadwalInfoDisplay">Menampilkan jadwal mapel Anda</div>
       </div>
       <div class="table-responsive">
         <table>
@@ -790,10 +750,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; By M TAUPIK M</div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.2</div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxBfVeytwypi_WH9AOuMMSjVD4aLxUDG2zws3upWPv0BdjAYQkcKtiJYtsKLNOmLlbS/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxHh8NVgQa7S4BafzCyM-VNekjx-_OC6rE70VtWj3hLV2mRLjRLPfcFvTyVOpW3fRlN3g/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -811,9 +771,6 @@ let isProcessing = false;
 let userRole = 'tamu';
 let userData = null;
 let siswaUserData = null;
-let pendingMenu = null;
-let globalPengaturanData = [];
-let currentActiveSesiName = "";
 let cachedPinConfig = null;
 let dashboardTimer = null;
 let popupTimeout = null;
@@ -824,7 +781,6 @@ let currentSiswaNISN = '';
 let activePengaturanPanel = null;
 let resetFingerprintData = [];
 let resetPinData = [];
-let pinGuruData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
 
@@ -1066,7 +1022,6 @@ function closeLoginSiswaModal() { hideEl('loginSiswaModal'); }
 function submitLoginSiswa() {
   const nisn = $('inputNISNModal').value.trim();
   if (!nisn) return showBigPopup('warning', 'Peringatan', 'NISN tidak boleh kosong!');
-  // PERBAIKAN KEDUA: Popup pesan verifikasi PIN/NISN
   showBigPopup('info', 'Sedang Memproses', '⏳ Sedang Verifikasi PIN / NISN...', 0);
   sendRequest({ action: 'login_siswa_fingerprint', nisn, mode: 'check' }, res => {
     if (res.status === 'success') {
@@ -1137,7 +1092,6 @@ function preloadPinConfig() {
   sendRequest({ action: 'get_pengaturan' }, res => {
     if (res.status === 'success') {
       cachedPinConfig = res.data;
-      globalPengaturanData = res.data;
       updateRealtimeSesi(res.data);
       renderSesiConfig(res.data);
     }
@@ -1148,7 +1102,6 @@ function updateRealtimeSesi(dataList) {
   if (!list) return;
   const now = new Date();
   const curMin = now.getHours() * 60 + now.getMinutes();
-  currentActiveSesiName = "";
   list.forEach(p => {
     if (p.sesi && p.sesi.toLowerCase().startsWith('sesi')) {
       if (curMin >= parseJamToMin(p.mulai) && curMin <= parseJamToMin(p.tutup)) currentActiveSesiName = p.sesi;
@@ -1237,11 +1190,10 @@ function openLoginModal() {
   setText('modalInfo', "Masukkan PIN Anda.");
   showFlex('loginModal');
 }
-function closeLoginModal() { hideEl('loginModal'); pendingMenu = null; closeSidebar(); }
+function closeLoginModal() { hideEl('loginModal'); closeSidebar(); }
 function submitLogin() {
   const pin = $('inputPinModal').value.trim();
   if (!pin) return showBigPopup("warning", "Peringatan", "PIN tidak boleh kosong!");
-  // PERBAIKAN KEDUA: Popup pesan "Sedang Verifikasi PIN"
   showBigPopup('info', 'Sedang Memproses', '⏳ Sedang Verifikasi PIN...', 0);
   sendRequest({ action: 'login', pin }, res => {
     if (res.status === 'success') {
@@ -1253,7 +1205,7 @@ function submitLogin() {
       showBigPopup("success", "Login Berhasil", res.message);
       sessionStorage.setItem('userSession', JSON.stringify({ userId: res.nip || 'admin', role: res.role, sessionToken: 'user_' + Date.now() }));
       if (userRole === 'guru' && userData) {
-        setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapelForGuru(); }, 500);
+        setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapel(); }, 500);
       }
       closeSidebar();
     } else {
@@ -1265,11 +1217,6 @@ function submitLogin() {
 function applyRoleAccessUI() {
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isSuperAdmin = userRole === 'super_admin';
-  ['nav-scanner','nav-izin','nav-rekap'].forEach(id => $(id)?.classList.remove('locked'));
-  $('nav-pengaturan')?.classList.toggle('locked', !isSuperAdmin);
-  if (isSuperAdmin || isAdmin || userRole === 'guru') {
-    ['nav-jadwal-mapel','nav-input-nilai','nav-daftar-nilai','nav-kelulusan'].forEach(id => $(id)?.classList.remove('locked'));
-  }
   $('optIzinGuru').style.display = isAdmin ? 'block' : 'none';
   const nama = userRole === 'guru' && userData ? userData.nama : (isAdmin ? 'Admin' : '-');
   setText('guruNamaDisplay', nama);
@@ -1284,7 +1231,6 @@ function logoutSession() {
   fingerprintRegistered = false;
   sessionStorage.removeItem('userSession');
   if (siswaUserData) logoutSiswaSession();
-  $$('.sidebar .nav-item').forEach(b => { if (b.id !== 'nav-logout') b.classList.add('locked'); });
   setText('guruNamaDisplay', '-');
   setText('guruNamaDisplayDaftar', '-');
   updateTopbarUserInfo();
@@ -1293,6 +1239,7 @@ function logoutSession() {
   showBigPopup("success", "Logout Berhasil", "Anda telah keluar.");
   closeSidebar();
 }
+
 function checkMenuAccess(menuName, el) {
   closeSidebar();
   if (userRole === 'tamu') {
@@ -1308,6 +1255,7 @@ function checkMenuAccess(menuName, el) {
   switchMenu(menuName, el);
 }
 
+// PERBAIKAN: Mencegah perpindahan halaman ke dashboard saat halaman direfresh/diakses langsung
 function switchMenu(menuName, el) {
   closeSidebar();
   closeProfileDropdown();
@@ -1317,6 +1265,10 @@ function switchMenu(menuName, el) {
   if (el) el.classList.add('active');
   const target = $(`menu-${menuName}`);
   if (target) target.classList.add('active');
+  
+  // Simpan state menu aktif ke sessionStorage agar saat refresh tetap di halaman yang sama
+  sessionStorage.setItem('activeMenu', menuName);
+
   if (menuName === 'scanner') setupScannerView();
   if (menuName === 'rekap') loadOpsiKelas();
   if (menuName === 'pengaturan') {
@@ -1342,7 +1294,8 @@ function setRole(role) {
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
 function toggleCamera() {
-  if (!currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif!");
+  const sesiAktif = sesiDataCache.find(s => s.sesi === currentActiveSesiName);
+  if (!sesiAktif && !currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif saat ini!");
   isCameraOn ? stopCamera() : startCamera();
 }
 function startCamera() {
@@ -1383,11 +1336,10 @@ function stopCamera() {
   }
 }
 
-// PERBAIKAN KETIGA: Optimasi kecepatan pengiriman scan kamera, debounce anti-lag, pencegahan error bersamaan
 function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
   if (isProcessing) return;
-  if (now - lastScanTime < 2000) return; // Debounce 2 detik untuk menghindari spam/lag
+  if (now - lastScanTime < 2000) return;
   if (!code || String(code).trim() === '') return;
   if (!sesiTarget || String(sesiTarget).trim() === '') {
     showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
@@ -1658,7 +1610,7 @@ function savePengaturanConfig(config, successMsg) {
 }
 function loadPengaturanDataFromServer() {
   sendRequest({ action: 'get_pengaturan' }, res => {
-    if (res.status === 'success') { globalPengaturanData = res.data; renderSesiConfig(res.data); }
+    if (res.status === 'success') { renderSesiConfig(res.data); }
   });
 }
 
@@ -1842,18 +1794,19 @@ function setupTriggerHistoris() {
   sendRequest({ action: 'setup_trigger' }, res => { showBigPopup('success', 'Trigger', res.message); });
 }
 
+// PERBAIKAN: Jadwal mapel guru disaring otomatis sesuai mapel & kelas yang diampu guru login
 function loadJadwalMapel() {
   const now = new Date();
   const hariIni = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][now.getDay()];
   setText('jadwalHariText', hariIni);
-  sendRequest({ action: 'get_jadwal_mapel', hari: hariIni }, res => {
+  const pinGuru = userRole === 'guru' && userData ? (userData.nip || '') : '';
+  sendRequest({ action: 'get_jadwal_mapel', hari: hariIni, pin: pinGuru }, res => {
     const tbody = $('tableJadwalBody');
     if (res.status === 'success' && res.data.length > 0) {
       tbody.innerHTML = res.data.map((item, idx) => `<tr><td>${idx + 1}</td><td>${item.waktu}</td><td><b>${item.mapel}</b></td><td>${item.kelas}</td></tr>`).join('');
-    } else tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada jadwal.</td></tr>';
+    } else tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada jadwal mapel untuk Anda hari ini.</td></tr>';
   });
 }
-function loadJadwalMapelForGuru() { loadJadwalMapel(); }
 
 function populateSelect(id, options, includeEmpty = false) {
   const select = $(id);
@@ -1978,12 +1931,12 @@ function updateFingerprintUI() {
     statusBadge.className = 'fingerprint-badge active';
     statusBadge.innerText = 'Terdaftar';
     btnAbsen.disabled = false;
-    btnRegister.classList.add('hidden');
+    btnRegister.classList.add('hidden'); // Sembunyikan tombol Daftar Sidik Jari jika sudah terdaftar
   } else {
     statusBadge.className = 'fingerprint-badge inactive';
     statusBadge.innerText = 'Belum Terdaftar';
     btnAbsen.disabled = true;
-    btnRegister.classList.remove('hidden');
+    btnRegister.classList.remove('hidden'); // Tampilkan kembali jika belum/direset
   }
 }
 function checkFingerprintStatus() {
@@ -1997,6 +1950,7 @@ function checkFingerprintStatus() {
     }
   });
 }
+
 async function createWebAuthnCredential(userId, userName) {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
