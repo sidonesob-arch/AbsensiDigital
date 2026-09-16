@@ -1926,17 +1926,20 @@ function updateFingerprintUI() {
   const statusBadge = $('fingerprintStatusBadge');
   const btnAbsen = $('btnAbsenFingerprint');
   const btnRegister = $('btnRegisterFingerprint');
-  if (!statusBadge) return;
+  if (!statusBadge || !btnAbsen || !btnRegister) return;
+
   if (fingerprintRegistered) {
     statusBadge.className = 'fingerprint-badge active';
     statusBadge.innerText = 'Terdaftar';
     btnAbsen.disabled = false;
-    btnRegister.classList.add('hidden'); // Sembunyikan tombol Daftar Sidik Jari jika sudah terdaftar
+    btnAbsen.style.display = 'inline-block';
+    btnRegister.style.display = 'none'; // Sembunyikan tombol Daftar Sidik Jari sepenuhnya
   } else {
     statusBadge.className = 'fingerprint-badge inactive';
     statusBadge.innerText = 'Belum Terdaftar';
     btnAbsen.disabled = true;
-    btnRegister.classList.remove('hidden'); // Tampilkan kembali jika belum/direset
+    btnAbsen.style.display = 'none'; // Sembunyikan tombol Absen jika belum daftar
+    btnRegister.style.display = 'inline-block'; // Tampilkan tombol Daftar Sidik Jari
   }
 }
 function checkFingerprintStatus() {
