@@ -5,7 +5,7 @@
 // ============================================================
 
 const SUPABASE_URL = 'https://avgpyvrkcgdeaobyfodi.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_-bgJC_KIPIBuJnpL87A1dQ_';
+const SUPABASE_KEY = 'sb_publishable_-bgJC_KlPIBuJnpL87A1dQ_mvipF2ur';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
