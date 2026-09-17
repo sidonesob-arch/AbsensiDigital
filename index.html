@@ -2071,7 +2071,7 @@ async function absenSiswaWithFingerprint() {
   $('downKelasContainer').style.display = role === 'siswa' ? 'block' : 'none';
 }
 
-  function generateDownloadAbsenExcel() {
+function generateDownloadAbsenExcel() {
   const role = $('downRole').value;
   const kelas = $('downKelas').value;
   const tglMulai = $('downTglMulai').value;
@@ -2097,25 +2097,25 @@ async function absenSiswaWithFingerprint() {
     const wb = XLSX.utils.book_new();
     const wsData = [];
 
-    // Baris Kop Surat
+    // Kop Surat
     wsData.push(["SMP NEGERI 1 SOBANG"]);
     wsData.push([role === 'siswa' ? "DAFTAR HADIR SISWA" : "DAFTAR HADIR GURU"]);
     wsData.push([`BULAN ${bulanTahunStr}`]);
-    wsData.push([]); // Baris kosong
+    wsData.push([]); // Baris Kosong
 
-    // Baris Header Tabel 1
+    // Header Baris 1
     let header1 = ["No", role === 'siswa' ? "Nama Siswa" : "Nama/NIP/Pangkat Gol", "L/P", "TANGGAL"];
-    for (let i = 1; i < listTanggal.length; i++) header1.push(""); // Spacer untuk merge tanggal
+    for (let i = 1; i < listTanggal.length; i++) header1.push("");
     header1.push("S", "I", "A", "Jml");
     wsData.push(header1);
 
-    // Baris Header Tabel 2 (Nomor Tanggal 1, 2, 3...)
+    // Header Baris 2 (Nomor Tanggal 1, 2, 3...)
     let header2 = ["", "", ""];
     listTanggal.forEach(t => header2.push(t.dayNum));
     header2.push("", "", "", "");
     wsData.push(header2);
 
-    // Data Baris User / Siswa
+    // Data Baris User / Siswa / Guru
     users.forEach((u, idx) => {
       let row = [
         idx + 1,
@@ -2123,7 +2123,8 @@ async function absenSiswaWithFingerprint() {
         u.jk || 'L'
       ];
       listTanggal.forEach(t => {
-        row.push(t.isLibur ? "LIBUR" : "");
+        // Jika libur, kosongkan sel atau beri tanda strip rapi, dan warna latar akan diatur via HTML/XML generator
+        row.push(t.isLibur ? "" : "");
       });
       row.push("", "", "", ""); // Kolom S, I, A, Jml
       wsData.push(row);
@@ -2131,39 +2132,51 @@ async function absenSiswaWithFingerprint() {
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Konfigurasi Merging Sel untuk Header Kop & Tanggal
-    if (!ws['!merges']) ws['!merges'] = [];
-    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: listTanggal.push ? listTanggal.length + 6 : 35 } }); // Judul 1
-    ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: listTanggal.length + 6 } }); // Judul 2
-    ws['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: listTanggal.length + 6 } }); // Judul 3
+    // Pengaturan Lebar Kolom (Column Widths) agar tidak sempit
+    const colWidths = [
+      { wch: 5 },  // No
+      { wch: role === 'guru' ? 28 : 25 }, // Nama
+      { wch: 5 }   // L/P
+    ];
+    // Lebar kolom untuk setiap tanggal dibuat pas (lebar 3.5)
+    listTanggal.forEach(() => colWidths.push({ wch: 3.5 }));
+    // Lebar kolom rekap S, I, A, Jml
+    colWidths.push({ wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 5 });
+    ws['!cols'] = colWidths;
 
-    // Merge Header Kolom Utama (No, Nama, L/P) vertikal 2 baris
-    ws['!merges'].push({ s: { r: 4, c: 0 }, e: { r: 5, c: 0 } }); // No
-    ws['!merges'].push({ s: { r: 4, c: 1 }, e: { r: 5, c: 1 } }); // Nama
-    ws['!merges'].push({ s: { r: 4, c: 2 }, e: { r: 5, c: 2 } }); // L/P
-    
-    // Merge Header 'TANGGAL' secara horizontal
+    // Konfigurasi Merging Sel Header
+    if (!ws['!merges']) ws['!merges'] = [];
+    const maxColIdx = 3 + listTanggal.length + 3;
+    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: maxColIdx } }); // Judul 1
+    ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: maxColIdx } }); // Judul 2
+    ws['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: maxColIdx } }); // Judul 3
+
+    // Merge vertikal kolom No, Nama, L/P
+    ws['!merges'].push({ s: { r: 4, c: 0 }, e: { r: 5, c: 0 } });
+    ws['!merges'].push({ s: { r: 4, c: 1 }, e: { r: 5, c: 1 } });
+    ws['!merges'].push({ s: { r: 4, c: 2 }, e: { r: 5, c: 2 } });
+
+    // Merge horizontal untuk tulisan TANGGAL
     const startTglCol = 3;
     const endTglCol = 3 + listTanggal.length - 1;
     ws['!merges'].push({ s: { r: 4, c: startTglCol }, e: { r: 4, c: endTglCol } });
 
-    // Merge Header Rekap (S, I, A, Jml) vertikal 2 baris
+    // Merge vertikal kolom rekap S, I, A, Jml
     const rekapStartCol = endTglCol + 1;
     for (let c = 0; c < 4; c++) {
       ws['!merges'].push({ s: { r: 4, c: rekapStartCol + c }, e: { r: 5, c: rekapStartCol + c } });
     }
 
-    // Pewarnaan latar merah vertikal secara otomatis untuk Tanggal yang Libur
+    // Pewarnaan latar merah vertikal secara otomatis pada kolom hari libur menggunakan XML Style Attributes SheetJS
     listTanggal.forEach((t, idx) => {
       const colIdx = startTglCol + idx;
       if (t.isLibur) {
-        // Beri warna merah pada baris tanggal dan seluruh baris ke bawah pada kolom tersebut
         for (let r = 5; r < wsData.length; r++) {
           const cellRef = XLSX.utils.encode_cell({ r: r, c: colIdx });
-          if (!ws[cellRef]) ws[cellRef] = { t: 's', v: 'LIBUR' };
+          if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+          // Menambahkan properti styling background merah muda (Hex: FFC7CE)
           ws[cellRef].s = {
-            fill: { fgColor: { rgb: "FFC7CE" } },
-            font: { color: { rgb: "9C0006" }, bold: true }
+            fill: { patternType: "solid", fgColor: { rgb: "FFC7CE" } }
           };
         }
       }
@@ -2171,7 +2184,7 @@ async function absenSiswaWithFingerprint() {
 
     XLSX.utils.book_append_sheet(wb, ws, "Daftar Hadir");
     XLSX.writeFile(wb, `Daftar_Hadir_${role.toUpperCase()}_${bulanTahunStr}.xlsx`);
-    showBigPopup('success', 'Berhasil', 'File absensi sesuai format berhasil didownload!');
+    showBigPopup('success', 'Berhasil', 'Template absensi berhasil didownload dengan format rapi!');
   });
 }
 </script>
