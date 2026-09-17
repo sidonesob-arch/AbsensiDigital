@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistem Absensi Terpadu - SMP NEGERI 1 SOBANG</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -767,8 +768,8 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.2</div>
 
+<script src="supabase-api.js"></script>
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbytVfB9msbjHR2qB8aRJzkeDln6-MPu4jRwqoUeKXh4Sgf3pbz6643nfrI4rrdWKdJ9XA/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -798,42 +799,6 @@ let resetFingerprintData = [];
 let resetPinData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
-
-function sendRequest(payload, callback, retryCount = 0) {
-  if (!payload || !payload.action) {
-    callback({ status: 'error', message: 'Payload tidak valid.' });
-    return;
-  }
-  fetch(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
-    redirect: 'follow',
-    cache: 'no-store'
-  })
-  .then(r => r.text())
-  .then(text => {
-    try {
-      const res = JSON.parse(text);
-      callback(res);
-    } catch (e) {
-      if (retryCount < MAX_RETRY) {
-        setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500);
-      } else {
-        showBigPopup('danger', 'Koneksi Error', 'Server tidak merespon dengan benar.');
-        callback({ status: 'error', message: 'Response tidak valid.' });
-      }
-    }
-  })
-  .catch(err => {
-    if (retryCount < MAX_RETRY) {
-      setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500 * (retryCount + 1));
-    } else {
-      showBigPopup("danger", "Koneksi Error", "Gagal terhubung ke server! " + err.message);
-      callback({ status: "error", message: "Koneksi gagal: " + err.message });
-    }
-  });
-}
 
 const POPUP_ICONS = { success: "✅", warning: "⚠️", danger: "❌", info: "ℹ️" };
 function showBigPopup(type, title, message, autoClose = null) {
