@@ -5,7 +5,7 @@
 // ============================================================
 
 const SUPABASE_URL = 'https://avgpyvrkcgdeaobyfodi.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_-bgJC_KlPIBuJnpL87A1dQ_mvipF2ur';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2Z3B5dnJrY2dkZWFvYnlmb2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NDM2ODAsImV4cCI6MjEwNTIxOTY4MH0.8pZD8rU8HMf7bh-izbZIqcUZaX-9kuGTKP2le9qzFOw';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
