@@ -344,10 +344,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" id="nav-cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
 
     <div class="nav-category">MENU UTAMA</div>
-    <a class="nav-item" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
-    <a class="nav-item" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
-    <a class="nav-item" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
-    <a class="nav-item" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
+    <a class="nav-item locked" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
+    <a class="nav-item locked" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
+    <a class="nav-item locked" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
+    <a class="nav-item" id="nav-download-absen" onclick="checkMenuAccess('download-absen', this)">📥 Download Absensi</a>
+    <a class="nav-item locked" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
     <a class="nav-item" id="nav-jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
@@ -544,6 +545,20 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
+    <!-- DOWNLOAD ABSENSI -->
+    <div id="menu-download-absen" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">📥 Download Template Absensi</h3>
+      <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid var(--border-light); margin-bottom:12px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1; min-width:140px;"><label>Peran:</label><select id="downRole" onchange="toggleDownKelas()"><option value="siswa">Siswa</option><option value="guru">Guru</option></select></div>
+          <div class="form-group" style="flex:1; min-width:140px;" id="downKelasContainer"><label>Kelas:</label><select id="downKelas"><option value="">-- Semua Kelas --</option></select></div>
+          <div class="form-group" style="flex:1; min-width:140px;"><label>Dari Tanggal:</label><input type="date" id="downTglMulai"></div>
+          <div class="form-group" style="flex:1; min-width:140px;"><label>Sampai Tanggal:</label><input type="date" id="downTglSelesai"></div>
+        </div>
+        <button class="btn-primary" onclick="generateDownloadAbsenExcel()">📥 Download Excel Template</button>
+      </div>
+    </div>
+    
     <!-- PENGATURAN -->
     <div id="menu-pengaturan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⚙️ Pengaturan</h3>
@@ -753,7 +768,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.2</div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbywlXY90-Z1SlizLTPSTOT6urWtNIa9_76QScsNdExkfFillaONYZZS-FpazwYgtoOiLQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwJZWwIyFNY6OJfHf3dVxRSOMko5T5gFVmhiYqQspo57waa_q8XqnoUiGT42VVFbRfHiw/exec";
 const MAX_RETRY = 3;
 
 const $ = id => document.getElementById(id);
@@ -2049,6 +2064,81 @@ async function registerSiswaFingerprint() {
 async function absenSiswaWithFingerprint() {
   if (!siswaUserData) return;
   await doAbsenFingerprint(siswaUserData.nisn, 'siswa', showSiswaFingerprintStatus, 'btnAbsenSiswaFingerprint');
+}
+
+  function toggleDownKelas() {
+  const role = $('downRole').value;
+  $('downKelasContainer').style.display = role === 'siswa' ? 'block' : 'none';
+}
+
+function generateDownloadAbsenExcel() {
+  const role = $('downRole').value;
+  const kelas = $('downKelas').value;
+  const tglMulai = $('downTglMulai').value;
+  const tglSelesai = $('downTglSelesai').value;
+
+  if (!tglMulai || !tglSelesai) {
+    return showBigPopup('warning', 'Peringatan', 'Harap isi rentang tanggal mulai dan selesai!');
+  }
+
+  showBigPopup('info', 'Memproses', 'Sedang menyiapkan template Excel...', 0);
+
+  sendRequest({ action: 'get_download_absen_data', role, kelas, tglMulai, tglSelesai }, res => {
+    closeBigPopup();
+    if (res.status !== 'success') {
+      return showBigPopup('danger', 'Gagal', res.message);
+    }
+
+    const { listTanggal, users } = res;
+    if (!users || !users.length) {
+      return showBigPopup('warning', 'Kosong', 'Tidak ada data pengguna ditemukan.');
+    }
+
+    // Buat Workbook SheetJS
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+
+    // Header Baris 1: Tanggal
+    let header1 = ['No', role === 'siswa' ? 'NISN' : 'NIP', 'Nama Lengkap'];
+    listTanggal.forEach(t => header1.push(t.tanggal));
+    wsData.push(header1);
+
+    // Baris 2: Hari / Keterangan Libur
+    let header2 = ['', '', ''];
+    listTanggal.forEach(t => header2.push(t.keterangan || 'Hadir'));
+    wsData.push(header2);
+
+    // Data User
+    users.forEach((u, idx) => {
+      let row = [idx + 1, u.id, role === 'guru' ? u.detail : u.nama];
+      listTanggal.forEach(t => {
+        row.push(t.isLibur ? 'LIBUR' : '');
+      });
+      wsData.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Styling kolom merah vertikal untuk hari libur
+    if (!ws['!cols']) ws['!cols'] = [];
+    listTanggal.forEach((t, colIdx) => {
+      const realCol = colIdx + 3; // Offset No, ID, Nama
+      if (t.isLibur) {
+        for (let r = 0; r < wsData.length; r++) {
+          const cellRef = XLSX.utils.encode_cell({ r: r, c: realCol });
+          if (!ws[cellRef]) ws[cellRef] = { t: 's', v: 'LIBUR' };
+          ws[cellRef].s = {
+            fill: { fgColor: { rgb: "FFC7CE" } },
+            font: { color: { rgb: "9C0006" }, bold: true }
+          };
+        }
+      }
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, "Template Absensi");
+    XLSX.writeFile(wb, `Template_Absensi_${role.toUpperCase()}_${tglMulai}_sd_${tglSelesai}.xlsx`);
+    showBigPopup('success', 'Berhasil', 'Template absensi berhasil didownload!');
+  });
 }
 </script>
 </body>
