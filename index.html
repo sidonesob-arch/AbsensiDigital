@@ -1458,16 +1458,18 @@ function renderSyaratResult(d) {
         <div class="syarat-kelas">Kelas ${d.kelas} • NISN ${d.nisn}</div>
         <div class="syarat-periode">📅 ${d.periodeMulai} s/d ${d.periodeAkhir}</div>
       </div>
+      
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px;">
+        <div style="display:flex; justify-content:space-between; padding:3px 0;">
+          <span>📅 Hari Efektif Sekolah Berjalan</span>
+          <b>${d.jumlahHariEfektif} hari</b>
+        </div>
         <div style="display:flex; justify-content:space-between; padding:3px 0;">
           <span>🕐 Total Sesi Berjalan</span>
           <b>${d.totalSesiEfektif} sesi</b>
         </div>
-        <div style="display:flex; justify-content:space-between; padding:3px 0;">
-          <span>✅ Sesi Diikuti Siswa</span>
-          <b>${d.totalSesiTercatat} sesi</b>
-        </div>
       </div>
+      
       <ul class="syarat-list">
         <li><span>Tepat Waktu (TW)</span><b>${d.tw}</b></li>
         <li><span>Terlambat (TL)</span><b>${d.tl}</b></li>
@@ -1476,12 +1478,22 @@ function renderSyaratResult(d) {
         <li><span>Alpa</span><b>${d.alpa}</b></li>
         <li><span>Bolos</span><b>${d.bolos}</b></li>
       </ul>
-      <div class="syarat-total">
-        <div class="total-label">Persentase Kehadiran Akurat</div>
-        <div class="total-value">${d.persen}%</div>
-        <div style="font-size:11px; color:#666; margin-top:4px;">Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%)</div>
+      
+      <div style="background:#f0f4f9; padding:10px 14px; border-radius:8px; margin-bottom:14px; display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:var(--primary); border:2px dashed var(--border);">
+        <span>🧮 Total Rincian</span>
+        <span>${d.totalRincian || (d.tw + d.tl + d.sakit + d.izin + d.alpa + d.bolos)} sesi</span>
       </div>
+      
+      <div class="syarat-total">
+        <div class="total-label">Persentase Kehadiran</div>
+        <div class="total-value">${d.persen}%</div>
+        <div style="font-size:11px; color:#666; margin-top:4px;">
+          Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%)
+        </div>
+      </div>
+      
       <div class="syarat-status ${d.warna}">${statusIcon} ${d.pesan}</div>
+      
       <div class="syarat-actions">
         <button class="btn-primary" style="background:var(--danger);" onclick="window.print()">📄 Cetak PDF</button>
       </div>
