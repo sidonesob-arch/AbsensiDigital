@@ -794,9 +794,7 @@ async function handleCheckSession(d) {
 }
 
 // ============================================================
-// HANDLER: SYARAT KELULUSAN (VERSI FINAL)
-// Total Sesi Berjalan = COUNT DISTINCT (tanggal, sesi) dari kehadiran
-// Hari Efektif = hitung kalender (Senin-Jumat, skip libur)
+// HANDLER: SYARAT KELULUSAN (VERSI FINAL - FIX TOTAL SESI)
 // ============================================================
 async function handleGetSyaratKelulusan(d) {
   const nisn = String(d.nisn || '').trim();
@@ -820,7 +818,7 @@ async function handleGetSyaratKelulusan(d) {
   const tglBatas = todayStr < tglAkhir ? todayStr : tglAkhir;
 
   // ============================================================
-  // HITUNG HARI EFEKTIF (untuk informasi saja)
+  // HITUNG HARI EFEKTIF (untuk informasi)
   // ============================================================
   const { data: liburRows } = await sb.from('hari_libur').select('tanggal');
   const liburSet = new Set((liburRows || []).map(r => String(r.tanggal).substring(0,10)));
@@ -843,7 +841,8 @@ async function handleGetSyaratKelulusan(d) {
   }
 
   // ============================================================
-  // HITUNG TOTAL SESI BERJALAN (dari tabel kehadiran)
+  // HITUNG TOTAL SESI BERJALAN (dari record MANUAL/AUTO siswa)
+  // Ambil semua sesi unik yang FORMATNYA "Sesi X" dari record manapun
   // ============================================================
   const { data: semuaKehadiran } = await sb.from('kehadiran')
     .select('tanggal, sesi')
@@ -852,8 +851,11 @@ async function handleGetSyaratKelulusan(d) {
 
   const sesiUnik = new Set();
   (semuaKehadiran || []).forEach(r => {
-    const namaSesi = String(r.sesi || '').split(' - ')[0].trim();
-    if (namaSesi) {
+    // Hanya hitung yang sesinya diawali "Sesi "
+    const sesiStr = String(r.sesi || '').trim();
+    const match = sesiStr.match(/^(Sesi\s+\d+)/i);
+    if (match) {
+      const namaSesi = match[1].trim();
       sesiUnik.add(`${r.tanggal}_${namaSesi}`);
     }
   });
@@ -874,10 +876,13 @@ async function handleGetSyaratKelulusan(d) {
 
   (kRows || []).forEach(r => {
     const st = String(r.sesi || '').toLowerCase();
+    // Hanya hitung yang punya format "Sesi X"
+    if (!st.match(/^sesi\s+\d+/)) return;
+    
     if (st.includes('tw')) stats.tw++;
     else if (st.includes('tl')) stats.tl++;
-    else if (st.startsWith('sakit')) stats.sakit++;
-    else if (st.startsWith('izin')) stats.izin++;
+    else if (st.includes('sakit')) stats.sakit++;
+    else if (st.includes('izin')) stats.izin++;
     else if (st.includes('alpa')) stats.alpa++;
     else if (st.includes('bolos')) stats.bolos++;
   });
