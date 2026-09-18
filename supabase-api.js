@@ -794,8 +794,9 @@ async function handleCheckSession(d) {
 }
 
 // ============================================================
-// HANDLER: SYARAT KELULUSAN (VERSI FINAL - HITUNG SESI BERJALAN)
-// Sesi berjalan = COUNT DISTINCT (tanggal, sesi) di tabel kehadiran
+// HANDLER: SYARAT KELULUSAN (VERSI FINAL)
+// Total Sesi Berjalan = COUNT DISTINCT (tanggal, sesi) dari kehadiran
+// Hari Efektif = hitung kalender (Senin-Jumat, skip libur)
 // ============================================================
 async function handleGetSyaratKelulusan(d) {
   const nisn = String(d.nisn || '').trim();
@@ -819,15 +820,36 @@ async function handleGetSyaratKelulusan(d) {
   const tglBatas = todayStr < tglAkhir ? todayStr : tglAkhir;
 
   // ============================================================
-  // HITUNG TOTAL SESI BERJALAN
+  // HITUNG HARI EFEKTIF (untuk informasi saja)
   // ============================================================
-  // Ambil SEMUA record kehadiran (semua siswa) dalam periode ini
+  const { data: liburRows } = await sb.from('hari_libur').select('tanggal');
+  const liburSet = new Set((liburRows || []).map(r => String(r.tanggal).substring(0,10)));
+
+  const [y1, m1, d1] = tglMulai.split('-').map(Number);
+  const [y2, m2, d2] = tglBatas.split('-').map(Number);
+  const startDate = new Date(y1, m1 - 1, d1);
+  const endDate = new Date(y2, m2 - 1, d2);
+
+  let jumlahHariEfektif = 0;
+  const cur = new Date(startDate);
+  while (cur <= endDate) {
+    const dow = cur.getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+    const tglStr = `${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
+    if (!isWeekend && !liburSet.has(tglStr)) {
+      jumlahHariEfektif++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // ============================================================
+  // HITUNG TOTAL SESI BERJALAN (dari tabel kehadiran)
+  // ============================================================
   const { data: semuaKehadiran } = await sb.from('kehadiran')
     .select('tanggal, sesi')
     .gte('tanggal', tglMulai)
     .lte('tanggal', tglBatas);
 
-  // Kumpulkan kombinasi unik (tanggal + sesi)
   const sesiUnik = new Set();
   (semuaKehadiran || []).forEach(r => {
     const namaSesi = String(r.sesi || '').split(' - ')[0].trim();
@@ -860,7 +882,7 @@ async function handleGetSyaratKelulusan(d) {
     else if (st.includes('bolos')) stats.bolos++;
   });
 
-  const totalSesiTercatat = stats.tw + stats.tl + stats.sakit + stats.izin + stats.alpa + stats.bolos;
+  const totalRincian = stats.tw + stats.tl + stats.sakit + stats.izin + stats.alpa + stats.bolos;
   const nilaiHadir = stats.tw + stats.tl + (stats.sakit * 0.75) + (stats.izin * 0.5);
   const persen = totalSesiBerjalan > 0 ? (nilaiHadir / totalSesiBerjalan) * 100 : 0;
 
@@ -876,8 +898,9 @@ async function handleGetSyaratKelulusan(d) {
     data: {
       nisn, nama: user.nama, kelas: user.kelas,
       periodeMulai: tglMulai, periodeAkhir: tglAkhir,
-      totalSesiEfektif: totalSesiBerjalan,  // total sesi berjalan
-      totalSesiTercatat,                    // sesi diikuti siswa
+      jumlahHariEfektif,
+      totalSesiEfektif: totalSesiBerjalan,
+      totalRincian,
       batasPersen, ...stats,
       nilaiHadir: nilaiHadir.toFixed(2),
       persen: persen.toFixed(2),
