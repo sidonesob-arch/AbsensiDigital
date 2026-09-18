@@ -160,16 +160,16 @@ async function handleLoginSiswa(d) {
 }
 
 // ============================================================
-// HANDLER: ABSEN QR
-// ============================================================
-// ============================================================
-// HANDLER: ABSEN QR (LOGIKA BARU - CASCADE ALPA/BOLOS)
+// HANDLER: ABSEN QR (LOGIKA CASCADE - VERSI BARU)
+// Server yang menentukan sesi aktif, bukan frontend.
+// Aturan:
+// - Tidak scan Sesi 1 → ALPA permanen untuk semua sesi
+// - Scan Sesi 1, tidak scan sesi berikutnya → BOLOS permanen
+// - Izin/Sakit berlaku sehari, otomatis di sesi berikutnya
 // ============================================================
 async function handleAbsenQR(d) {
   const role = String(d.role || '').toLowerCase().trim();
   const code = String(d.code || '').trim();
-  // CATATAN: d.sesi TIDAK dipakai lagi. Server yang menentukan.
-
   if (!role || !code) return { status: 'error', message: 'Data tidak lengkap!' };
 
   // 1. Cari user
@@ -183,7 +183,7 @@ async function handleAbsenQR(d) {
   const { data: libur } = await sb.from('hari_libur').select('*').eq('tanggal', today).maybeSingle();
   if (libur) return { status: 'danger', message: `Absensi Ditolak! Hari ini libur: ${libur.keterangan}` };
 
-  // 3. Tentukan sesi aktif dari jam server
+  // 3. Tentukan sesi aktif dari jam server (WIB)
   const sesiList = await _getSesiList();
   if (!sesiList.length) return { status: 'error', message: 'Tidak ada sesi dikonfigurasi.' };
 
@@ -191,7 +191,6 @@ async function handleAbsenQR(d) {
   const wib = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
   const curMin = wib.getHours() * 60 + wib.getMinutes();
 
-  // Cari sesi yang sedang aktif (mulai <= sekarang <= tutup)
   let sesiAktif = null;
   for (const s of sesiList) {
     if (curMin >= s.mulaiMin && curMin <= s.tutupMin) {
@@ -200,7 +199,6 @@ async function handleAbsenQR(d) {
     }
   }
 
-  // Kalau tidak ada sesi aktif: bisa jadi belum mulai sesi 1, atau sudah lewat semua sesi
   if (!sesiAktif) {
     const first = sesiList[0];
     const last = sesiList[sesiList.length - 1];
@@ -209,12 +207,11 @@ async function handleAbsenQR(d) {
     } else if (curMin > last.tutupMin) {
       return { status: 'danger', message: `Semua sesi absensi hari ini sudah selesai (terakhir ${last.tutup}).` };
     } else {
-      // Di antara sesi (misal jam istirahat)
       return { status: 'warning', message: 'Tidak ada sesi aktif saat ini. Tunggu sesi berikutnya.' };
     }
   }
 
-  // 4. Cek riwayat absen hari ini
+  // 4. Ambil riwayat absen hari ini
   const { data: riwayat } = await sb.from('kehadiran')
     .select('sesi')
     .eq('id_user', code)
@@ -226,16 +223,16 @@ async function handleAbsenQR(d) {
     riwayatBySesi[namaSesi] = String(r.sesi);
   });
 
-  // 5. Cek status sesi sebelumnya (CASCADE)
+  // 5. Cek cascade dari sesi sebelumnya
   const sesiIdx = sesiList.findIndex(s => s.sesi === sesiAktif.sesi);
 
-  // Cek Izin/Sakit dulu (berlaku sehari)
   for (let i = 0; i < sesiIdx; i++) {
     const prev = sesiList[i];
     const statusPrev = riwayatBySesi[prev.sesi] || '';
+
+    // Kalau ada Izin/Sakit → otomatis catat di sesi ini
     if (statusPrev.startsWith('Izin') || statusPrev.startsWith('Sakit')) {
       const jenis = statusPrev.startsWith('Izin') ? 'Izin' : 'Sakit';
-      // Otomatis catat Izin/Sakit di sesi ini juga
       const { error } = await sb.from('kehadiran').insert({
         timestamp: _nowStr(),
         peran: role.toUpperCase(),
@@ -245,24 +242,27 @@ async function handleAbsenQR(d) {
         tanggal: today
       });
       if (error) return { status: 'error', message: 'Gagal menyimpan: ' + error.message };
-      return { status: 'warning', message: `${user.nama} tercatat ${jenis} hari ini. Absen otomatis dicatat.` };
+      return { status: 'warning', message: `${user.nama} tercatat ${jenis} hari ini.` };
     }
-  }
 
-  // Cek ALPA di sesi sebelumnya
-  for (let i = 0; i < sesiIdx; i++) {
-    const prev = sesiList[i];
-    const statusPrev = riwayatBySesi[prev.sesi] || '';
+    // Kalau sudah ALPA → tolak permanen
     if (statusPrev.includes('Alpa')) {
       return { status: 'danger', message: `Ditolak! ${user.nama} sudah ALPA di ${prev.sesi}. Status ALPA permanen seharian.` };
     }
+
+    // Kalau sudah BOLOS → tolak permanen
     if (statusPrev.includes('Bolos')) {
       return { status: 'danger', message: `Ditolak! ${user.nama} sudah BOLOS di ${prev.sesi}. Status BOLOS permanen seharian.` };
     }
-    // Kalau sesi sebelumnya belum lewat (masih kosong), tapi sesi sudah tutup → otomatis ALPA/BOLOS
+
+    // Kalau sesi sebelumnya sudah lewat tapi belum tercatat → otomatis ALPA/BOLOS
     if (!statusPrev && curMin > prev.tutupMin) {
-      const jenis = prev.alpaSetting === 'Bolos' ? 'Bolos' : 'Alpa';
-      // Insert untuk sesi sebelumnya
+      const adaScan = Object.keys(riwayatBySesi).some(k => {
+        const s = riwayatBySesi[k];
+        return (s.includes('TW') || s.includes('TL'));
+      });
+      const jenis = adaScan ? 'Bolos' : (prev.alpaSetting === 'Bolos' ? 'Bolos' : 'Alpa');
+      
       await sb.from('kehadiran').insert({
         timestamp: _nowStr(),
         peran: role.toUpperCase(),
@@ -275,7 +275,7 @@ async function handleAbsenQR(d) {
     }
   }
 
-  // 6. Cek sudah scan di sesi ini atau belum
+  // 6. Cek sudah scan di sesi ini
   if (riwayatBySesi[sesiAktif.sesi]) {
     return { status: 'warning', message: `DITOLAK! ${user.nama} sudah absen pada ${sesiAktif.sesi} hari ini.` };
   }
@@ -283,7 +283,7 @@ async function handleAbsenQR(d) {
   // 7. Tentukan TW/TL
   const statusAbsen = curMin > sesiAktif.batasTWMin ? 'TL (Terlambat)' : 'TW (Tepat Waktu)';
 
-  // 8. Simpan ke Supabase
+  // 8. Simpan
   const { error } = await sb.from('kehadiran').insert({
     timestamp: _nowStr(),
     peran: role.toUpperCase(),
