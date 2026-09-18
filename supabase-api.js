@@ -793,9 +793,6 @@ async function handleCheckSession(d) {
   return { status: 'success', role, userData: null, message: 'Session valid!' };
 }
 
-// ============================================================
-// HANDLER: SYARAT KELULUSAN (DENGAN HITUNG HARI EFEKTIF)
-// ============================================================
 async function handleGetSyaratKelulusan(d) {
   const nisn = String(d.nisn || '').trim();
   if (!nisn) return { status: 'error', message: 'NISN tidak valid!' };
@@ -811,54 +808,26 @@ async function handleGetSyaratKelulusan(d) {
     return { status: 'not_configured', message: 'Seting Absen belum dikonfigurasi.' };
   }
 
-  // Ambil daftar hari libur dari database
+  // Hitung tanggal batas: min(tglAkhir, hari ini)
+  const nowWIB = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${nowWIB.getFullYear()}-${pad(nowWIB.getMonth()+1)}-${pad(nowWIB.getDate())}`;
+  const tglBatas = todayStr < tglAkhir ? todayStr : tglAkhir;
+
+  // AMBIL DATA HARI SEKOLAH DARI DATABASE
+  const { data: hariSekolahRows } = await sb.from('hari_sekolah')
+    .select('tanggal, jumlah_sesi')
+    .gte('tanggal', tglMulai)
+    .lte('tanggal', tglBatas);
+
+  const jumlahHariEfektif = (hariSekolahRows || []).length;
+  const totalSesiEfektif = (hariSekolahRows || []).reduce((sum, r) => sum + (r.jumlah_sesi || 0), 0);
+
+  // Ambil daftar hari libur (untuk skip data kehadiran di hari libur)
   const { data: liburRows } = await sb.from('hari_libur').select('tanggal');
   const liburSet = new Set((liburRows || []).map(r => String(r.tanggal).substring(0,10)));
 
-  // Ambil konfigurasi sesi
-  const sesiList = await _getSesiList();
-  const jumlahSesiPerHari = sesiList.length || 1;
-
-  // ============================================================
-  // HITUNG HARI SEKOLAH BERJALAN (SKIP SABTU-MINGGU + LIBUR)
-  // ============================================================
-  const hariEfektifSet = new Set();
-  
-  // Parse tanggal mulai & akhir
-  const [y1, m1, d1] = tglMulai.split('-').map(Number);
-  const [y2, m2, d2] = tglAkhir.split('-').map(Number);
-  const startDate = new Date(y1, m1 - 1, d1); // bulan 0-indexed
-  const endDate = new Date(y2, m2 - 1, d2);
-
-  // Tentukan tanggal batas: min(tglAkhir, hari ini)
-  const nowWIB = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-  nowWIB.setHours(0, 0, 0, 0);
-  const effectiveEnd = endDate > nowWIB ? nowWIB : endDate;
-
-  // Loop dari startDate sampai effectiveEnd
-  const cur = new Date(startDate);
-  while (cur <= effectiveEnd) {
-    const dayOfWeek = cur.getDay(); // 0 = Minggu, 6 = Sabtu
-    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-    
-    // Format tanggal YYYY-MM-DD (pakai lokal, bukan UTC)
-    const pad = n => String(n).padStart(2, '0');
-    const tglStr = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
-    
-    // Skip kalau weekend atau hari libur
-    if (!isWeekend && !liburSet.has(tglStr)) {
-      hariEfektifSet.add(tglStr);
-    }
-    
-    cur.setDate(cur.getDate() + 1);
-  }
-
-  const jumlahHariEfektif = hariEfektifSet.size;
-  const totalSesiEfektif = jumlahHariEfektif * jumlahSesiPerHari;
-
-  // ============================================================
-  // HITUNG STATISTIK KEHADIRAN SISWA
-  // ============================================================
+  // Hitung statistik kehadiran siswa
   const stats = { tw: 0, tl: 0, sakit: 0, izin: 0, alpa: 0, bolos: 0 };
 
   const { data: kRows } = await sb.from('kehadiran')
@@ -866,15 +835,10 @@ async function handleGetSyaratKelulusan(d) {
     .eq('id_user', nisn)
     .eq('peran', 'SISWA')
     .gte('tanggal', tglMulai)
-    .lte('tanggal', tglAkhir);
+    .lte('tanggal', tglBatas);
 
   (kRows || []).forEach(r => {
     const tgl = String(r.tanggal).substring(0, 10);
-    // Skip kalau weekend atau hari libur
-    const [yy, mm, dd] = tgl.split('-').map(Number);
-    const dObj = new Date(yy, mm - 1, dd);
-    const dow = dObj.getDay();
-    if (dow === 0 || dow === 6) return;
     if (liburSet.has(tgl)) return;
 
     const st = String(r.sesi || '').toLowerCase();
@@ -888,7 +852,6 @@ async function handleGetSyaratKelulusan(d) {
 
   const totalSesiTercatat = stats.tw + stats.tl + stats.sakit + stats.izin + stats.alpa + stats.bolos;
 
-  // Hitung nilai hadir
   const nilaiHadir = stats.tw + stats.tl + (stats.sakit * 0.75) + (stats.izin * 0.5);
   const persen = totalSesiEfektif > 0 ? (nilaiHadir / totalSesiEfektif) * 100 : 0;
 
@@ -904,7 +867,7 @@ async function handleGetSyaratKelulusan(d) {
     data: {
       nisn, nama: user.nama, kelas: user.kelas,
       periodeMulai: tglMulai, periodeAkhir: tglAkhir,
-      jumlahHariEfektif, jumlahSesiPerHari, totalSesiEfektif,
+      jumlahHariEfektif, totalSesiEfektif,
       totalSesiTercatat,
       batasPersen, ...stats,
       nilaiHadir: nilaiHadir.toFixed(2),
