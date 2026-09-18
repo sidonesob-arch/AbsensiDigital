@@ -1273,21 +1273,17 @@ function setRole(role) {
   $('btnSiswaAdmin').style.background = role === 'siswa' ? 'var(--primary)' : '#6c757d';
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
-function toggleCamera() {
-  const sesiAktif = sesiDataCache.find(s => s.sesi === currentActiveSesiName);
-  if (!sesiAktif && !currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif saat ini!");
-  isCameraOn ? stopCamera() : startCamera();
-}
 function startCamera() {
   if (html5QrcodeScanner) {
     try { html5QrcodeScanner.clear(); } catch(e) {}
     html5QrcodeScanner = null;
   }
   html5QrcodeScanner = new Html5Qrcode("reader");
-  html5QrcodeScanner.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-    code => onScanSuccess(code, currentActiveSesiName)
+html5QrcodeScanner.start(
+  { facingMode: "environment" },
+  { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
+  code => onScanSuccess(code)  // tanpa sesi
+)
   ).then(() => {
     isCameraOn = true;
     const btn = $('btnCameraToggle');
@@ -1316,15 +1312,11 @@ function stopCamera() {
   }
 }
 
-function onScanSuccess(code, sesiTarget) {
+function onScanSuccess(code) {
   const now = Date.now();
   if (isProcessing) return;
   if (now - lastScanTime < 2000) return;
   if (!code || String(code).trim() === '') return;
-  if (!sesiTarget || String(sesiTarget).trim() === '') {
-    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
-    return;
-  }
 
   lastScanTime = now;
   isProcessing = true;
@@ -1333,8 +1325,9 @@ function onScanSuccess(code, sesiTarget) {
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
+  // Kirim tanpa sesi — server yang tentukan
   sendRequest(
-    { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
+    { action: 'absen_qr', role: currentRole, code: String(code).trim() },
     res => {
       isProcessing = false;
       if (!res || typeof res !== 'object') {
