@@ -794,45 +794,89 @@ async function handleCheckSession(d) {
 }
 
 // ============================================================
-// HANDLER: SYARAT KELULUSAN
+// HANDLER: SYARAT KELULUSAN (DENGAN HITUNG HARI EFEKTIF)
 // ============================================================
 async function handleGetSyaratKelulusan(d) {
   const nisn = String(d.nisn || '').trim();
   if (!nisn) return { status: 'error', message: 'NISN tidak valid!' };
+
   const { data: user } = await sb.from('siswa').select('*').eq('nisn', nisn).maybeSingle();
   if (!user) return { status: 'error', message: 'Siswa tidak ditemukan!' };
 
   const tglMulai = await _getSetting('Tgl_Mulai_Absen', '');
   const tglAkhir = await _getSetting('Tgl_Akhir_Absen', '');
   const batasPersen = parseFloat(await _getSetting('Batas_Persen_Hadir', '80'));
-  if (!tglMulai || !tglAkhir) return { status: 'not_configured', message: 'Seting Absen belum dikonfigurasi.' };
 
+  if (!tglMulai || !tglAkhir) {
+    return { status: 'not_configured', message: 'Seting Absen belum dikonfigurasi.' };
+  }
+
+  // Ambil daftar hari libur dari database
   const { data: liburRows } = await sb.from('hari_libur').select('tanggal');
   const liburSet = new Set((liburRows || []).map(r => String(r.tanggal).substring(0,10)));
 
-  const { data: kRows } = await sb.from('kehadiran')
-    .select('*').eq('id_user', nisn).eq('peran', 'SISWA')
-    .gte('tanggal', tglMulai).lte('tanggal', tglAkhir);
-
+  // Ambil konfigurasi sesi
   const sesiList = await _getSesiList();
   const jumlahSesiPerHari = sesiList.length || 1;
 
-  // Hitung hari efektif
+  // ============================================================
+  // HITUNG HARI SEKOLAH BERJALAN (SKIP SABTU-MINGGU + LIBUR)
+  // ============================================================
   const hariEfektifSet = new Set();
-  let cur = new Date(tglMulai + 'T00:00:00');
-  const end = new Date(tglAkhir + 'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-  const effEnd = end > today ? today : end;
-  while (cur <= effEnd) {
-    const s = cur.toISOString().substring(0,10);
-    if (!liburSet.has(s)) hariEfektifSet.add(s);
+  
+  // Parse tanggal mulai & akhir
+  const [y1, m1, d1] = tglMulai.split('-').map(Number);
+  const [y2, m2, d2] = tglAkhir.split('-').map(Number);
+  const startDate = new Date(y1, m1 - 1, d1); // bulan 0-indexed
+  const endDate = new Date(y2, m2 - 1, d2);
+
+  // Tentukan tanggal batas: min(tglAkhir, hari ini)
+  const nowWIB = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+  nowWIB.setHours(0, 0, 0, 0);
+  const effectiveEnd = endDate > nowWIB ? nowWIB : endDate;
+
+  // Loop dari startDate sampai effectiveEnd
+  const cur = new Date(startDate);
+  while (cur <= effectiveEnd) {
+    const dayOfWeek = cur.getDay(); // 0 = Minggu, 6 = Sabtu
+    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+    
+    // Format tanggal YYYY-MM-DD (pakai lokal, bukan UTC)
+    const pad = n => String(n).padStart(2, '0');
+    const tglStr = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+    
+    // Skip kalau weekend atau hari libur
+    if (!isWeekend && !liburSet.has(tglStr)) {
+      hariEfektifSet.add(tglStr);
+    }
+    
     cur.setDate(cur.getDate() + 1);
   }
 
-  const stats = { tw:0, tl:0, sakit:0, izin:0, alpa:0, bolos:0 };
+  const jumlahHariEfektif = hariEfektifSet.size;
+  const totalSesiEfektif = jumlahHariEfektif * jumlahSesiPerHari;
+
+  // ============================================================
+  // HITUNG STATISTIK KEHADIRAN SISWA
+  // ============================================================
+  const stats = { tw: 0, tl: 0, sakit: 0, izin: 0, alpa: 0, bolos: 0 };
+
+  const { data: kRows } = await sb.from('kehadiran')
+    .select('*')
+    .eq('id_user', nisn)
+    .eq('peran', 'SISWA')
+    .gte('tanggal', tglMulai)
+    .lte('tanggal', tglAkhir);
+
   (kRows || []).forEach(r => {
-    const tgl = String(r.tanggal).substring(0,10);
+    const tgl = String(r.tanggal).substring(0, 10);
+    // Skip kalau weekend atau hari libur
+    const [yy, mm, dd] = tgl.split('-').map(Number);
+    const dObj = new Date(yy, mm - 1, dd);
+    const dow = dObj.getDay();
+    if (dow === 0 || dow === 6) return;
     if (liburSet.has(tgl)) return;
+
     const st = String(r.sesi || '').toLowerCase();
     if (st.includes('tw')) stats.tw++;
     else if (st.includes('tl')) stats.tl++;
@@ -843,11 +887,16 @@ async function handleGetSyaratKelulusan(d) {
   });
 
   const totalSesiTercatat = stats.tw + stats.tl + stats.sakit + stats.izin + stats.alpa + stats.bolos;
+
+  // Hitung nilai hadir
   const nilaiHadir = stats.tw + stats.tl + (stats.sakit * 0.75) + (stats.izin * 0.5);
-  const persen = totalSesiTercatat > 0 ? (nilaiHadir / totalSesiTercatat) * 100 : 0;
+  const persen = totalSesiEfektif > 0 ? (nilaiHadir / totalSesiEfektif) * 100 : 0;
+
   const isKelas9 = user.kelas.trim().startsWith('9');
   const memenuhi = persen >= batasPersen;
-  const pesan = isKelas9 ? (memenuhi ? 'MEMENUHI SYARAT LULUS' : 'TIDAK MEMENUHI SYARAT LULUS') : (memenuhi ? 'MEMENUHI SYARAT NAIK KELAS' : 'TIDAK MEMENUHI SYARAT NAIK KELAS');
+  const pesan = isKelas9
+    ? (memenuhi ? 'MEMENUHI SYARAT LULUS' : 'TIDAK MEMENUHI SYARAT LULUS')
+    : (memenuhi ? 'MEMENUHI SYARAT NAIK KELAS' : 'TIDAK MEMENUHI SYARAT NAIK KELAS');
   const warna = persen >= batasPersen ? 'hijau' : (persen >= batasPersen - 2 ? 'kuning' : 'merah');
 
   return {
@@ -855,15 +904,15 @@ async function handleGetSyaratKelulusan(d) {
     data: {
       nisn, nama: user.nama, kelas: user.kelas,
       periodeMulai: tglMulai, periodeAkhir: tglAkhir,
-      jumlahHariEfektif: hariEfektifSet.size, jumlahSesiPerHari,
-      totalSesiEfektif: totalSesiTercatat, totalSesiTercatat,
+      jumlahHariEfektif, jumlahSesiPerHari, totalSesiEfektif,
+      totalSesiTercatat,
       batasPersen, ...stats,
-      nilaiHadir: nilaiHadir.toFixed(2), persen: persen.toFixed(2),
+      nilaiHadir: nilaiHadir.toFixed(2),
+      persen: persen.toFixed(2),
       memenuhi, warna, pesan, isKelas9
     }
   };
 }
-
 // ============================================================
 // HANDLER: SETTING ABSEN
 // ============================================================
