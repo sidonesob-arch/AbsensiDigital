@@ -1316,15 +1316,11 @@ function stopCamera() {
   }
 }
 
-function onScanSuccess(code, sesiTarget) {
+function onScanSuccess(code) {
   const now = Date.now();
   if (isProcessing) return;
   if (now - lastScanTime < 2000) return;
   if (!code || String(code).trim() === '') return;
-  if (!sesiTarget || String(sesiTarget).trim() === '') {
-    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
-    return;
-  }
 
   lastScanTime = now;
   isProcessing = true;
@@ -1333,8 +1329,9 @@ function onScanSuccess(code, sesiTarget) {
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
+  // Kirim TANPA sesi — server yang menentukan
   sendRequest(
-    { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
+    { action: 'absen_qr', role: currentRole, code: String(code).trim() },
     res => {
       isProcessing = false;
       if (!res || typeof res !== 'object') {
@@ -1346,7 +1343,6 @@ function onScanSuccess(code, sesiTarget) {
     }
   );
 }
-
 function updatePopupResult(type, title, message) {
   const box = $('bigPopupBox');
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
