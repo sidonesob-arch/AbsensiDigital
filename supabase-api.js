@@ -794,9 +794,8 @@ async function handleCheckSession(d) {
 }
 
 // ============================================================
-// HANDLER: SYARAT KELULUSAN (VERSI SIMPEL - HITUNG SESI)
-// Logika: hitung sesi berjalan dari tanggal mulai s/d hari ini,
-//         bandingkan dengan nilai hadir siswa.
+// HANDLER: SYARAT KELULUSAN (VERSI FINAL - HITUNG SESI BERJALAN)
+// Sesi berjalan = COUNT DISTINCT (tanggal, sesi) di tabel kehadiran
 // ============================================================
 async function handleGetSyaratKelulusan(d) {
   const nisn = String(d.nisn || '').trim();
@@ -819,35 +818,25 @@ async function handleGetSyaratKelulusan(d) {
   const todayStr = `${nowWIB.getFullYear()}-${pad(nowWIB.getMonth()+1)}-${pad(nowWIB.getDate())}`;
   const tglBatas = todayStr < tglAkhir ? todayStr : tglAkhir;
 
-  // Ambil daftar hari libur (untuk skip hari libur)
-  const { data: liburRows } = await sb.from('hari_libur').select('tanggal');
-  const liburSet = new Set((liburRows || []).map(r => String(r.tanggal).substring(0,10)));
-
-  // Ambil konfigurasi sesi
-  const sesiList = await _getSesiList();
-  const jumlahSesiPerHari = sesiList.length || 1;
-
   // ============================================================
-  // HITUNG HARI EFEKTIF (Senin-Jumat, minus hari libur)
+  // HITUNG TOTAL SESI BERJALAN
   // ============================================================
-  const [y1, m1, d1] = tglMulai.split('-').map(Number);
-  const [y2, m2, d2] = tglBatas.split('-').map(Number);
-  const startDate = new Date(y1, m1 - 1, d1);
-  const endDate = new Date(y2, m2 - 1, d2);
+  // Ambil SEMUA record kehadiran (semua siswa) dalam periode ini
+  const { data: semuaKehadiran } = await sb.from('kehadiran')
+    .select('tanggal, sesi')
+    .gte('tanggal', tglMulai)
+    .lte('tanggal', tglBatas);
 
-  let jumlahHariEfektif = 0;
-  const cur = new Date(startDate);
-  while (cur <= endDate) {
-    const dow = cur.getDay();
-    const isWeekend = (dow === 0 || dow === 6);
-    const tglStr = `${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
-    if (!isWeekend && !liburSet.has(tglStr)) {
-      jumlahHariEfektif++;
+  // Kumpulkan kombinasi unik (tanggal + sesi)
+  const sesiUnik = new Set();
+  (semuaKehadiran || []).forEach(r => {
+    const namaSesi = String(r.sesi || '').split(' - ')[0].trim();
+    if (namaSesi) {
+      sesiUnik.add(`${r.tanggal}_${namaSesi}`);
     }
-    cur.setDate(cur.getDate() + 1);
-  }
+  });
 
-  const totalSesiBerjalan = jumlahHariEfektif * jumlahSesiPerHari;
+  const totalSesiBerjalan = sesiUnik.size;
 
   // ============================================================
   // HITUNG NILAI HADIR SISWA
@@ -862,13 +851,6 @@ async function handleGetSyaratKelulusan(d) {
     .lte('tanggal', tglBatas);
 
   (kRows || []).forEach(r => {
-    const tgl = String(r.tanggal).substring(0, 10);
-    if (liburSet.has(tgl)) return;
-    const [yy, mm, dd] = tgl.split('-').map(Number);
-    const dObj = new Date(yy, mm - 1, dd);
-    const dow = dObj.getDay();
-    if (dow === 0 || dow === 6) return;
-
     const st = String(r.sesi || '').toLowerCase();
     if (st.includes('tw')) stats.tw++;
     else if (st.includes('tl')) stats.tl++;
@@ -879,7 +861,6 @@ async function handleGetSyaratKelulusan(d) {
   });
 
   const totalSesiTercatat = stats.tw + stats.tl + stats.sakit + stats.izin + stats.alpa + stats.bolos;
-
   const nilaiHadir = stats.tw + stats.tl + (stats.sakit * 0.75) + (stats.izin * 0.5);
   const persen = totalSesiBerjalan > 0 ? (nilaiHadir / totalSesiBerjalan) * 100 : 0;
 
@@ -895,10 +876,8 @@ async function handleGetSyaratKelulusan(d) {
     data: {
       nisn, nama: user.nama, kelas: user.kelas,
       periodeMulai: tglMulai, periodeAkhir: tglAkhir,
-      jumlahHariEfektif,
-      jumlahSesiPerHari,
-      totalSesiEfektif: totalSesiBerjalan,  // ← "total sesi berjalan"
-      totalSesiTercatat,                    // ← "sesi yang diikuti siswa"
+      totalSesiEfektif: totalSesiBerjalan,  // total sesi berjalan
+      totalSesiTercatat,                    // sesi diikuti siswa
       batasPersen, ...stats,
       nilaiHadir: nilaiHadir.toFixed(2),
       persen: persen.toFixed(2),
