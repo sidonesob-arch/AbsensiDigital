@@ -1274,6 +1274,8 @@ function setRole(role) {
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
 function toggleCamera() {
+  const sesiAktif = sesiDataCache.find(s => s.sesi === currentActiveSesiName);
+  if (!sesiAktif && !currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif saat ini!");
   isCameraOn ? stopCamera() : startCamera();
 }
 function startCamera() {
@@ -1285,7 +1287,7 @@ function startCamera() {
   html5QrcodeScanner.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-    code => onScanSuccess(code)
+    code => onScanSuccess(code, currentActiveSesiName)
   ).then(() => {
     isCameraOn = true;
     const btn = $('btnCameraToggle');
@@ -1314,11 +1316,15 @@ function stopCamera() {
   }
 }
 
-function onScanSuccess(code) {
+function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
   if (isProcessing) return;
   if (now - lastScanTime < 2000) return;
   if (!code || String(code).trim() === '') return;
+  if (!sesiTarget || String(sesiTarget).trim() === '') {
+    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
+    return;
+  }
 
   lastScanTime = now;
   isProcessing = true;
@@ -1327,9 +1333,8 @@ function onScanSuccess(code) {
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
-  // Kirim TANPA sesi — server yang menentukan
   sendRequest(
-    { action: 'absen_qr', role: currentRole, code: String(code).trim() },
+    { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
       isProcessing = false;
       if (!res || typeof res !== 'object') {
