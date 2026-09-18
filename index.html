@@ -1283,7 +1283,6 @@ html5QrcodeScanner.start(
   { facingMode: "environment" },
   { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
   code => onScanSuccess(code)  // tanpa sesi
-)
   ).then(() => {
     isCameraOn = true;
     const btn = $('btnCameraToggle');
