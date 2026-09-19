@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistem Absensi Terpadu - SMP NEGERI 1 SOBANG</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -345,11 +344,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" id="nav-cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
 
     <div class="nav-category">MENU UTAMA</div>
-    <a class="nav-item locked" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
-    <a class="nav-item locked" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
-    <a class="nav-item locked" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
-    <a class="nav-item" id="nav-download-absen" onclick="checkMenuAccess('download-absen', this)">📥 Download Absensi</a>
-    <a class="nav-item locked" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
+    <a class="nav-item" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
+    <a class="nav-item" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
+    <a class="nav-item" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
+    <a class="nav-item" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
     <a class="nav-item" id="nav-jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
@@ -546,20 +544,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
-    <!-- DOWNLOAD ABSENSI -->
-    <div id="menu-download-absen" class="section">
-      <h3 style="color:var(--primary); font-size:15px;">📥 Download Template Absensi</h3>
-      <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid var(--border-light); margin-bottom:12px;">
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-          <div class="form-group" style="flex:1; min-width:140px;"><label>Peran:</label><select id="downRole" onchange="toggleDownKelas()"><option value="siswa">Siswa</option><option value="guru">Guru</option></select></div>
-          <div class="form-group" style="flex:1; min-width:140px;" id="downKelasContainer"><label>Kelas:</label><select id="downKelas"><option value="">-- Semua Kelas --</option></select></div>
-          <div class="form-group" style="flex:1; min-width:140px;"><label>Dari Tanggal:</label><input type="date" id="downTglMulai"></div>
-          <div class="form-group" style="flex:1; min-width:140px;"><label>Sampai Tanggal:</label><input type="date" id="downTglSelesai"></div>
-        </div>
-        <button class="btn-primary" onclick="generateDownloadAbsenExcel()">📥 Download Excel Template</button>
-      </div>
-    </div>
-    
     <!-- PENGATURAN -->
     <div id="menu-pengaturan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⚙️ Pengaturan</h3>
@@ -768,9 +752,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
 <div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.2</div>
 
-<script src="supabase-api.js"></script>
 <script>
-const MAX_RETRY = 3;
+// ===================== KONFIGURASI SUPABASE =====================
+const SUPABASE_FUNCTION_URL = "https://avgpyvrkcgdeaobyfodi.supabase.co/functions/v1/api";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2Z3B5dnJrY2dkZWFvYnlmb2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NDM2ODAsImV4cCI6MjEwNTIxOTY4MH0.8pZD8rU8HMf7bh-izbZIqcUZaX-9kuGTKP2le9qzFOw";   // <-- ganti dengan anon key kamu
 
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -800,6 +785,40 @@ let resetPinData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
 
+
+// ===================== FUNGSI PENGGANTI sendRequest =====================
+function sendRequest(payload, callback, retryCount = 0) {
+  if (!payload || !payload.action) {
+    if (typeof callback === "function") {
+      callback({ status: 'error', message: 'Payload tidak valid.' });
+    }
+    return;
+  }
+
+  fetch(SUPABASE_FUNCTION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "apikey": SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (typeof callback === "function") callback(res);
+  })
+  .catch(err => {
+    if (retryCount < 2) {
+      setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500);
+    } else {
+      showBigPopup("danger", "Koneksi Error", "Gagal terhubung ke server! " + err.message);
+      if (typeof callback === "function") {
+        callback({ status: "error", message: "Koneksi gagal: " + err.message });
+      }
+    }
+  });
+}
 const POPUP_ICONS = { success: "✅", warning: "⚠️", danger: "❌", info: "ℹ️" };
 function showBigPopup(type, title, message, autoClose = null) {
   const popup = $('bigPopup');
@@ -1316,11 +1335,15 @@ function stopCamera() {
   }
 }
 
-function onScanSuccess(code) {
+function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
   if (isProcessing) return;
   if (now - lastScanTime < 2000) return;
   if (!code || String(code).trim() === '') return;
+  if (!sesiTarget || String(sesiTarget).trim() === '') {
+    showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
+    return;
+  }
 
   lastScanTime = now;
   isProcessing = true;
@@ -1329,9 +1352,8 @@ function onScanSuccess(code) {
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
 
-  // Kirim TANPA sesi — server yang menentukan
   sendRequest(
-    { action: 'absen_qr', role: currentRole, code: String(code).trim() },
+    { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
       isProcessing = false;
       if (!res || typeof res !== 'object') {
@@ -1343,6 +1365,7 @@ function onScanSuccess(code) {
     }
   );
 }
+
 function updatePopupResult(type, title, message) {
   const box = $('bigPopupBox');
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
@@ -1458,18 +1481,10 @@ function renderSyaratResult(d) {
         <div class="syarat-kelas">Kelas ${d.kelas} • NISN ${d.nisn}</div>
         <div class="syarat-periode">📅 ${d.periodeMulai} s/d ${d.periodeAkhir}</div>
       </div>
-      
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px;">
-        <div style="display:flex; justify-content:space-between; padding:3px 0;">
-          <span>📅 Hari Efektif Sekolah Berjalan</span>
-          <b>${d.jumlahHariEfektif} hari</b>
-        </div>
-        <div style="display:flex; justify-content:space-between; padding:3px 0;">
-          <span>🕐 Total Sesi Berjalan</span>
-          <b>${d.totalSesiEfektif} sesi</b>
-        </div>
+        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Sekolah Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
+        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>🕐 Akumulasi Sesi Efektif</span><b>${d.totalSesiEfektif} sesi</b></div>
       </div>
-      
       <ul class="syarat-list">
         <li><span>Tepat Waktu (TW)</span><b>${d.tw}</b></li>
         <li><span>Terlambat (TL)</span><b>${d.tl}</b></li>
@@ -1478,22 +1493,12 @@ function renderSyaratResult(d) {
         <li><span>Alpa</span><b>${d.alpa}</b></li>
         <li><span>Bolos</span><b>${d.bolos}</b></li>
       </ul>
-      
-      <div style="background:#f0f4f9; padding:10px 14px; border-radius:8px; margin-bottom:14px; display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:var(--primary); border:2px dashed var(--border);">
-        <span>🧮 Total Rincian</span>
-        <span>${d.totalRincian || (d.tw + d.tl + d.sakit + d.izin + d.alpa + d.bolos)} sesi</span>
-      </div>
-      
       <div class="syarat-total">
-        <div class="total-label">Persentase Kehadiran</div>
+        <div class="total-label">Persentase Kehadiran Akurat</div>
         <div class="total-value">${d.persen}%</div>
-        <div style="font-size:11px; color:#666; margin-top:4px;">
-          Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%)
-        </div>
+        <div style="font-size:11px; color:#666; margin-top:4px;">Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%)</div>
       </div>
-      
       <div class="syarat-status ${d.warna}">${statusIcon} ${d.pesan}</div>
-      
       <div class="syarat-actions">
         <button class="btn-primary" style="background:var(--danger);" onclick="window.print()">📄 Cetak PDF</button>
       </div>
@@ -2043,128 +2048,6 @@ async function registerSiswaFingerprint() {
 async function absenSiswaWithFingerprint() {
   if (!siswaUserData) return;
   await doAbsenFingerprint(siswaUserData.nisn, 'siswa', showSiswaFingerprintStatus, 'btnAbsenSiswaFingerprint');
-}
-
-  function toggleDownKelas() {
-  const role = $('downRole').value;
-  $('downKelasContainer').style.display = role === 'siswa' ? 'block' : 'none';
-}
-
-function generateDownloadAbsenExcel() {
-  const role = $('downRole').value;
-  const kelas = $('downKelas').value;
-  const tglMulai = $('downTglMulai').value;
-  const tglSelesai = $('downTglSelesai').value;
-
-  if (!tglMulai || !tglSelesai) {
-    return showBigPopup('warning', 'Peringatan', 'Harap isi rentang tanggal mulai dan selesai!');
-  }
-
-  showBigPopup('info', 'Memproses', 'Sedang menyiapkan template Excel...', 0);
-
-  sendRequest({ action: 'get_download_absen_data', role, kelas, tglMulai, tglSelesai }, res => {
-    closeBigPopup();
-    if (res.status !== 'success') {
-      return showBigPopup('danger', 'Gagal', res.message);
-    }
-
-    const { bulanTahunStr, listTanggal, users } = res;
-    if (!users || !users.length) {
-      return showBigPopup('warning', 'Kosong', 'Tidak ada data pengguna ditemukan.');
-    }
-
-    const wb = XLSX.utils.book_new();
-    const wsData = [];
-
-    // Kop Surat
-    wsData.push(["SMP NEGERI 1 SOBANG"]);
-    wsData.push([role === 'siswa' ? "DAFTAR HADIR SISWA" : "DAFTAR HADIR GURU"]);
-    wsData.push([`BULAN ${bulanTahunStr}`]);
-    wsData.push([]); // Baris Kosong
-
-    // Header Baris 1
-    let header1 = ["No", role === 'siswa' ? "Nama Siswa" : "Nama/NIP/Pangkat Gol", "L/P", "TANGGAL"];
-    for (let i = 1; i < listTanggal.length; i++) header1.push("");
-    header1.push("S", "I", "A", "Jml");
-    wsData.push(header1);
-
-    // Header Baris 2 (Nomor Tanggal 1, 2, 3...)
-    let header2 = ["", "", ""];
-    listTanggal.forEach(t => header2.push(t.dayNum));
-    header2.push("", "", "", "");
-    wsData.push(header2);
-
-    // Data Baris User / Siswa / Guru
-    users.forEach((u, idx) => {
-      let row = [
-        idx + 1,
-        role === 'guru' ? u.detail : u.nama,
-        u.jk || 'L'
-      ];
-      listTanggal.forEach(t => {
-        // Jika libur, kosongkan sel atau beri tanda strip rapi, dan warna latar akan diatur via HTML/XML generator
-        row.push(t.isLibur ? "" : "");
-      });
-      row.push("", "", "", ""); // Kolom S, I, A, Jml
-      wsData.push(row);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // Pengaturan Lebar Kolom (Column Widths) agar tidak sempit
-    const colWidths = [
-      { wch: 5 },  // No
-      { wch: role === 'guru' ? 28 : 25 }, // Nama
-      { wch: 5 }   // L/P
-    ];
-    // Lebar kolom untuk setiap tanggal dibuat pas (lebar 3.5)
-    listTanggal.forEach(() => colWidths.push({ wch: 3.5 }));
-    // Lebar kolom rekap S, I, A, Jml
-    colWidths.push({ wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 5 });
-    ws['!cols'] = colWidths;
-
-    // Konfigurasi Merging Sel Header
-    if (!ws['!merges']) ws['!merges'] = [];
-    const maxColIdx = 3 + listTanggal.length + 3;
-    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: maxColIdx } }); // Judul 1
-    ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: maxColIdx } }); // Judul 2
-    ws['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: maxColIdx } }); // Judul 3
-
-    // Merge vertikal kolom No, Nama, L/P
-    ws['!merges'].push({ s: { r: 4, c: 0 }, e: { r: 5, c: 0 } });
-    ws['!merges'].push({ s: { r: 4, c: 1 }, e: { r: 5, c: 1 } });
-    ws['!merges'].push({ s: { r: 4, c: 2 }, e: { r: 5, c: 2 } });
-
-    // Merge horizontal untuk tulisan TANGGAL
-    const startTglCol = 3;
-    const endTglCol = 3 + listTanggal.length - 1;
-    ws['!merges'].push({ s: { r: 4, c: startTglCol }, e: { r: 4, c: endTglCol } });
-
-    // Merge vertikal kolom rekap S, I, A, Jml
-    const rekapStartCol = endTglCol + 1;
-    for (let c = 0; c < 4; c++) {
-      ws['!merges'].push({ s: { r: 4, c: rekapStartCol + c }, e: { r: 5, c: rekapStartCol + c } });
-    }
-
-    // Pewarnaan latar merah vertikal secara otomatis pada kolom hari libur menggunakan XML Style Attributes SheetJS
-    listTanggal.forEach((t, idx) => {
-      const colIdx = startTglCol + idx;
-      if (t.isLibur) {
-        for (let r = 5; r < wsData.length; r++) {
-          const cellRef = XLSX.utils.encode_cell({ r: r, c: colIdx });
-          if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
-          // Menambahkan properti styling background merah muda (Hex: FFC7CE)
-          ws[cellRef].s = {
-            fill: { patternType: "solid", fgColor: { rgb: "FFC7CE" } }
-          };
-        }
-      }
-    });
-
-    XLSX.utils.book_append_sheet(wb, ws, "Daftar Hadir");
-    XLSX.writeFile(wb, `Daftar_Hadir_${role.toUpperCase()}_${bulanTahunStr}.xlsx`);
-    showBigPopup('success', 'Berhasil', 'Template absensi berhasil didownload dengan format rapi!');
-  });
 }
 </script>
 </body>
