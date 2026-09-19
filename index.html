@@ -1155,28 +1155,43 @@ function updateStatsUI(stats) {
     setText(id, stats[role]?.[key] || '0');
   });
 }
-function updateDashboardTables(guruList, siswaList, sesiList) {
+
+  function updateDashboardTables(guruList, siswaList, sesiList) {
   const sesiNames = sesiList || [];
+  
   const render = (theadId, tbodyId, list, extraKey) => {
     const thead = $(theadId);
     const tbody = $(tbodyId);
     if (!thead || !tbody) return;
+
+    // 1. Buat Header Tabel
     if (sesiNames.length > 0) {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th>${sesiNames.map(s => `<th>${s}</th>`).join('')}</tr>`;
     } else {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th><th>Status</th></tr>`;
     }
-    if (!list || !list.length) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Tidak ada data.</td></tr>`; return; }
+
+    if (!list || !list.length) { 
+      tbody.innerHTML = `<tr><td colspan="${4 + (sesiNames.length || 1)}" style="text-align:center;">Tidak ada data.</td></tr>`; 
+      return; 
+    }
+
+    // 2. Render Baris Data
     tbody.innerHTML = list.map((item, idx) => {
-      const statusArr = String(item.status || '').split(' / ');
       if (sesiNames.length > 0) {
-        const sesiCells = sesiNames.map((_, i) => `<td><b>${statusArr[i] || '-'}</b></td>`).join('');
+        // Ambil data langsung dari key nama sesi (misal: item["Sesi 1"], item["Sesi 2"])
+        const sesiCells = sesiNames.map(sName => {
+          const val = item[sName] || '-';
+          return `<td><b>${val}</b></td>`;
+        }).join('');
+
         return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td>${sesiCells}</tr>`;
       } else {
-        return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td><b>${item.status}</b></td></tr>`;
+        return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td><b>${item.status || '-'}</b></td></tr>`;
       }
     }).join('');
   };
+
   render('theadDashGuru', 'tableDashGuru', guruList, 'mapel');
   render('theadDashSiswa', 'tableDashSiswa', siswaList, 'kelas');
 }
