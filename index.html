@@ -255,6 +255,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .badge-guru { background: #d4edda; color: #155724; }
 .badge-siswa { background: var(--info-bg); color: var(--info-text); }
 .badge-registered { background: #fff3cd; color: #856404; margin-left: 4px; }
+
+/* DOWNLOAD ABSENSI */
+.download-card { background: #fff; padding: 16px; border-radius: 10px; border: 1px solid var(--border-light); margin-bottom: 14px; }
+.download-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.download-summary { background: var(--primary-lighter); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 12px; font-size: 12px; color: var(--primary); }
 </style>
 </head>
 <body>
@@ -336,24 +341,25 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <div class="main-wrapper">
   <div class="sidebar" id="appSidebar">
     <div class="nav-category">DASHBOARD</div>
-    <a class="nav-item active" onclick="switchMenu('dashboard', this)">🏠 Dashboard Utama</a>
+    <a class="nav-item active" data-menu="dashboard" onclick="switchMenu('dashboard', this)">🏠 Dashboard Utama</a>
 
     <div class="nav-category">ORANG TUA / TAMU</div>
-    <a class="nav-item" onclick="switchMenu('cari', this)">🔍 Cari Data Siswa</a>
-    <a class="nav-item" id="nav-siswa-fingerprint" onclick="switchMenu('siswa-fingerprint', this)">👆 Sidik Jari Siswa</a>
-    <a class="nav-item" id="nav-cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
+    <a class="nav-item" data-menu="cari" onclick="switchMenu('cari', this)">🔍 Cari Data Siswa</a>
+    <a class="nav-item" data-menu="siswa-fingerprint" onclick="switchMenu('siswa-fingerprint', this)">👆 Sidik Jari Siswa</a>
+    <a class="nav-item" data-menu="cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
 
     <div class="nav-category">MENU UTAMA</div>
-    <a class="nav-item" id="nav-scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
-    <a class="nav-item" id="nav-izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
-    <a class="nav-item" id="nav-rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
-    <a class="nav-item" id="nav-pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
+    <a class="nav-item" data-menu="scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
+    <a class="nav-item" data-menu="izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
+    <a class="nav-item" data-menu="rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
+    <a class="nav-item" data-menu="pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
-    <a class="nav-item" id="nav-jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
-    <a class="nav-item" id="nav-input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
-    <a class="nav-item" id="nav-daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
-    <a class="nav-item" id="nav-kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
+    <a class="nav-item" data-menu="jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
+    <a class="nav-item" data-menu="input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
+    <a class="nav-item" data-menu="daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
+    <a class="nav-item" data-menu="download-absensi" onclick="checkMenuAccess('download-absensi', this)">⬇️ Download Absensi</a>
+    <a class="nav-item" data-menu="kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
   </div>
 
   <div class="content-container" id="appContent">
@@ -691,7 +697,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <h3 style="color:var(--primary); font-size:15px;">📈 Input Nilai</h3>
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; border-left:4px solid var(--primary); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div><span style="font-weight:600; color:var(--primary); font-size:12px;">👤 Guru:</span> <span id="guruNamaDisplay" style="color:var(--primary); font-weight:bold; font-size:13px;">-</span></div>
-        <button class="btn-success btn-sm" onclick="switchMenu('daftar-nilai', document.getElementById('nav-daftar-nilai'))">📋 Daftar Nilai</button>
+        <button class="btn-success btn-sm" onclick="switchMenu('daftar-nilai', document.querySelector('[data-menu=daftar-nilai]'))">📋 Daftar Nilai</button>
       </div>
       <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid var(--border-light); margin-bottom:12px;">
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
@@ -718,7 +724,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <h3 style="color:var(--primary); font-size:15px;">📋 Daftar Nilai</h3>
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; border-left:4px solid var(--primary); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div><span style="font-weight:600; color:var(--primary); font-size:12px;">👤 Guru:</span> <span id="guruNamaDisplayDaftar" style="color:var(--primary); font-weight:bold; font-size:13px;">-</span></div>
-        <button class="btn-primary btn-sm" onclick="switchMenu('input-nilai', document.getElementById('nav-input-nilai'))">📝 Kembali ke Input</button>
+        <button class="btn-primary btn-sm" onclick="switchMenu('input-nilai', document.querySelector('[data-menu=input-nilai]'))">📝 Kembali ke Input</button>
       </div>
       <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid var(--border-light); margin-bottom:12px;">
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
@@ -739,6 +745,47 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
+    <!-- DOWNLOAD ABSENSI (MENU BARU) -->
+    <div id="menu-download-absensi" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">⬇️ Download Absensi</h3>
+      <div class="download-card">
+        <div class="download-filter">
+          <div class="form-group">
+            <label>Tipe Pengguna:</label>
+            <select id="downloadRole" onchange="toggleDownloadKelasFilter()">
+              <option value="guru">Guru</option>
+              <option value="siswa">Siswa</option>
+            </select>
+          </div>
+          <div class="form-group" id="downloadKelasContainer" style="display:none;">
+            <label>Kelas:</label>
+            <select id="downloadKelas"><option value="">-- Semua --</option></select>
+          </div>
+          <div class="form-group">
+            <label>Dari Tanggal:</label>
+            <input type="date" id="downloadTglMulai">
+          </div>
+          <div class="form-group">
+            <label>Sampai Tanggal:</label>
+            <input type="date" id="downloadTglSelesai">
+          </div>
+        </div>
+        <button class="btn-primary" style="width:auto; padding:10px 28px;" onclick="loadDownloadPreview()">🔍 Tampilkan Pratinjau</button>
+      </div>
+      <div id="downloadSummary" class="download-summary" style="display:none;"></div>
+      <div class="export-section">
+        <button class="btn-excel" onclick="downloadExcel()">📊 Download Excel</button>
+        <button class="btn-pdf" onclick="downloadPDF()">📄 Download PDF</button>
+        <button class="btn-primary" style="background:#17a2b8;" onclick="downloadCSV()">📥 Download CSV</button>
+      </div>
+      <div class="table-responsive">
+        <table id="tableDownloadResult">
+          <thead id="tableDownloadHead"><tr><th>No</th><th>ID</th><th>Nama</th><th>Unit</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr></thead>
+          <tbody id="tableDownloadBody"><tr><td colspan="7" style="text-align:center;">Pilih filter dan klik Tampilkan Pratinjau.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- KELULUSAN -->
     <div id="menu-kelulusan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">🎓 Pengumuman Kelulusan</h3>
@@ -750,7 +797,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.2</div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.3</div>
 
 <script>
 // ===================== KONFIGURASI SUPABASE =====================
@@ -784,7 +831,7 @@ let resetFingerprintData = [];
 let resetPinData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
-
+let currentActiveSesiName = '';
 
 // ===================== FUNGSI PENGGANTI sendRequest =====================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -960,12 +1007,33 @@ function updateProfileDropdown() {
   }
 }
 
+// ===================== PERBAIKAN: SIMPAN & PULIHKAN MENU AKTIF =====================
+function getSavedActiveMenu() {
+  return sessionStorage.getItem('activeMenu') || 'dashboard';
+}
+function saveActiveMenu(menuName) {
+  sessionStorage.setItem('activeMenu', menuName);
+}
+function restoreActiveMenu() {
+  const savedMenu = getSavedActiveMenu();
+  const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
+  switchMenu(savedMenu, navItem, true);
+}
+// ==================================================================================
+
 function restoreSession() {
   const saved = sessionStorage.getItem('userSession');
-  if (!saved) return restoreSiswaSession();
+  if (!saved) {
+    restoreSiswaSession();
+    return;
+  }
   try {
     const { userId, role, sessionToken } = JSON.parse(saved);
-    if (!userId || !role || !sessionToken) { sessionStorage.removeItem('userSession'); return restoreSiswaSession(); }
+    if (!userId || !role || !sessionToken) {
+      sessionStorage.removeItem('userSession');
+      restoreSiswaSession();
+      return;
+    }
     sendRequest({ action: 'check_session', userId, role, sessionToken }, res => {
       if (res.status === 'success') {
         userRole = res.role;
@@ -976,16 +1044,33 @@ function restoreSession() {
           setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapelForGuru(); }, 500);
         }
         closeSidebar();
-      } else { sessionStorage.removeItem('userSession'); restoreSiswaSession(); }
+        // Pulihkan menu aktif setelah sesi dipulihkan
+        restoreActiveMenu();
+      } else {
+        sessionStorage.removeItem('userSession');
+        restoreSiswaSession();
+      }
     });
-  } catch (e) { sessionStorage.removeItem('userSession'); restoreSiswaSession(); }
+  } catch (e) {
+    sessionStorage.removeItem('userSession');
+    restoreSiswaSession();
+  }
 }
 function restoreSiswaSession() {
   const saved = sessionStorage.getItem('siswaSession');
-  if (!saved) return resetSiswaUI();
+  if (!saved) {
+    resetSiswaUI();
+    restoreActiveMenu();
+    return;
+  }
   try {
     const { nisn } = JSON.parse(saved);
-    if (!nisn) { sessionStorage.removeItem('siswaSession'); return resetSiswaUI(); }
+    if (!nisn) {
+      sessionStorage.removeItem('siswaSession');
+      resetSiswaUI();
+      restoreActiveMenu();
+      return;
+    }
     sendRequest({ action: 'login_siswa_fingerprint', nisn, mode: 'check' }, res => {
       if (res.status === 'success') {
         siswaUserData = res;
@@ -993,9 +1078,19 @@ function restoreSiswaSession() {
         updateSiswaUI();
         setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
         updateTopbarUserInfo();
-      } else { sessionStorage.removeItem('siswaSession'); resetSiswaUI(); }
+        updateSyaratAccessUI();
+        restoreActiveMenu();
+      } else {
+        sessionStorage.removeItem('siswaSession');
+        resetSiswaUI();
+        restoreActiveMenu();
+      }
     });
-  } catch (e) { sessionStorage.removeItem('siswaSession'); resetSiswaUI(); }
+  } catch (e) {
+    sessionStorage.removeItem('siswaSession');
+    resetSiswaUI();
+    restoreActiveMenu();
+  }
 }
 function resetSiswaUI() {
   setText('siswaNamaDisplay', '-');
@@ -1101,6 +1196,7 @@ function updateRealtimeSesi(dataList) {
   if (!list) return;
   const now = new Date();
   const curMin = now.getHours() * 60 + now.getMinutes();
+  currentActiveSesiName = '';
   list.forEach(p => {
     if (p.sesi && p.sesi.toLowerCase().startsWith('sesi')) {
       if (curMin >= parseJamToMin(p.mulai) && curMin <= parseJamToMin(p.tutup)) currentActiveSesiName = p.sesi;
@@ -1156,7 +1252,7 @@ function updateStatsUI(stats) {
   });
 }
 
-  function updateDashboardTables(guruList, siswaList, sesiList) {
+function updateDashboardTables(guruList, siswaList, sesiList) {
   const sesiNames = sesiList || [];
   
   const render = (theadId, tbodyId, list, extraKey) => {
@@ -1164,7 +1260,6 @@ function updateStatsUI(stats) {
     const tbody = $(tbodyId);
     if (!thead || !tbody) return;
 
-    // 1. Buat Header Tabel
     if (sesiNames.length > 0) {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th>${sesiNames.map(s => `<th>${s}</th>`).join('')}</tr>`;
     } else {
@@ -1176,15 +1271,12 @@ function updateStatsUI(stats) {
       return; 
     }
 
-    // 2. Render Baris Data
     tbody.innerHTML = list.map((item, idx) => {
       if (sesiNames.length > 0) {
-        // Ambil data langsung dari key nama sesi (misal: item["Sesi 1"], item["Sesi 2"])
         const sesiCells = sesiNames.map(sName => {
           const val = item[sName] || '-';
           return `<td><b>${val}</b></td>`;
         }).join('');
-
         return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td>${sesiCells}</tr>`;
       } else {
         return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td><b>${item.status || '-'}</b></td></tr>`;
@@ -1230,7 +1322,6 @@ function submitLogin() {
 }
 function applyRoleAccessUI() {
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
-  const isSuperAdmin = userRole === 'super_admin';
   $('optIzinGuru').style.display = isAdmin ? 'block' : 'none';
   const nama = userRole === 'guru' && userData ? userData.nama : (isAdmin ? 'Admin' : '-');
   setText('guruNamaDisplay', nama);
@@ -1249,7 +1340,8 @@ function logoutSession() {
   setText('guruNamaDisplayDaftar', '-');
   updateTopbarUserInfo();
   updateFingerprintUI();
-  switchMenu('dashboard', document.querySelector('.sidebar .nav-item'));
+  saveActiveMenu('dashboard');
+  switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'));
   showBigPopup("success", "Logout Berhasil", "Anda telah keluar.");
   closeSidebar();
 }
@@ -1269,8 +1361,8 @@ function checkMenuAccess(menuName, el) {
   switchMenu(menuName, el);
 }
 
-// PERBAIKAN: Mencegah perpindahan halaman ke dashboard saat halaman direfresh/diakses langsung
-function switchMenu(menuName, el) {
+// ===================== PERBAIKAN: switchMenu tidak pindah ke dashboard saat refresh =====================
+function switchMenu(menuName, el, isRestoring = false) {
   closeSidebar();
   closeProfileDropdown();
   if (isCameraOn && menuName !== 'scanner') stopCamera();
@@ -1280,13 +1372,12 @@ function switchMenu(menuName, el) {
   const target = $(`menu-${menuName}`);
   if (target) target.classList.add('active');
   
-  // Simpan state menu aktif ke sessionStorage agar saat refresh tetap di halaman yang sama
-  sessionStorage.setItem('activeMenu', menuName);
+  // Simpan state menu aktif ke sessionStorage
+  saveActiveMenu(menuName);
 
   if (menuName === 'scanner') setupScannerView();
   if (menuName === 'rekap') {
     loadOpsiKelas();
-    // Prefill tanggal dengan periode dari pengaturan agar sinkron dengan Cek Syarat
     sendRequest({ action: 'get_setting_absen' }, res => {
       if (res.status === 'success' && res.data) {
         if (res.data.mulai) $('rekapTglMulai').value = res.data.mulai;
@@ -1304,7 +1395,9 @@ function switchMenu(menuName, el) {
   if (menuName === 'daftar-nilai') loadFilterDaftarNilaiWithGuru();
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
+  if (menuName === 'download-absensi') initDownloadAbsensi();
 }
+// =======================================================================================================
 
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
@@ -1434,10 +1527,11 @@ function loadOpsiKelas() {
     if (res.status !== 'success') return;
     const select = $('rekapKelas');
     if (select) select.innerHTML = '<option value="">-- Semua --</option>' + res.data.map(k => `<option value="${k}">${k}</option>`).join('');
+    const dlKelas = $('downloadKelas');
+    if (dlKelas) dlKelas.innerHTML = '<option value="">-- Semua --</option>' + res.data.map(k => `<option value="${k}">${k}</option>`).join('');
   });
 }
 function loadRekap() {
-  // Pastikan format tanggal selalu YYYY-MM-DD
   let tglMulai = ($('rekapTglMulai').value || '').trim();
   let tglSelesai = ($('rekapTglSelesai').value || '').trim();
   
@@ -1828,7 +1922,6 @@ function setupTriggerHistoris() {
   sendRequest({ action: 'setup_trigger' }, res => { showBigPopup('success', 'Trigger', res.message); });
 }
 
-// PERBAIKAN: Jadwal mapel guru disaring otomatis sesuai mapel & kelas yang diampu guru login
 function loadJadwalMapel() {
   const now = new Date();
   const hariIni = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][now.getDay()];
@@ -1841,6 +1934,7 @@ function loadJadwalMapel() {
     } else tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada jadwal mapel untuk Anda hari ini.</td></tr>';
   });
 }
+function loadJadwalMapelForGuru() { loadJadwalMapel(); }
 
 function populateSelect(id, options, includeEmpty = false) {
   const select = $(id);
@@ -1955,6 +2049,102 @@ function exportDaftarNilaiToExcel() {
 }
 function exportDaftarNilaiToPDF() { window.print(); }
 
+// ===================== FITUR BARU: DOWNLOAD ABSENSI =====================
+function initDownloadAbsensi() {
+  toggleDownloadKelasFilter();
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  if (!$('downloadTglMulai').value) $('downloadTglMulai').value = firstDay.toISOString().split('T')[0];
+  if (!$('downloadTglSelesai').value) $('downloadTglSelesai').value = lastDay.toISOString().split('T')[0];
+  loadOpsiKelas();
+}
+function toggleDownloadKelasFilter() {
+  const role = $('downloadRole').value;
+  $('downloadKelasContainer').style.display = role === 'siswa' ? 'block' : 'none';
+}
+function loadDownloadPreview() {
+  const role = $('downloadRole').value;
+  const kelas = $('downloadKelas').value;
+  const tglMulai = $('downloadTglMulai').value;
+  const tglSelesai = $('downloadTglSelesai').value;
+  if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
+  showBigPopup('info', 'Memuat', '⏳ Mengambil data absensi...', 0);
+  sendRequest({
+    action: 'download_absensi',
+    role, kelas, tglMulai, tglSelesai
+  }, res => {
+    closeBigPopup();
+    const thead = $('tableDownloadHead');
+    const tbody = $('tableDownloadBody');
+    const summary = $('downloadSummary');
+    if (res.status !== 'success') {
+      thead.innerHTML = '<tr><th>No</th><th>ID</th><th>Nama</th><th>Unit</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr>';
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;">${res.message || 'Gagal memuat data'}</td></tr>`;
+      summary.style.display = 'none';
+      return;
+    }
+    const data = res.data || [];
+    summary.style.display = 'block';
+    summary.innerHTML = `📊 Tipe: <b>${role.toUpperCase()}</b>${role === 'siswa' ? ' • Kelas: <b>' + (kelas || 'Semua') + '</b>' : ''} • Periode: <b>${tglMulai}</b> s/d <b>${tglSelesai}</b> • Total: <b>${data.length}</b> baris`;
+    thead.innerHTML = '<tr><th>No</th><th>ID</th><th>Nama</th><th>Unit</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr>';
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Tidak ada data absensi pada periode ini.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((r, i) => `<tr>
+      <td>${i + 1}</td><td>${r.id}</td><td><b>${r.nama}</b></td><td>${r.unit}</td>
+      <td>${r.tanggal}</td><td>${r.jam}</td><td><b>${r.status}</b></td>
+    </tr>`).join('');
+    window._downloadAbsensiData = data;
+    window._downloadAbsensiRole = role;
+  });
+}
+function downloadExcel() {
+  const data = window._downloadAbsensiData;
+  if (!data || !data.length) return showBigPopup('warning', 'Peringatan', 'Tampilkan pratinjau terlebih dahulu!');
+  const wsData = [['No', 'ID', 'Nama', 'Unit', 'Tanggal', 'Jam', 'Status']];
+  data.forEach((r, i) => wsData.push([i + 1, r.id, r.nama, r.unit, r.tanggal, r.jam, r.status]));
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+  XLSX.writeFile(wb, `Absensi_${window._downloadAbsensiRole}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+function downloadCSV() {
+  const data = window._downloadAbsensiData;
+  if (!data || !data.length) return showBigPopup('warning', 'Peringatan', 'Tampilkan pratinjau terlebih dahulu!');
+  let csv = 'No,ID,Nama,Unit,Tanggal,Jam,Status\n';
+  data.forEach((r, i) => {
+    csv += `${i + 1},"${r.id}","${r.nama}","${r.unit}","${r.tanggal}","${r.jam}","${r.status}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `Absensi_${window._downloadAbsensiRole}_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+}
+function downloadPDF() {
+  const data = window._downloadAbsensiData;
+  if (!data || !data.length) return showBigPopup('warning', 'Peringatan', 'Tampilkan pratinjau terlebih dahulu!');
+  const role = window._downloadAbsensiRole;
+  const element = document.getElementById('tableDownloadResult');
+  const clone = element.cloneNode(true);
+  clone.style.fontSize = '11px';
+  const wrapper = document.createElement('div');
+  wrapper.style.padding = '20px';
+  wrapper.innerHTML = `<h3 style="text-align:center; color:#05285e; margin-bottom:5px;">LAPORAN ABSENSI ${role.toUpperCase()}</h3>
+    <p style="text-align:center; font-size:11px; margin-bottom:15px;">SMP NEGERI 1 SOBANG</p>`;
+  wrapper.appendChild(clone);
+  html2pdf().set({
+    margin: [10, 10, 10, 10],
+    filename: `Absensi_${role}_${new Date().toISOString().split('T')[0]}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+  }).from(wrapper).save();
+}
+
+// ===================== FINGERPRINT =====================
 function isWebAuthnSupported() { return window.PublicKeyCredential !== undefined; }
 function updateFingerprintUI() {
   const statusBadge = $('fingerprintStatusBadge');
@@ -1967,13 +2157,13 @@ function updateFingerprintUI() {
     statusBadge.innerText = 'Terdaftar';
     btnAbsen.disabled = false;
     btnAbsen.style.display = 'inline-block';
-    btnRegister.style.display = 'none'; // Sembunyikan tombol Daftar Sidik Jari sepenuhnya
+    btnRegister.style.display = 'none';
   } else {
     statusBadge.className = 'fingerprint-badge inactive';
     statusBadge.innerText = 'Belum Terdaftar';
     btnAbsen.disabled = true;
-    btnAbsen.style.display = 'none'; // Sembunyikan tombol Absen jika belum daftar
-    btnRegister.style.display = 'inline-block'; // Tampilkan tombol Daftar Sidik Jari
+    btnAbsen.style.display = 'none';
+    btnRegister.style.display = 'inline-block';
   }
 }
 function checkFingerprintStatus() {
