@@ -832,16 +832,14 @@ let resetPinData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
 let currentActiveSesiName = '';
+let sessionRestored = false;   // <-- flag baru
 
 // ===================== FUNGSI PENGGANTI sendRequest =====================
 function sendRequest(payload, callback, retryCount = 0) {
   if (!payload || !payload.action) {
-    if (typeof callback === "function") {
-      callback({ status: 'error', message: 'Payload tidak valid.' });
-    }
+    if (typeof callback === "function") callback({ status: 'error', message: 'Payload tidak valid.' });
     return;
   }
-
   fetch(SUPABASE_FUNCTION_URL, {
     method: "POST",
     headers: {
@@ -852,17 +850,13 @@ function sendRequest(payload, callback, retryCount = 0) {
     body: JSON.stringify(payload)
   })
   .then(r => r.json())
-  .then(res => {
-    if (typeof callback === "function") callback(res);
-  })
+  .then(res => { if (typeof callback === "function") callback(res); })
   .catch(err => {
     if (retryCount < 2) {
       setTimeout(() => sendRequest(payload, callback, retryCount + 1), 1500);
     } else {
       showBigPopup("danger", "Koneksi Error", "Gagal terhubung ke server! " + err.message);
-      if (typeof callback === "function") {
-        callback({ status: "error", message: "Koneksi gagal: " + err.message });
-      }
+      if (typeof callback === "function") callback({ status: "error", message: "Koneksi gagal: " + err.message });
     }
   });
 }
@@ -1007,19 +1001,48 @@ function updateProfileDropdown() {
   }
 }
 
-// ===================== PERBAIKAN: SIMPAN & PULIHKAN MENU AKTIF =====================
+// ===================== SIMPAN & PULIHKAN MENU AKTIF =====================
 function getSavedActiveMenu() {
   return sessionStorage.getItem('activeMenu') || 'dashboard';
 }
 function saveActiveMenu(menuName) {
   sessionStorage.setItem('activeMenu', menuName);
 }
+
+// ==================================================================
+// restoreActiveMenu: dipanggil HANYA setelah session selesai dipulihkan.
+// Gunakan checkMenuAccess agar validasi role tetap berjalan.
+// ==================================================================
 function restoreActiveMenu() {
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
+
+  // Menu yang boleh diakses tamu
+  const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint'];
+  if (guestMenus.includes(savedMenu)) {
+    switchMenu(savedMenu, navItem, true);
+    return;
+  }
+
+  // Menu yang butuh login → validasi role
+  if (userRole === 'tamu') {
+    // Belum login, kembali ke dashboard tanpa popup
+    switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'), true);
+    saveActiveMenu('dashboard');
+    return;
+  }
+
+  if (savedMenu === 'pengaturan' && userRole !== 'super_admin') {
+    // Bukan super_admin → kembalikan ke dashboard
+    switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'), true);
+    saveActiveMenu('dashboard');
+    return;
+  }
+
+  // Role valid → buka menu
   switchMenu(savedMenu, navItem, true);
 }
-// ==================================================================================
+// ==================================================================
 
 function restoreSession() {
   const saved = sessionStorage.getItem('userSession');
@@ -1044,12 +1067,12 @@ function restoreSession() {
           setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapelForGuru(); }, 500);
         }
         closeSidebar();
-        // Pulihkan menu aktif setelah sesi dipulihkan
-        restoreActiveMenu();
       } else {
         sessionStorage.removeItem('userSession');
-        restoreSiswaSession();
       }
+      // SELALU panggil restoreActiveMenu setelah selesai (baik sukses/gagal)
+      sessionRestored = true;
+      restoreActiveMenu();
     });
   } catch (e) {
     sessionStorage.removeItem('userSession');
@@ -1060,6 +1083,7 @@ function restoreSiswaSession() {
   const saved = sessionStorage.getItem('siswaSession');
   if (!saved) {
     resetSiswaUI();
+    sessionRestored = true;
     restoreActiveMenu();
     return;
   }
@@ -1068,6 +1092,7 @@ function restoreSiswaSession() {
     if (!nisn) {
       sessionStorage.removeItem('siswaSession');
       resetSiswaUI();
+      sessionRestored = true;
       restoreActiveMenu();
       return;
     }
@@ -1079,16 +1104,17 @@ function restoreSiswaSession() {
         setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
         updateTopbarUserInfo();
         updateSyaratAccessUI();
-        restoreActiveMenu();
       } else {
         sessionStorage.removeItem('siswaSession');
         resetSiswaUI();
-        restoreActiveMenu();
       }
+      sessionRestored = true;
+      restoreActiveMenu();
     });
   } catch (e) {
     sessionStorage.removeItem('siswaSession');
     resetSiswaUI();
+    sessionRestored = true;
     restoreActiveMenu();
   }
 }
@@ -1254,23 +1280,19 @@ function updateStatsUI(stats) {
 
 function updateDashboardTables(guruList, siswaList, sesiList) {
   const sesiNames = sesiList || [];
-  
   const render = (theadId, tbodyId, list, extraKey) => {
     const thead = $(theadId);
     const tbody = $(tbodyId);
     if (!thead || !tbody) return;
-
     if (sesiNames.length > 0) {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th>${sesiNames.map(s => `<th>${s}</th>`).join('')}</tr>`;
     } else {
       thead.innerHTML = `<tr><th>No</th><th>Nama</th><th>${extraKey === 'mapel' ? 'Mapel' : 'Kelas'}</th><th>Jam Scan</th><th>Status</th></tr>`;
     }
-
-    if (!list || !list.length) { 
-      tbody.innerHTML = `<tr><td colspan="${4 + (sesiNames.length || 1)}" style="text-align:center;">Tidak ada data.</td></tr>`; 
-      return; 
+    if (!list || !list.length) {
+      tbody.innerHTML = `<tr><td colspan="${4 + (sesiNames.length || 1)}" style="text-align:center;">Tidak ada data.</td></tr>`;
+      return;
     }
-
     tbody.innerHTML = list.map((item, idx) => {
       if (sesiNames.length > 0) {
         const sesiCells = sesiNames.map(sName => {
@@ -1283,7 +1305,6 @@ function updateDashboardTables(guruList, siswaList, sesiList) {
       }
     }).join('');
   };
-
   render('theadDashGuru', 'tableDashGuru', guruList, 'mapel');
   render('theadDashSiswa', 'tableDashSiswa', siswaList, 'kelas');
 }
@@ -1313,6 +1334,9 @@ function submitLogin() {
       if (userRole === 'guru' && userData) {
         setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapel(); }, 500);
       }
+      // Setelah login, buka menu yang terakhir tersimpan (jika boleh diakses)
+      sessionRestored = true;
+      restoreActiveMenu();
       closeSidebar();
     } else {
       showBigPopup("danger", "Login Gagal", res.message);
@@ -1361,7 +1385,6 @@ function checkMenuAccess(menuName, el) {
   switchMenu(menuName, el);
 }
 
-// ===================== PERBAIKAN: switchMenu tidak pindah ke dashboard saat refresh =====================
 function switchMenu(menuName, el, isRestoring = false) {
   closeSidebar();
   closeProfileDropdown();
@@ -1371,8 +1394,6 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (el) el.classList.add('active');
   const target = $(`menu-${menuName}`);
   if (target) target.classList.add('active');
-  
-  // Simpan state menu aktif ke sessionStorage
   saveActiveMenu(menuName);
 
   if (menuName === 'scanner') setupScannerView();
@@ -1397,7 +1418,6 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'download-absensi') initDownloadAbsensi();
 }
-// =======================================================================================================
 
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
@@ -1461,14 +1481,11 @@ function onScanSuccess(code, sesiTarget) {
     showBigPopup('warning', 'Sesi Tidak Aktif', 'Tidak ada sesi absen yang aktif.', 1500);
     return;
   }
-
   lastScanTime = now;
   isProcessing = true;
   showBigPopup('info', 'Memproses...', `⏳ Mengirim data scan <b>${String(code).trim()}</b>...`, 0);
-  
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
   if (popupBtn) popupBtn.style.display = 'none';
-
   sendRequest(
     { action: 'absen_qr', role: currentRole, code: String(code).trim(), sesi: String(sesiTarget).trim() },
     res => {
@@ -1534,7 +1551,6 @@ function loadOpsiKelas() {
 function loadRekap() {
   let tglMulai = ($('rekapTglMulai').value || '').trim();
   let tglSelesai = ($('rekapTglSelesai').value || '').trim();
-  
   sendRequest({
     action: 'rekap_kehadiran',
     role: $('rekapRole').value,
@@ -2015,7 +2031,6 @@ function loadDaftarNilaiData() {
   const kelas = $('filterDaftarNilaiKelas').value;
   let guru = ($('guruNamaDisplayDaftar').innerText || '').trim();
   if (['Admin', 'Administrator', 'Super Admin', '-', ''].includes(guru)) guru = '';
-
   sendRequest({ action: 'get_daftar_nilai', guru, mapel, kelas }, res => {
     const thead = $('tableDaftarNilaiHead');
     const tbody = $('tableDaftarNilaiBody');
@@ -2151,7 +2166,6 @@ function updateFingerprintUI() {
   const btnAbsen = $('btnAbsenFingerprint');
   const btnRegister = $('btnRegisterFingerprint');
   if (!statusBadge || !btnAbsen || !btnRegister) return;
-
   if (fingerprintRegistered) {
     statusBadge.className = 'fingerprint-badge active';
     statusBadge.innerText = 'Terdaftar';
