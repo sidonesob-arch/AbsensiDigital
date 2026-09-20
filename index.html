@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sistem Informasi Terpadu - SMP NEGERI 1 SOBANG</title>
+<title>Sistem Absensi Terpadu - SMP NEGERI 1 SOBANG</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -162,6 +162,7 @@ input, select, button { width: 100%; padding: 8px 10px; border-radius: 6px; bord
 .btn-pdf:hover { background: var(--danger-hover); }
 .btn-toggle { background: var(--success); color: #fff; border: none; font-weight: bold; cursor: pointer; }
 .btn-toggle.off { background: var(--danger); }
+.btn-toggle:disabled { background: #999 !important; cursor: not-allowed; opacity: 0.7; }
 .btn-danger { background: var(--danger); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 .btn-edit { background: var(--warning); color: #333; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 4px; }
 .btn-success { background: var(--success); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
@@ -260,6 +261,25 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .download-card { background: #fff; padding: 16px; border-radius: 10px; border: 1px solid var(--border-light); margin-bottom: 14px; }
 .download-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .download-summary { background: var(--primary-lighter); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 12px; font-size: 12px; color: var(--primary); }
+
+/* ====== BARU: Info kunci scanner ====== */
+.scanner-lock-info {
+  display: none;
+  background: #f8d7da; color: #721c24;
+  padding: 12px 14px; border-radius: 8px;
+  font-size: 12px; margin-bottom: 12px;
+  border-left: 4px solid var(--danger);
+  text-align: left;
+}
+.scanner-lock-info.show { display: block; }
+.scanner-ok-info {
+  display: none;
+  background: #d4edda; color: #155724;
+  padding: 10px 12px; border-radius: 8px;
+  font-size: 11px; margin-bottom: 12px;
+  border-left: 4px solid var(--success);
+}
+.scanner-ok-info.show { display: block; }
 </style>
 </head>
 <body>
@@ -486,6 +506,17 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- SCANNER -->
     <div id="menu-scanner" class="section">
       <h3 style="color:var(--primary); font-size:15px;">📷 Scanner QR Barcode</h3>
+
+      <!-- ====== BARU: Info status izin scan ====== -->
+      <div id="scannerLockInfo" class="scanner-lock-info">
+        🔒 <b>Akses Scanner Terkunci</b><br>
+        Anda belum diizinkan admin untuk melakukan scan QR siswa. Hubungi admin untuk mengaktifkan izin scan QR Anda di menu <b>Pengaturan → Izin Sidik Jari</b>.
+      </div>
+      <div id="scannerOkInfo" class="scanner-ok-info">
+        ✅ <b>Izin Scan QR Aktif</b> — Anda dapat melakukan scan QR siswa.
+      </div>
+      <!-- ====== AKHIR BARU ====== -->
+
       <div class="fingerprint-section">
         <span class="icon-large">🔐</span>
         <h4 style="margin:0 0 5px; color:var(--primary);">Absensi Guru dengan Sidik Jari HP</h4>
@@ -593,20 +624,38 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
       </div>
 
-      <!-- PANEL: IZIN SIDIK JARI -->
+      <!-- PANEL: IZIN SIDIK JARI & SCAN QR -->
       <div class="pengaturan-panel" id="panel-izin">
-        <h4 class="panel-title">👆 Izin Sidik Jari</h4>
+        <h4 class="panel-title">👆 Izin Sidik Jari & Izin Scan QR</h4>
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:6px 16px;" onclick="syncAllowedUsers()">🔄 Sinkronisasi</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllUsers()">✅ Izinkan Semua</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="denyAllUsers()">❌ Tolak Semua</button>
+          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllUsers()">✅ Izinkan Semua (Sidik Jari)</button>
+          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="denyAllUsers()">❌ Tolak Semua (Sidik Jari)</button>
         </div>
+        <!-- ====== BARU: Tombol bulk untuk izin scan QR guru ====== -->
+        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllGuruScan(true)">✅ Izinkan Semua Guru Scan QR</button>
+          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="allowAllGuruScan(false)">❌ Tolak Semua Guru Scan QR</button>
+        </div>
+        <!-- ====== AKHIR BARU ====== -->
         <div class="table-responsive">
           <table>
-            <thead><tr><th style="width:40px;">No</th><th>ID / NISN</th><th>Nama</th><th style="width:80px;">Role</th><th style="width:120px; text-align:center;">Status</th></tr></thead>
-            <tbody id="tableAllowedUsersBody"><tr><td colspan="5" style="text-align:center;">Memuat data...</td></tr></tbody>
+            <thead>
+              <tr>
+                <th style="width:40px;">No</th>
+                <th>ID / NISN</th>
+                <th>Nama</th>
+                <th style="width:80px;">Role</th>
+                <th style="width:110px; text-align:center;">Izin Sidik Jari</th>
+                <th style="width:110px; text-align:center;">Izin Scan QR</th>
+              </tr>
+            </thead>
+            <tbody id="tableAllowedUsersBody"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
+        <p style="font-size:11px; color:var(--muted); margin-top:10px;">
+          ℹ️ <b>Izin Scan QR</b> hanya berlaku untuk guru. Jika dinonaktifkan, guru tersebut tidak dapat membuka kamera scanner untuk mengabsen siswa.
+        </p>
       </div>
 
       <!-- PANEL: RESET SIDIK JARI -->
@@ -745,7 +794,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
-    <!-- DOWNLOAD ABSENSI (MENU BARU) -->
+    <!-- DOWNLOAD ABSENSI -->
     <div id="menu-download-absensi" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⬇️ Download Absensi</h3>
       <div class="download-card">
@@ -797,12 +846,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; By MTM </div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.4</div>
 
 <script>
 // ===================== KONFIGURASI SUPABASE =====================
 const SUPABASE_FUNCTION_URL = "https://avgpyvrkcgdeaobyfodi.supabase.co/functions/v1/api";
-const SUPABASE_ANON_KEY = "sb_publishable_-bgJC_KlPIBuJnpL87A1dQ_mvipF2ur";   // <-- ganti dengan anon key kamu
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2Z3B5dnJrY2dkZWFvYnlmb2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NDM2ODAsImV4cCI6MjEwNTIxOTY4MH0.8pZD8rU8HMf7bh-izbZIqcUZaX-9kuGTKP2le9qzFOw";   // <-- ganti dengan anon key kamu
 
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -832,7 +881,8 @@ let resetPinData = [];
 let lastScanTime = 0;
 let sesiDataCache = [];
 let currentActiveSesiName = '';
-let sessionRestored = false;   // <-- flag baru
+let sessionRestored = false;
+let guruScanAllowed = false;   // ====== BARU: status izin scan QR guru ======
 
 // ===================== FUNGSI PENGGANTI sendRequest =====================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1001,48 +1051,32 @@ function updateProfileDropdown() {
   }
 }
 
-// ===================== SIMPAN & PULIHKAN MENU AKTIF =====================
 function getSavedActiveMenu() {
   return sessionStorage.getItem('activeMenu') || 'dashboard';
 }
 function saveActiveMenu(menuName) {
   sessionStorage.setItem('activeMenu', menuName);
 }
-
-// ==================================================================
-// restoreActiveMenu: dipanggil HANYA setelah session selesai dipulihkan.
-// Gunakan checkMenuAccess agar validasi role tetap berjalan.
-// ==================================================================
 function restoreActiveMenu() {
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
-
-  // Menu yang boleh diakses tamu
   const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint'];
   if (guestMenus.includes(savedMenu)) {
     switchMenu(savedMenu, navItem, true);
     return;
   }
-
-  // Menu yang butuh login → validasi role
   if (userRole === 'tamu') {
-    // Belum login, kembali ke dashboard tanpa popup
     switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'), true);
     saveActiveMenu('dashboard');
     return;
   }
-
   if (savedMenu === 'pengaturan' && userRole !== 'super_admin') {
-    // Bukan super_admin → kembalikan ke dashboard
     switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'), true);
     saveActiveMenu('dashboard');
     return;
   }
-
-  // Role valid → buka menu
   switchMenu(savedMenu, navItem, true);
 }
-// ==================================================================
 
 function restoreSession() {
   const saved = sessionStorage.getItem('userSession');
@@ -1070,7 +1104,6 @@ function restoreSession() {
       } else {
         sessionStorage.removeItem('userSession');
       }
-      // SELALU panggil restoreActiveMenu setelah selesai (baik sukses/gagal)
       sessionRestored = true;
       restoreActiveMenu();
     });
@@ -1334,7 +1367,6 @@ function submitLogin() {
       if (userRole === 'guru' && userData) {
         setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapel(); }, 500);
       }
-      // Setelah login, buka menu yang terakhir tersimpan (jika boleh diakses)
       sessionRestored = true;
       restoreActiveMenu();
       closeSidebar();
@@ -1358,6 +1390,7 @@ function logoutSession() {
   userRole = 'tamu';
   userData = null;
   fingerprintRegistered = false;
+  guruScanAllowed = false;   // ====== BARU: reset izin scan ======
   sessionStorage.removeItem('userSession');
   if (siswaUserData) logoutSiswaSession();
   setText('guruNamaDisplay', '-');
@@ -1419,17 +1452,84 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'download-absensi') initDownloadAbsensi();
 }
 
+// ===================== BARU: SETUP SCANNER + VALIDASI IZIN SCAN =====================
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
-  if (userRole === 'admin' || userRole === 'super_admin') adminSwitch.style.display = 'block';
-  else { adminSwitch.style.display = 'none'; setRole('siswa'); }
+  const lockInfo = $('scannerLockInfo');
+  const okInfo = $('scannerOkInfo');
+  const btn = $('btnCameraToggle');
+
+  // Admin & Super Admin selalu boleh
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    adminSwitch.style.display = 'block';
+    guruScanAllowed = true;
+    applyScannerAccessUI();
+    return;
+  }
+
+  adminSwitch.style.display = 'none';
+  setRole('siswa');
+  lockInfo.classList.remove('show');
+  okInfo.classList.remove('show');
+
+  // Guru: cek izin allowed_scan
+  if (userRole === 'guru' && userData) {
+    const userId = userData.nip || userData.id;
+    btn.disabled = true;
+    btn.innerText = "⏳ Memeriksa izin...";
+
+    sendRequest({ action: 'get_allowed_users' }, res => {
+      if (res.status === 'success' && res.data) {
+        const me = res.data.find(u => String(u.id) === String(userId) && u.role === 'guru');
+        guruScanAllowed = !!(me && (me.allowed_scan === true || me.allowed_scan === 'true'));
+      } else {
+        guruScanAllowed = false;
+      }
+      applyScannerAccessUI();
+    });
+  } else {
+    // Tamu / siswa tidak boleh scan (hanya guru/admin yang scan)
+    guruScanAllowed = false;
+    applyScannerAccessUI();
+  }
 }
+
+function applyScannerAccessUI() {
+  const btn = $('btnCameraToggle');
+  const lockInfo = $('scannerLockInfo');
+  const okInfo = $('scannerOkInfo');
+  if (!btn || !lockInfo || !okInfo) return;
+
+  if (guruScanAllowed) {
+    btn.disabled = false;
+    btn.innerText = "Buka Kamera";
+    btn.title = "";
+    lockInfo.classList.remove('show');
+    okInfo.classList.add('show');
+  } else {
+    btn.disabled = true;
+    btn.innerText = "🔒 Kamera Terkunci";
+    btn.title = "Anda belum diizinkan admin untuk scan QR siswa.";
+    lockInfo.classList.add('show');
+    okInfo.classList.remove('show');
+    // Pastikan kamera mati jika sedang menyala
+    if (isCameraOn) stopCamera();
+  }
+}
+// ====================================================================================
+
 function setRole(role) {
   currentRole = role;
   $('btnSiswaAdmin').style.background = role === 'siswa' ? 'var(--primary)' : '#6c757d';
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
 function toggleCamera() {
+  // ====== BARU: cek izin sebelum buka kamera ======
+  if (!guruScanAllowed) {
+    return showBigPopup('warning', 'Akses Ditolak',
+      'Anda belum diizinkan admin untuk melakukan scan QR siswa. Hubungi admin untuk mengaktifkan izin scan QR Anda.');
+  }
+  // ===============================================
   const sesiAktif = sesiDataCache.find(s => s.sesi === currentActiveSesiName);
   if (!sesiAktif && !currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif saat ini!");
   isCameraOn ? stopCamera() : startCamera();
@@ -1460,13 +1560,13 @@ function stopCamera() {
       html5QrcodeScanner = null;
       isCameraOn = false;
       const btn = $('btnCameraToggle');
-      btn.innerText = "Buka Kamera";
+      btn.innerText = guruScanAllowed ? "Buka Kamera" : "🔒 Kamera Terkunci";
       btn.classList.remove('off');
     }).catch(err => {
       html5QrcodeScanner = null;
       isCameraOn = false;
       const btn = $('btnCameraToggle');
-      btn.innerText = "Buka Kamera";
+      btn.innerText = guruScanAllowed ? "Buka Kamera" : "🔒 Kamera Terkunci";
       btn.classList.remove('off');
     });
   }
@@ -1802,23 +1902,69 @@ function hapusHariLibur(rowIndex) {
   });
 }
 
+// ===================== BARU: LOAD ALLOWED USERS (2 TOGGLE) =====================
 function loadAllowedUsers() {
   sendRequest({ action: 'get_allowed_users' }, res => {
     const tbody = $('tableAllowedUsersBody');
     if (!tbody) return;
     if (res.status === 'success' && res.data && res.data.length > 0) {
-      tbody.innerHTML = res.data.map((item, idx) => `<tr>
-        <td>${idx + 1}</td><td><b>${item.id}</b></td><td>${item.nama}</td>
-        <td><span class="role-badge ${item.role}">${item.role}</span></td>
-        <td style="text-align:center;">
-          <label class="switch"><input type="checkbox" ${item.allowed ? 'checked' : ''} onchange="updateAllowedUser('${item.id}', this.checked)"><span class="slider"></span></label>
-        </td></tr>`).join('');
-    } else tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada data.</td></tr>';
+      tbody.innerHTML = res.data.map((item, idx) => {
+        const isGuru = item.role === 'guru';
+        return `<tr>
+          <td>${idx + 1}</td>
+          <td><b>${item.id}</b></td>
+          <td>${item.nama}</td>
+          <td><span class="role-badge ${item.role}">${item.role}</span></td>
+          <td style="text-align:center;">
+            <label class="switch">
+              <input type="checkbox" ${item.allowed ? 'checked' : ''}
+                onchange="updateAllowedUser('${item.id}', 'allowed', this.checked)">
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td style="text-align:center;">
+            ${isGuru ? `
+              <label class="switch">
+                <input type="checkbox" ${item.allowed_scan ? 'checked' : ''}
+                  onchange="updateAllowedUser('${item.id}', 'allowed_scan', this.checked)">
+                <span class="slider"></span>
+              </label>
+            ` : '<span style="color:#999; font-size:10px;">—</span>'}
+          </td>
+        </tr>`;
+      }).join('');
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data.</td></tr>';
+    }
   });
 }
-function updateAllowedUser(userId, allowed) {
-  sendRequest({ action: 'update_allowed_users', userId, allowed }, res => {});
+
+function updateAllowedUser(userId, field, value) {
+  const payload = { action: 'update_allowed_users', userId };
+  payload[field] = value;
+  sendRequest(payload, res => {
+    if (res.status !== 'success') {
+      showBigPopup('danger', 'Gagal', res.message || 'Gagal memperbarui izin.');
+    }
+  });
 }
+
+function allowAllGuruScan(allow) {
+  sendRequest({ action: 'get_allowed_users' }, res => {
+    if (res.status !== 'success' || !res.data) return;
+    const guruList = res.data.filter(u => u.role === 'guru');
+    if (!guruList.length) return showBigPopup('warning', 'Info', 'Tidak ada data guru.');
+    guruList.forEach(u => {
+      sendRequest({ action: 'update_allowed_users', userId: u.id, allowed_scan: allow }, () => {});
+    });
+    setTimeout(() => {
+      loadAllowedUsers();
+      showBigPopup('success', 'Berhasil', `Semua guru ${allow ? 'diizinkan' : 'ditolak'} scan QR.`);
+    }, 800);
+  });
+}
+// ==============================================================================
+
 function syncAllowedUsers() {
   sendRequest({ action: 'sync_allowed_users' }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Sinkronisasi', res.message);
@@ -2064,7 +2210,7 @@ function exportDaftarNilaiToExcel() {
 }
 function exportDaftarNilaiToPDF() { window.print(); }
 
-// ===================== FITUR BARU: DOWNLOAD ABSENSI =====================
+// ===================== DOWNLOAD ABSENSI =====================
 function initDownloadAbsensi() {
   toggleDownloadKelasFilter();
   const today = new Date();
