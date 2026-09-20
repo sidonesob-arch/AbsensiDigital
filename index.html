@@ -1284,7 +1284,16 @@ function switchMenu(menuName, el) {
   sessionStorage.setItem('activeMenu', menuName);
 
   if (menuName === 'scanner') setupScannerView();
-  if (menuName === 'rekap') loadOpsiKelas();
+  if (menuName === 'rekap') {
+    loadOpsiKelas();
+    // Prefill tanggal dengan periode dari pengaturan agar sinkron dengan Cek Syarat
+    sendRequest({ action: 'get_setting_absen' }, res => {
+      if (res.status === 'success' && res.data) {
+        if (res.data.mulai) $('rekapTglMulai').value = res.data.mulai;
+        if (res.data.akhir) $('rekapTglSelesai').value = res.data.akhir;
+      }
+    });
+  }
   if (menuName === 'pengaturan') {
     loadPengaturanDataFromServer();
     loadHariLiburData();
@@ -1428,12 +1437,23 @@ function loadOpsiKelas() {
   });
 }
 function loadRekap() {
+  // Pastikan format tanggal selalu YYYY-MM-DD
+  let tglMulai = ($('rekapTglMulai').value || '').trim();
+  let tglSelesai = ($('rekapTglSelesai').value || '').trim();
+  
   sendRequest({
-    action: 'rekap_kehadiran', role: $('rekapRole').value, kelas: $('rekapKelas').value,
-    tglMulai: $('rekapTglMulai').value, tglSelesai: $('rekapTglSelesai').value
+    action: 'rekap_kehadiran',
+    role: $('rekapRole').value,
+    kelas: $('rekapKelas').value,
+    tglMulai: tglMulai,
+    tglSelesai: tglSelesai
   }, res => {
     const tbody = $('tableRekapBody');
-    setText('labelTotalHari', `Total: ${res.totalHari} Hari • ${res.jumlahSesiPerHari} Sesi/Hari • ${res.totalSesiEfektif} Sesi Efektif`);
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:red;">${res.message || 'Gagal memuat data'}</td></tr>`;
+      return;
+    }
+    setText('labelTotalHari', `Total Sesi Efektif: ${res.totalSesiEfektif} • Periode: ${tglMulai || 'semua'} s/d ${tglSelesai || 'semua'}`);
     if (!res.data || !res.data.length) {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Tidak ada data.</td></tr>';
       return;
@@ -1442,7 +1462,7 @@ function loadRekap() {
       <tr>
         <td>${s.id}</td><td>${s.nama}</td><td>${s.unit}</td>
         <td>${s.tw}</td><td>${s.tl}</td><td>${s.izin}</td><td>${s.sakit}</td><td>${s.alpa}</td><td>${s.bolos}</td>
-        <td><b>${s.totalSesiTercatat}</b></td><td><b>${s.nilaiHadir}</b></td><td><b>${s.persentase}%</b></td>
+        <td><b>${s.totalSesiTercatat}</b></td><td><b>${Number(s.nilaiHadir).toFixed(2)}</b></td><td><b>${s.persentase}%</b></td>
       </tr>`).join('');
   });
 }
