@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
   const ASSETS_BASE_URL = './assets/';
   const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
@@ -107,6 +108,7 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 }
 .sidebar.open { transform: translateX(0); }
 .nav-category { font-size: 11px; font-weight: bold; color: #9bb3de; margin: 15px 10px 5px; letter-spacing: 0.5px; }
+.nav-category.super { color: #f1c40f; }
 .nav-item { padding: 10px 12px; display: block; color: #e2e8f0; text-decoration: none; font-size: 13px; font-weight: 600; border-radius: 6px; margin-bottom: 3px; cursor: pointer; transition: background 0.2s, color 0.2s; }
 .nav-item:hover, .nav-item.active { background: var(--primary-hover); color: #fff; }
 .nav-item.locked { opacity: 0.4; color: #8fa0bd; cursor: not-allowed; }
@@ -138,6 +140,21 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .modal-popup-btn { background: var(--primary); color: #fff; border: none; padding: 10px 30px; border-radius: 30px; font-size: 14px; font-weight: 700; cursor: pointer; min-width: 110px; }
 .modal-popup-btn:hover { background: var(--primary-hover); }
 
+/* FORM MODAL (untuk CRUD) */
+.form-modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
+  z-index: 3500; padding: 20px; overflow-y: auto;
+}
+.form-modal.show { display: flex; }
+.form-modal-box {
+  background: #fff; border-radius: 12px; padding: 24px;
+  width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35); border-top: 6px solid var(--primary);
+}
+.form-modal-title { font-size: 16px; font-weight: 800; color: var(--primary); margin: 0 0 16px; }
+.form-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
 /* STATS */
 .stats-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
 @media(max-width: 900px) { .stats-container { grid-template-columns: 1fr; } }
@@ -153,7 +170,7 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 /* FORM & BUTTONS */
 .form-group { margin-bottom: 10px; }
 label { display: block; font-weight: 600; margin-bottom: 4px; color: var(--text); font-size: 12px; }
-input, select, button { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
+input, select, button, textarea { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; font-family: inherit; }
 .btn-primary { background: var(--primary); color: #fff; border: none; font-weight: bold; cursor: pointer; margin-top: 4px; }
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-excel { background: #1d6f42; color: #fff; border: none; font-weight: bold; cursor: pointer; }
@@ -170,6 +187,7 @@ input, select, button { width: 100%; padding: 8px 10px; border-radius: 6px; bord
 .btn-sm { padding: 4px 10px; font-size: 11px; width: auto; }
 .btn-add { background: var(--success); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
 .btn-add:hover { background: var(--success-hover); }
+.btn-warning { background: var(--warning); color: #333; border: none; font-weight: bold; cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 12px; }
 
 /* TABLE */
 #reader { width: 100%; max-width: 400px; border-radius: 8px; overflow: hidden; margin-top: 10px; background: #111; }
@@ -262,24 +280,62 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .download-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .download-summary { background: var(--primary-lighter); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 12px; font-size: 12px; color: var(--primary); }
 
-/* ====== Info kunci scanner ====== */
+/* SCANNER INFO */
 .scanner-lock-info {
-  display: none;
-  background: #f8d7da; color: #721c24;
-  padding: 12px 14px; border-radius: 8px;
-  font-size: 12px; margin-bottom: 12px;
-  border-left: 4px solid var(--danger);
-  text-align: left;
+  display: none; background: #f8d7da; color: #721c24;
+  padding: 12px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+  border-left: 4px solid var(--danger); text-align: left;
 }
 .scanner-lock-info.show { display: block; }
 .scanner-ok-info {
-  display: none;
-  background: #d4edda; color: #155724;
-  padding: 10px 12px; border-radius: 8px;
-  font-size: 11px; margin-bottom: 12px;
+  display: none; background: #d4edda; color: #155724;
+  padding: 10px 12px; border-radius: 8px; font-size: 11px; margin-bottom: 12px;
   border-left: 4px solid var(--success);
 }
 .scanner-ok-info.show { display: block; }
+
+/* MASTER DATA */
+.master-toolbar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  background: #fff; padding: 12px; border-radius: 8px;
+  border: 1px solid var(--border-light); margin-bottom: 10px;
+}
+.master-toolbar .form-group { margin-bottom: 0; flex: 1; min-width: 140px; }
+.checkbox-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px; max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--primary-lighter);
+}
+.checkbox-grid label {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 500; font-size: 12px; margin-bottom: 0;
+  padding: 4px 6px; border-radius: 4px; cursor: pointer; background: #fff;
+}
+.checkbox-grid label:hover { background: var(--primary-light); }
+.checkbox-grid input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.tag-mini {
+  display: inline-block; background: var(--primary-light); color: var(--primary);
+  font-size: 9px; padding: 1px 6px; border-radius: 8px; font-weight: 700; margin-right: 2px;
+}
+
+/* QR PRINT GRID */
+.qr-print-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 10px; }
+.qr-card {
+  border: 1.5px dashed #888; border-radius: 8px; padding: 8px;
+  text-align: center; page-break-inside: avoid; background: #fff;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.qr-card canvas, .qr-card img { width: 120px !important; height: 120px !important; display: block; }
+.qr-card .qr-name { font-weight: 800; font-size: 11px; color: var(--primary); line-height: 1.1; margin-top: 4px; }
+.qr-card .qr-nisn { font-size: 10px; color: #333; font-family: monospace; }
+.qr-card .qr-kelas { font-size: 9px; color: var(--muted); }
+@media print {
+  body * { visibility: hidden; }
+  #qrPrintWrapper, #qrPrintWrapper * { visibility: visible; }
+  #qrPrintWrapper { position: absolute; top: 0; left: 0; width: 100%; }
+  .no-print { display: none !important; }
+  .qr-card { border: 1px solid #000; }
+}
 </style>
 </head>
 <body>
@@ -330,6 +386,44 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
+<!-- FORM MODAL (CRUD) -->
+<div id="formModal" class="form-modal">
+  <div class="form-modal-box">
+    <h3 class="form-modal-title" id="formModalTitle">Form</h3>
+    <div id="formModalContent"></div>
+    <div class="form-modal-actions">
+      <button class="btn-primary" style="background:#6c757d; width:auto; padding:8px 20px;" onclick="closeFormModal()">Batal</button>
+      <button class="btn-primary" style="width:auto; padding:8px 24px;" id="formModalSaveBtn" onclick="submitFormModal()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR PRINT MODAL -->
+<div id="qrPrintModal" class="form-modal">
+  <div class="form-modal-box" style="max-width: 900px;">
+    <h3 class="form-modal-title">🖨️ Cetak Kartu QR Siswa</h3>
+    <div class="master-toolbar no-print" style="margin-bottom:10px;">
+      <div class="form-group">
+        <label>Filter Kelas:</label>
+        <select id="qrFilterKelas" onchange="renderQrCards()">
+          <option value="">-- Semua Kelas --</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex: 0 0 auto; min-width: auto;">
+        <label>&nbsp;</label>
+        <button class="btn-primary" style="width:auto; padding:8px 16px;" onclick="window.print()">🖨️ Print</button>
+      </div>
+      <div class="form-group" style="flex: 0 0 auto; min-width: auto;">
+        <label>&nbsp;</label>
+        <button class="btn-primary" style="background:#6c757d; width:auto; padding:8px 16px;" onclick="closeQrPrintModal()">✖ Tutup</button>
+      </div>
+    </div>
+    <div id="qrPrintWrapper" style="max-height: 70vh; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+      <div id="qrPrintArea" class="qr-print-area"></div>
+    </div>
+  </div>
+</div>
+
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
 <!-- LOGIN MODAL GURU/ADMIN -->
@@ -372,6 +466,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" data-menu="scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
     <a class="nav-item" data-menu="izin" onclick="checkMenuAccess('izin', this)">📝 Input Izin / Sakit</a>
     <a class="nav-item" data-menu="rekap" onclick="checkMenuAccess('rekap', this)">📊 Rekap Data</a>
+
+    <div class="nav-category super">MASTER DATA (SUPER ADMIN)</div>
+    <a class="nav-item" data-menu="data-siswa" onclick="checkMenuAccess('data-siswa', this)">👥 Data Siswa</a>
+    <a class="nav-item" data-menu="data-guru" onclick="checkMenuAccess('data-guru', this)">👨‍🏫 Data Guru</a>
     <a class="nav-item" data-menu="pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
@@ -506,7 +604,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- SCANNER -->
     <div id="menu-scanner" class="section">
       <h3 style="color:var(--primary); font-size:15px;">📷 Scanner QR Barcode</h3>
-
       <div id="scannerLockInfo" class="scanner-lock-info">
         🔒 <b>Akses Scanner Terkunci</b><br>
         Anda belum diizinkan admin untuk melakukan scan QR siswa. Hubungi admin untuk mengaktifkan izin scan QR Anda di menu <b>Pengaturan → Izin Sidik Jari</b>.
@@ -514,7 +611,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div id="scannerOkInfo" class="scanner-ok-info">
         ✅ <b>Izin Scan QR Aktif</b> — Anda dapat melakukan scan QR siswa.
       </div>
-
       <div class="fingerprint-section">
         <span class="icon-large">🔐</span>
         <h4 style="margin:0 0 5px; color:var(--primary);">Absensi Guru dengan Sidik Jari HP</h4>
@@ -579,6 +675,93 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
+    <!-- ==================== DATA SISWA (BARU) ==================== -->
+    <div id="menu-data-siswa" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">👥 Data Siswa</h3>
+      <div class="master-toolbar">
+        <div class="form-group">
+          <label>Cari (NISN/Nama):</label>
+          <input type="text" id="siswaSearch" placeholder="Ketik NISN atau nama..." oninput="loadDataSiswaDebounced()">
+        </div>
+        <div class="form-group">
+          <label>Kelas:</label>
+          <select id="siswaFilterKelas" onchange="loadDataSiswa()">
+            <option value="">-- Semua --</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-add" style="width:auto; padding:8px 14px;" onclick="openFormSiswa()">➕ Tambah Siswa</button>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-primary" style="background:#1d6f42; width:auto; padding:8px 14px;" onclick="openImportSiswaModal()">📥 Import Excel</button>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-primary" style="background:#d93025; width:auto; padding:8px 14px;" onclick="openQrPrintModal()">🖨️ Cetak QR</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <p id="siswaTotalInfo" style="font-weight:bold; color:var(--primary); font-size:12px; margin: 0 0 8px 0;"></p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">No</th>
+              <th>NISN</th>
+              <th>Nama</th>
+              <th>Kelas</th>
+              <th style="width:40px;">L/P</th>
+              <th>Tgl Lahir</th>
+              <th>No. HP</th>
+              <th>Alamat</th>
+              <th>Status</th>
+              <th style="width:120px; text-align:center;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableDataSiswaBody">
+            <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== DATA GURU (BARU) ==================== -->
+    <div id="menu-data-guru" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">👨‍🏫 Data Guru</h3>
+      <div class="master-toolbar">
+        <div class="form-group">
+          <label>Cari (NIP/Nama):</label>
+          <input type="text" id="guruSearch" placeholder="Ketik NIP atau nama..." oninput="loadDataGuruDebounced()">
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-add" style="width:auto; padding:8px 14px;" onclick="openFormGuru()">➕ Tambah Guru</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <p id="guruTotalInfo" style="font-weight:bold; color:var(--primary); font-size:12px; margin: 0 0 8px 0;"></p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">No</th>
+              <th>NIP</th>
+              <th>Nama</th>
+              <th style="width:40px;">L/P</th>
+              <th>Pangkat/Gol</th>
+              <th>Mapel</th>
+              <th>Kelas</th>
+              <th>PIN</th>
+              <th style="width:120px; text-align:center;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableDataGuruBody">
+            <tr><td colspan="9" style="text-align:center;">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- PENGATURAN -->
     <div id="menu-pengaturan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⚙️ Pengaturan</h3>
@@ -622,7 +805,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
       </div>
 
-      <!-- PANEL: IZIN SIDIK JARI & SCAN QR -->
+      <!-- PANEL: IZIN SIDIK JARI -->
       <div class="pengaturan-panel" id="panel-izin">
         <h4 class="panel-title">👆 Izin Sidik Jari & Izin Scan QR</h4>
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
@@ -845,9 +1028,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.5</div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; By MTM</div>
 
-<script>
+<!-- ============ BATAS BAGIAN 1 ============ -->
+
+  <script>
 // ===================== KONFIGURASI SUPABASE =====================
 const SUPABASE_FUNCTION_URL = "https://avgpyvrkcgdeaobyfodi.supabase.co/functions/v1/api";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2Z3B5dnJrY2dkZWFvYnlmb2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NDM2ODAsImV4cCI6MjEwNTIxOTY4MH0.8pZD8rU8HMf7bh-izbZIqcUZaX-9kuGTKP2le9qzFOw";   // <-- ganti dengan anon key kamu
@@ -881,8 +1066,15 @@ let lastScanTime = 0;
 let sesiDataCache = [];
 let currentActiveSesiName = '';
 let sessionRestored = false;
-let guruScanAllowed = null;   // null = belum dicek, true = diizinkan, false = ditolak
+let guruScanAllowed = null;
 let scannerCheckInProgress = false;
+
+// Data cache master
+let dataSiswaCache = [];
+let dataGuruCache = [];
+let mapelUnikCache = [];
+let kelasUnikCache = [];
+let formModalCallback = null;
 
 // ===================== FUNGSI PENGGANTI sendRequest =====================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1061,6 +1253,8 @@ function restoreActiveMenu() {
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
   const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint'];
+  const superMenus = ['pengaturan', 'data-siswa', 'data-guru'];
+
   if (guestMenus.includes(savedMenu)) {
     switchMenu(savedMenu, navItem, true);
     return;
@@ -1070,7 +1264,7 @@ function restoreActiveMenu() {
     saveActiveMenu('dashboard');
     return;
   }
-  if (savedMenu === 'pengaturan' && userRole !== 'super_admin') {
+  if (superMenus.includes(savedMenu) && userRole !== 'super_admin') {
     switchMenu('dashboard', document.querySelector('[data-menu="dashboard"]'), true);
     saveActiveMenu('dashboard');
     return;
@@ -1310,7 +1504,6 @@ function updateStatsUI(stats) {
     setText(id, stats[role]?.[key] || '0');
   });
 }
-
 function updateDashboardTables(guruList, siswaList, sesiList) {
   const sesiNames = sesiList || [];
   const render = (theadId, tbodyId, list, extraKey) => {
@@ -1328,10 +1521,7 @@ function updateDashboardTables(guruList, siswaList, sesiList) {
     }
     tbody.innerHTML = list.map((item, idx) => {
       if (sesiNames.length > 0) {
-        const sesiCells = sesiNames.map(sName => {
-          const val = item[sName] || '-';
-          return `<td><b>${val}</b></td>`;
-        }).join('');
+        const sesiCells = sesiNames.map(sName => `<td><b>${item[sName] || '-'}</b></td>`).join('');
         return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td>${sesiCells}</tr>`;
       } else {
         return `<tr><td>${idx+1}</td><td>${item.nama}</td><td>${item[extraKey]}</td><td>${item.jamScan}</td><td><b>${item.status || '-'}</b></td></tr>`;
@@ -1415,6 +1605,7 @@ function checkMenuAccess(menuName, el) {
   }
   const isSuperAdmin = userRole === 'super_admin';
   if (menuName === 'pengaturan' && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
+  if ((menuName === 'data-siswa' || menuName === 'data-guru') && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
   switchMenu(menuName, el);
 }
 
@@ -1450,16 +1641,17 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'download-absensi') initDownloadAbsensi();
+  if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
+  if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
 }
 
-// ===================== SETUP SCANNER + VALIDASI IZIN SCAN =====================
+// ===================== SETUP SCANNER =====================
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
   const lockInfo = $('scannerLockInfo');
   const okInfo = $('scannerOkInfo');
   const btn = $('btnCameraToggle');
 
-  // Admin & Super Admin selalu boleh
   if (userRole === 'admin' || userRole === 'super_admin') {
     adminSwitch.style.display = 'block';
     guruScanAllowed = true;
@@ -1472,10 +1664,9 @@ function setupScannerView() {
   lockInfo.classList.remove('show');
   okInfo.classList.remove('show');
 
-  // Guru: cek izin allowed_scan
   if (userRole === 'guru' && userData) {
     const userId = userData.nip || userData.id;
-    guruScanAllowed = null; // reset supaya bisa dicek ulang
+    guruScanAllowed = null;
     btn.disabled = true;
     btn.innerText = "⏳ Memeriksa izin...";
 
@@ -1489,12 +1680,10 @@ function setupScannerView() {
       applyScannerAccessUI();
     });
   } else {
-    // Tamu / siswa tidak boleh scan (hanya guru/admin yang scan)
     guruScanAllowed = false;
     applyScannerAccessUI();
   }
 }
-
 function applyScannerAccessUI() {
   const btn = $('btnCameraToggle');
   const lockInfo = $('scannerLockInfo');
@@ -1516,22 +1705,16 @@ function applyScannerAccessUI() {
     if (isCameraOn) stopCamera();
   }
 }
-
 function setRole(role) {
   currentRole = role;
   $('btnSiswaAdmin').style.background = role === 'siswa' ? 'var(--primary)' : '#6c757d';
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
-
-// ===================== TOGGLE CAMERA DENGAN AUTO-RETRY =====================
 function toggleCamera() {
-  // 1. Kalau sedang cek izin, tunggu
   if (scannerCheckInProgress) {
-    return showBigPopup('info', 'Sedang Memeriksa',
-      'Sedang memeriksa izin Anda... Silakan tunggu sebentar lalu klik lagi.', 2000);
+    return showBigPopup('info', 'Sedang Memeriksa', 'Sedang memeriksa izin Anda... Silakan tunggu sebentar lalu klik lagi.', 2000);
   }
 
-  // 2. Kalau izin guru belum pernah dicek (null), cek ulang dulu
   if (userRole === 'guru' && guruScanAllowed === null) {
     scannerCheckInProgress = true;
     const userId = userData?.nip || userData?.id;
@@ -1544,19 +1727,17 @@ function toggleCamera() {
         guruScanAllowed = false;
       }
       applyScannerAccessUI();
-      if (guruScanAllowed) toggleCamera(); // retry sekali
+      if (guruScanAllowed) toggleCamera();
     });
     return;
   }
 
-  // 3. Cek izin scan guru
   if (!guruScanAllowed) {
     return showBigPopup('warning', 'Akses Ditolak',
       'Anda belum diizinkan admin untuk melakukan scan QR siswa. ' +
       'Hubungi admin untuk mengaktifkan izin scan QR Anda di menu Pengaturan → Izin Sidik Jari.');
   }
 
-  // 4. Cek sesi aktif — kalau kosong, coba fetch ulang
   if (!currentActiveSesiName) {
     sendRequest({ action: 'get_pengaturan' }, res => {
       if (res.status === 'success') {
@@ -1577,8 +1758,6 @@ function toggleCamera() {
 
   isCameraOn ? stopCamera() : startCamera();
 }
-// ============================================================================
-
 function startCamera() {
   if (html5QrcodeScanner) {
     try { html5QrcodeScanner.clear(); } catch(e) {}
@@ -1616,7 +1795,6 @@ function stopCamera() {
     });
   }
 }
-
 function onScanSuccess(code, sesiTarget) {
   const now = Date.now();
   if (isProcessing) return;
@@ -1644,7 +1822,6 @@ function onScanSuccess(code, sesiTarget) {
     }
   );
 }
-
 function updatePopupResult(type, title, message) {
   const box = $('bigPopupBox');
   const popupBtn = document.querySelector('#bigPopup .modal-popup-btn');
@@ -1687,21 +1864,36 @@ function cariKehadiran() {
 function loadOpsiKelas() {
   sendRequest({ action: 'get_kelas' }, res => {
     if (res.status !== 'success') return;
+    const opts = res.data.map(k => `<option value="${k}">${k}</option>`).join('');
     const select = $('rekapKelas');
-    if (select) select.innerHTML = '<option value="">-- Semua --</option>' + res.data.map(k => `<option value="${k}">${k}</option>`).join('');
+    if (select) select.innerHTML = '<option value="">-- Semua --</option>' + opts;
     const dlKelas = $('downloadKelas');
-    if (dlKelas) dlKelas.innerHTML = '<option value="">-- Semua --</option>' + res.data.map(k => `<option value="${k}">${k}</option>`).join('');
+    if (dlKelas) dlKelas.innerHTML = '<option value="">-- Semua --</option>' + opts;
   });
 }
+function loadKelasUnik() {
+  sendRequest({ action: 'get_kelas' }, res => {
+    if (res.status !== 'success') return;
+    kelasUnikCache = res.data || [];
+    const opts = kelasUnikCache.map(k => `<option value="${k}">${k}</option>`).join('');
+    const filterSiswa = $('siswaFilterKelas');
+    if (filterSiswa) filterSiswa.innerHTML = '<option value="">-- Semua --</option>' + opts;
+    const qrKelas = $('qrFilterKelas');
+    if (qrKelas) qrKelas.innerHTML = '<option value="">-- Semua Kelas --</option>' + opts;
+  });
+}
+function loadMapelUnik() {
+  sendRequest({ action: 'get_mapel_unik' }, res => {
+    if (res.status === 'success') mapelUnikCache = res.data || [];
+  });
+}
+
 function loadRekap() {
   let tglMulai = ($('rekapTglMulai').value || '').trim();
   let tglSelesai = ($('rekapTglSelesai').value || '').trim();
   sendRequest({
-    action: 'rekap_kehadiran',
-    role: $('rekapRole').value,
-    kelas: $('rekapKelas').value,
-    tglMulai: tglMulai,
-    tglSelesai: tglSelesai
+    action: 'rekap_kehadiran', role: $('rekapRole').value, kelas: $('rekapKelas').value,
+    tglMulai, tglSelesai
   }, res => {
     const tbody = $('tableRekapBody');
     if (res.status !== 'success') {
@@ -1947,7 +2139,6 @@ function hapusHariLibur(rowIndex) {
   });
 }
 
-// ===================== LOAD ALLOWED USERS (2 TOGGLE) =====================
 function loadAllowedUsers() {
   sendRequest({ action: 'get_allowed_users' }, res => {
     const tbody = $('tableAllowedUsersBody');
@@ -1983,7 +2174,6 @@ function loadAllowedUsers() {
     }
   });
 }
-
 function updateAllowedUser(userId, field, value) {
   const payload = { action: 'update_allowed_users', userId };
   payload[field] = value;
@@ -1993,22 +2183,15 @@ function updateAllowedUser(userId, field, value) {
     }
   });
 }
-
 function allowAllGuruScan(allow) {
   sendRequest({ action: 'get_allowed_users' }, res => {
     if (res.status !== 'success' || !res.data) return;
     const guruList = res.data.filter(u => u.role === 'guru');
     if (!guruList.length) return showBigPopup('warning', 'Info', 'Tidak ada data guru.');
-    guruList.forEach(u => {
-      sendRequest({ action: 'update_allowed_users', userId: u.id, allowed_scan: allow }, () => {});
-    });
-    setTimeout(() => {
-      loadAllowedUsers();
-      showBigPopup('success', 'Berhasil', `Semua guru ${allow ? 'diizinkan' : 'ditolak'} scan QR.`);
-    }, 800);
+    guruList.forEach(u => { sendRequest({ action: 'update_allowed_users', userId: u.id, allowed_scan: allow }, () => {}); });
+    setTimeout(() => { loadAllowedUsers(); showBigPopup('success', 'Berhasil', `Semua guru ${allow ? 'diizinkan' : 'ditolak'} scan QR.`); }, 800);
   });
 }
-
 function syncAllowedUsers() {
   sendRequest({ action: 'sync_allowed_users' }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Sinkronisasi', res.message);
@@ -2275,10 +2458,7 @@ function loadDownloadPreview() {
   const tglSelesai = $('downloadTglSelesai').value;
   if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
   showBigPopup('info', 'Memuat', '⏳ Mengambil data absensi...', 0);
-  sendRequest({
-    action: 'download_absensi',
-    role, kelas, tglMulai, tglSelesai
-  }, res => {
+  sendRequest({ action: 'download_absensi', role, kelas, tglMulai, tglSelesai }, res => {
     closeBigPopup();
     const thead = $('tableDownloadHead');
     const tbody = $('tableDownloadBody');
@@ -2355,25 +2535,14 @@ async function generateTemplateDaftarHadir() {
   const kelas = role === 'siswa' ? $('downloadKelas').value : '';
   const tglMulai = $('downloadTglMulai').value;
   const tglSelesai = $('downloadTglSelesai').value;
-
-  if (!tglMulai || !tglSelesai) {
-    return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
-  }
-
+  if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
   showBigPopup('info', 'Memuat', '⏳ Menyiapkan template daftar hadir...', 0);
-
-  sendRequest({
-    action: 'get_template_absensi',
-    role, kelas, tglMulai, tglSelesai
-  }, res => {
+  sendRequest({ action: 'get_template_absensi', role, kelas, tglMulai, tglSelesai }, res => {
     closeBigPopup();
-    if (res.status !== 'success') {
-      return showBigPopup('danger', 'Gagal', res.message || 'Gagal memuat data.');
-    }
+    if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message || 'Gagal memuat data.');
     renderTemplateDaftarHadir(res);
   });
 }
-
 function renderTemplateDaftarHadir(data) {
   const role = data.role;
   const isGuru = role === 'guru';
@@ -2383,17 +2552,10 @@ function renderTemplateDaftarHadir(data) {
 
   const wrapper = document.createElement('div');
   wrapper.id = 'templateAbsensiWrapper';
-  wrapper.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.75); z-index: 9999; overflow: auto; padding: 20px;
-    display: flex; justify-content: center; align-items: flex-start;
-  `;
+  wrapper.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 9999; overflow: auto; padding: 20px; display: flex; justify-content: center; align-items: flex-start;`;
 
   const inner = document.createElement('div');
-  inner.style.cssText = `
-    background: #fff; padding: 20px; border-radius: 8px;
-    max-width: 100%; overflow-x: auto;
-  `;
+  inner.style.cssText = `background: #fff; padding: 20px; border-radius: 8px; max-width: 100%; overflow-x: auto;`;
 
   const actions = document.createElement('div');
   actions.style.cssText = 'display:flex; gap:10px; margin-bottom:12px; justify-content:flex-end; flex-wrap:wrap;';
@@ -2403,8 +2565,6 @@ function renderTemplateDaftarHadir(data) {
     <button onclick="closeTemplatePreview()" style="background:#6c757d; color:#fff; border:none; padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:bold; width:auto;">✖ Tutup</button>
   `;
 
-  const tableId = 'tableTemplateAbsensi';
-
   let html = `
     <div id="templatePrintArea" style="background:#fff; font-family:'Times New Roman', serif;">
       <div style="text-align:center; font-weight:bold; font-size:14px; line-height:1.4; margin-bottom:8px;">
@@ -2413,7 +2573,7 @@ function renderTemplateDaftarHadir(data) {
         BULAN ${data.judulBulan.toUpperCase()}
       </div>
       ${!isGuru && data.kelas && data.kelas !== '-' ? `<div style="font-weight:bold; font-size:12px; margin-bottom:6px;">KELAS : ${data.kelas}</div>` : ''}
-      <table id="${tableId}" style="border-collapse:collapse; width:100%; font-size:10px;">
+      <table id="tableTemplateAbsensi" style="border-collapse:collapse; width:100%; font-size:10px;">
         <thead>
           <tr>
             <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:24px;">No</th>
@@ -2427,11 +2587,9 @@ function renderTemplateDaftarHadir(data) {
           </tr>
           <tr>
   `;
-
   daftarTanggal.forEach(t => {
     html += `<th style="border:1px solid #000; padding:2px 0; text-align:center; width:16px; font-size:9px;">${t.tglNum}</th>`;
   });
-
   html += `</tr></thead><tbody>`;
 
   if (baris.length === 0) {
@@ -2450,13 +2608,11 @@ function renderTemplateDaftarHadir(data) {
         html += `<td style="border:1px solid #000; padding:2px 4px;">${b.nama}</td>`;
       }
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.jenis_kelamin || '-'}</td>`;
-
       daftarTanggal.forEach(t => {
         const simbol = b.perTanggal[t.tgl] || '';
         const bg = t.isLibur ? 'background:#ff4d4d; color:#fff;' : '';
         html += `<td style="border:1px solid #000; padding:2px 0; text-align:center; ${bg}">${simbol}</td>`;
       });
-
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalS || ''}</td>`;
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalI || ''}</td>`;
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalA || ''}</td>`;
@@ -2464,30 +2620,24 @@ function renderTemplateDaftarHadir(data) {
       html += `</tr>`;
     });
   }
-
   html += `</tbody></table></div>`;
 
   inner.appendChild(actions);
   inner.insertAdjacentHTML('beforeend', html);
   wrapper.appendChild(inner);
   document.body.appendChild(wrapper);
-
   window._templateData = data;
 }
-
 function closeTemplatePreview() {
   const el = document.getElementById('templateAbsensiWrapper');
   if (el) el.remove();
 }
-
 function downloadTemplatePDF() {
   const el = document.getElementById('templatePrintArea');
   if (!el) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
-
   const role = window._templateData?.role || 'guru';
   const judul = role === 'guru' ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
   const bulan = (window._templateData?.judulBulan || '').replace(/\s+/g, '_');
-
   html2pdf().set({
     margin: [8, 8, 8, 8],
     filename: `${judul}_${bulan}.pdf`,
@@ -2496,15 +2646,12 @@ function downloadTemplatePDF() {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
   }).from(el).save();
 }
-
 function downloadTemplateExcel() {
   const table = document.getElementById('tableTemplateAbsensi');
   if (!table) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
-
   const role = window._templateData?.role || 'guru';
   const judul = role === 'guru' ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
   const bulan = (window._templateData?.judulBulan || '').replace(/\s+/g, '_');
-
   const wb = XLSX.utils.table_to_book(table, { sheet: "Daftar Hadir", raw: true });
   XLSX.writeFile(wb, `${judul}_${bulan}.xlsx`);
 }
@@ -2541,7 +2688,6 @@ function checkFingerprintStatus() {
     }
   });
 }
-
 async function createWebAuthnCredential(userId, userName) {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
@@ -2638,6 +2784,508 @@ async function absenSiswaWithFingerprint() {
   if (!siswaUserData) return;
   await doAbsenFingerprint(siswaUserData.nisn, 'siswa', showSiswaFingerprintStatus, 'btnAbsenSiswaFingerprint');
 }
+
+// ===================== FORM MODAL GENERIK =====================
+function openFormModal(title, contentHTML, onSubmit) {
+  $('formModalTitle').innerText = title;
+  setHTML('formModalContent', contentHTML);
+  formModalCallback = onSubmit;
+  $('formModal').classList.add('show');
+}
+function closeFormModal() {
+  $('formModal').classList.remove('show');
+  formModalCallback = null;
+}
+function submitFormModal() {
+  if (typeof formModalCallback === 'function') formModalCallback();
+}
+
+// ===================== DATA SISWA CRUD =====================
+let siswaSearchTimer = null;
+function loadDataSiswaDebounced() {
+  if (siswaSearchTimer) clearTimeout(siswaSearchTimer);
+  siswaSearchTimer = setTimeout(loadDataSiswa, 300);
+}
+function loadDataSiswa() {
+  const search = $('siswaSearch').value.trim();
+  const kelas = $('siswaFilterKelas').value;
+  sendRequest({ action: 'get_data_siswa', search, kelas }, res => {
+    const tbody = $('tableDataSiswaBody');
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">${res.message}</td></tr>`;
+      return;
+    }
+    dataSiswaCache = res.data || [];
+    setText('siswaTotalInfo', `Total: ${dataSiswaCache.length} siswa`);
+    if (!dataSiswaCache.length) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Tidak ada data siswa.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = dataSiswaCache.map((s, idx) => {
+      const tgl = s.tanggal_lahir ? String(s.tanggal_lahir).substring(0, 10) : '-';
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td><b>${s.id}</b></td>
+        <td>${s.nama}</td>
+        <td><span class="tag-mini">${s.kelas || '-'}</span></td>
+        <td style="text-align:center;">${s.jenis_kelamin || '-'}</td>
+        <td>${tgl}</td>
+        <td>${s.no_hp || '-'}</td>
+        <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${s.alamat || ''}">${s.alamat || '-'}</td>
+        <td>${s.status || 'Aktif'}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button class="btn-edit" onclick="editSiswa('${s.id}')">✏️ Edit</button>
+          <button class="btn-danger" onclick="hapusSiswa('${s.id}','${s.nama.replace(/'/g, "\\'")}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+}
+
+function openFormSiswa() {
+  const html = `
+    <div class="form-group"><label>NISN (10 digit):</label><input type="text" id="fmSiswaId" placeholder="Contoh: 0107339055" inputmode="numeric"></div>
+    <div class="form-group"><label>Nama Lengkap:</label><input type="text" id="fmSiswaNama" placeholder="Nama siswa"></div>
+    <div class="form-group"><label>Kelas:</label>
+      <select id="fmSiswaKelas">
+        <option value="">-- Pilih Kelas --</option>
+        ${kelasUnikCache.map(k => `<option value="${k}">${k}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group"><label>Jenis Kelamin:</label>
+      <select id="fmSiswaJK"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select>
+    </div>
+    <div class="form-group"><label>Tanggal Lahir:</label><input type="date" id="fmSiswaTgl"></div>
+    <div class="form-group"><label>No. HP:</label><input type="text" id="fmSiswaHP" placeholder="08xxx" inputmode="tel"></div>
+    <div class="form-group"><label>Alamat:</label><textarea id="fmSiswaAlamat" rows="2" placeholder="Alamat lengkap"></textarea></div>
+    <div class="form-group"><label>Status:</label>
+      <select id="fmSiswaStatus">
+        <option value="Aktif">Aktif</option>
+        <option value="Lulus">Lulus</option>
+        <option value="Pindah">Pindah</option>
+        <option value="Keluar">Keluar</option>
+      </select>
+    </div>
+  `;
+  openFormModal('➕ Tambah Siswa Baru', html, submitFormSiswaBaru);
+}
+
+function submitFormSiswaBaru() {
+  const payload = {
+    action: 'save_data_siswa',
+    id: $('fmSiswaId').value.trim(),
+    nama: $('fmSiswaNama').value.trim(),
+    kelas: $('fmSiswaKelas').value.trim(),
+    jenis_kelamin: $('fmSiswaJK').value,
+    tanggal_lahir: $('fmSiswaTgl').value,
+    no_hp: $('fmSiswaHP').value.trim(),
+    alamat: $('fmSiswaAlamat').value.trim(),
+    status: $('fmSiswaStatus').value,
+  };
+  if (!payload.id || !payload.nama) return showBigPopup('warning', 'Peringatan', 'NISN dan Nama wajib diisi!');
+  sendRequest(payload, res => {
+    if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataSiswa(); }
+    else showBigPopup('danger', 'Gagal', res.message);
+  });
+}
+
+function editSiswa(id) {
+  const s = dataSiswaCache.find(x => String(x.id) === String(id));
+  if (!s) return showBigPopup('danger', 'Error', 'Data siswa tidak ditemukan.');
+  const tgl = s.tanggal_lahir ? String(s.tanggal_lahir).substring(0, 10) : '';
+  const html = `
+    <div class="form-group"><label>NISN:</label><input type="text" id="fmSiswaId" value="${s.id}" readonly style="background:#f0f0f0;"></div>
+    <div class="form-group"><label>Nama Lengkap:</label><input type="text" id="fmSiswaNama" value="${s.nama}"></div>
+    <div class="form-group"><label>Kelas:</label>
+      <select id="fmSiswaKelas">
+        <option value="">-- Pilih Kelas --</option>
+        ${kelasUnikCache.map(k => `<option value="${k}" ${k === s.kelas ? 'selected' : ''}>${k}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group"><label>Jenis Kelamin:</label>
+      <select id="fmSiswaJK">
+        <option value="L" ${s.jenis_kelamin === 'L' ? 'selected' : ''}>Laki-laki</option>
+        <option value="P" ${s.jenis_kelamin === 'P' ? 'selected' : ''}>Perempuan</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Tanggal Lahir:</label><input type="date" id="fmSiswaTgl" value="${tgl}"></div>
+    <div class="form-group"><label>No. HP:</label><input type="text" id="fmSiswaHP" value="${s.no_hp || ''}"></div>
+    <div class="form-group"><label>Alamat:</label><textarea id="fmSiswaAlamat" rows="2">${s.alamat || ''}</textarea></div>
+    <div class="form-group"><label>Status:</label>
+      <select id="fmSiswaStatus">
+        ${['Aktif','Lulus','Pindah','Keluar'].map(st => `<option value="${st}" ${st === s.status ? 'selected' : ''}>${st}</option>`).join('')}
+      </select>
+    </div>
+  `;
+  openFormModal(`✏️ Edit Siswa: ${s.nama}`, html, () => {
+    const payload = {
+      action: 'save_data_siswa',
+      id: s.id,
+      nama: $('fmSiswaNama').value.trim(),
+      kelas: $('fmSiswaKelas').value.trim(),
+      jenis_kelamin: $('fmSiswaJK').value,
+      tanggal_lahir: $('fmSiswaTgl').value,
+      no_hp: $('fmSiswaHP').value.trim(),
+      alamat: $('fmSiswaAlamat').value.trim(),
+      status: $('fmSiswaStatus').value,
+    };
+    if (!payload.nama) return showBigPopup('warning', 'Peringatan', 'Nama wajib diisi!');
+    sendRequest(payload, res => {
+      if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataSiswa(); }
+      else showBigPopup('danger', 'Gagal', res.message);
+    });
+  });
+}
+
+function hapusSiswa(id, nama) {
+  const html = `
+    <p style="font-size:13px; text-align:center; margin: 8px 0 16px;">
+      Yakin ingin menghapus siswa <b>${nama}</b> (${id})?<br><br>
+      <span style="color:#dc3545; font-weight:700;">Semua data terkait akan dihapus permanen:</span><br>
+      <span style="font-size:11px;">Kehadiran, Historis, Nilai, Sidik Jari, Izin, dan Session</span>
+    </p>
+    <p style="text-align:center; font-size:12px; color:#666;">Tindakan ini tidak dapat dibatalkan.</p>
+  `;
+  openFormModal('⚠️ Konfirmasi Hapus Siswa', html, () => {
+    sendRequest({ action: 'delete_data_siswa', id }, res => {
+      if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataSiswa(); }
+      else showBigPopup('danger', 'Gagal', res.message);
+    });
+  });
+  $('formModalSaveBtn').innerText = '🗑️ Hapus';
+  $('formModalSaveBtn').style.background = 'var(--danger)';
+  setTimeout(() => {
+    $('formModalSaveBtn').innerText = '💾 Simpan';
+    $('formModalSaveBtn').style.background = 'var(--primary)';
+  }, 300);
+}
+
+// ===================== IMPORT SISWA EXCEL =====================
+function openImportSiswaModal() {
+  const html = `
+    <p style="font-size:12px; color:#666; margin-bottom:10px;">
+      Format kolom (baris pertama = header):<br>
+      <code style="background:#f0f0f0; padding:4px 6px; display:block; margin-top:6px; font-size:11px;">
+      nisn | nama | kelas | jenis_kelamin | tanggal_lahir | no_hp | alamat | status
+      </code>
+      <br>
+      • <b>tanggal_lahir</b>: format YYYY-MM-DD<br>
+      • <b>jenis_kelamin</b>: L / P<br>
+      • Jika NISN sudah ada → data akan <b>diupdate</b> (upsert)
+    </p>
+    <div class="form-group">
+      <label>Pilih file Excel (.xlsx / .xls):</label>
+      <input type="file" id="importSiswaFile" accept=".xlsx,.xls" onchange="previewImportSiswa(event)">
+    </div>
+    <div id="importSiswaPreview" style="margin-top:10px;"></div>
+  `;
+  openFormModal('📥 Import Data Siswa', html, submitImportSiswa);
+}
+let importSiswaData = [];
+function previewImportSiswa(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+      if (rows.length < 2) {
+        setHTML('importSiswaPreview', '<p style="color:#dc3545;">File kosong atau tidak ada data.</p>');
+        return;
+      }
+      const headers = rows[0].map(h => String(h || '').toLowerCase().trim());
+      const idxMap = {
+        nisn: headers.findIndex(h => h.includes('nisn') || h === 'id'),
+        nama: headers.findIndex(h => h.includes('nama')),
+        kelas: headers.findIndex(h => h.includes('kelas')),
+        jenis_kelamin: headers.findIndex(h => h.includes('jenis') || h === 'jk' || h === 'l/p'),
+        tanggal_lahir: headers.findIndex(h => h.includes('tanggal') || h.includes('tgl')),
+        no_hp: headers.findIndex(h => h.includes('hp') || h.includes('telepon') || h.includes('telp')),
+        alamat: headers.findIndex(h => h.includes('alamat')),
+        status: headers.findIndex(h => h.includes('status')),
+      };
+      const data = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r.length) continue;
+        const getVal = (idx) => idx >= 0 ? String(r[idx] || '').trim() : '';
+        const nisn = getVal(idxMap.nisn);
+        const nama = getVal(idxMap.nama);
+        if (!nisn || !nama) continue;
+        data.push({
+          id: nisn,
+          nama: nama,
+          kelas: getVal(idxMap.kelas),
+          jenis_kelamin: getVal(idxMap.jenis_kelamin).toUpperCase() || 'L',
+          tanggal_lahir: getVal(idxMap.tanggal_lahir),
+          no_hp: getVal(idxMap.no_hp),
+          alamat: getVal(idxMap.alamat),
+          status: getVal(idxMap.status) || 'Aktif',
+        });
+      }
+      importSiswaData = data;
+      setHTML('importSiswaPreview', `<p style="color:var(--success); font-weight:700;">✅ Terbaca ${data.length} baris data.</p>
+        <div style="max-height:200px; overflow-y:auto; border:1px solid #ddd; border-radius:6px; padding:8px; font-size:11px;">
+          ${data.slice(0, 10).map(d => `<div>• <b>${d.id}</b> - ${d.nama} (${d.kelas})</div>`).join('')}
+          ${data.length > 10 ? `<div style="color:#666;">... dan ${data.length - 10} baris lainnya</div>` : ''}
+        </div>`);
+    } catch (err) {
+      setHTML('importSiswaPreview', `<p style="color:#dc3545;">Gagal membaca file: ${err.message}</p>`);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function submitImportSiswa() {
+  if (!importSiswaData.length) return showBigPopup('warning', 'Peringatan', 'Tidak ada data untuk diimport.');
+  showBigPopup('info', 'Memproses', `⏳ Mengimport ${importSiswaData.length} data...`, 0);
+  sendRequest({ action: 'import_siswa', list: importSiswaData }, res => {
+    closeBigPopup();
+    closeFormModal();
+    if (res.status === 'success') {
+      showBigPopup('success', 'Import Selesai', res.message);
+      loadDataSiswa();
+      importSiswaData = [];
+    } else showBigPopup('danger', 'Gagal', res.message);
+  });
+}
+
+// ===================== QR PRINT =====================
+function openQrPrintModal() {
+  $('qrPrintModal').classList.add('show');
+  loadKelasUnik();
+  renderQrCards();
+}
+function closeQrPrintModal() {
+  $('qrPrintModal').classList.remove('show');
+  setHTML('qrPrintArea', '');
+}
+function renderQrCards() {
+  const kelas = $('qrFilterKelas').value;
+  setHTML('qrPrintArea', '<div style="text-align:center; padding:20px;">⏳ Memuat data...</div>');
+  sendRequest({ action: 'get_qr_data', kelas }, res => {
+    if (res.status !== 'success' || !res.data || !res.data.length) {
+      setHTML('qrPrintArea', '<div style="text-align:center; padding:20px; color:#666;">Tidak ada data siswa.</div>');
+      return;
+    }
+    const area = $('qrPrintArea');
+    area.innerHTML = '';
+    res.data.forEach((s, idx) => {
+      const card = document.createElement('div');
+      card.className = 'qr-card';
+      const canvas = document.createElement('canvas');
+      canvas.id = `qr_${idx}`;
+      card.appendChild(canvas);
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'qr-name';
+      nameDiv.innerText = s.nama;
+      card.appendChild(nameDiv);
+      const nisnDiv = document.createElement('div');
+      nisnDiv.className = 'qr-nisn';
+      nisnDiv.innerText = s.id;
+      card.appendChild(nisnDiv);
+      const kelasDiv = document.createElement('div');
+      kelasDiv.className = 'qr-kelas';
+      kelasDiv.innerText = `Kelas ${s.kelas || '-'}`;
+      card.appendChild(kelasDiv);
+      area.appendChild(card);
+      QRCode.toCanvas(canvas, String(s.id), { width: 120, margin: 1 }, err => {
+        if (err) console.error('QR Error:', err);
+      });
+    });
+  });
+}
+
+// ===================== DATA GURU CRUD =====================
+let guruSearchTimer = null;
+function loadDataGuruDebounced() {
+  if (guruSearchTimer) clearTimeout(guruSearchTimer);
+  guruSearchTimer = setTimeout(loadDataGuru, 300);
+}
+function loadDataGuru() {
+  const search = $('guruSearch').value.trim();
+  sendRequest({ action: 'get_data_guru', search }, res => {
+    const tbody = $('tableDataGuruBody');
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:red;">${res.message}</td></tr>`;
+      return;
+    }
+    dataGuruCache = res.data || [];
+    setText('guruTotalInfo', `Total: ${dataGuruCache.length} guru`);
+    if (!dataGuruCache.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Tidak ada data guru.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = dataGuruCache.map((g, idx) => {
+      const mapelTags = (g.mapel || []).map(m => `<span class="tag-mini">${m}</span>`).join('') || '-';
+      const kelasTags = (g.kelas || []).map(k => `<span class="tag-mini">${k}</span>`).join('') || '-';
+      const pinStatus = g.pin ? '✅' : '❌';
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td><b>${g.id}</b></td>
+        <td>${g.nama}</td>
+        <td style="text-align:center;">${g.jenis_kelamin || '-'}</td>
+        <td>${g.pangkat_gol || '-'}</td>
+        <td>${mapelTags}</td>
+        <td>${kelasTags}</td>
+        <td style="text-align:center;">${pinStatus}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button class="btn-edit" onclick="editGuru('${g.id}')">✏️ Edit</button>
+          <button class="btn-danger" onclick="hapusGuru('${g.id}','${g.nama.replace(/'/g, "\\'")}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+}
+
+function buildCheckboxGrid(items, checkedArr, prefix) {
+  return items.map(item => {
+    const checked = checkedArr.includes(item) ? 'checked' : '';
+    return `<label><input type="checkbox" data-${prefix} value="${item}" ${checked}> ${item}</label>`;
+  }).join('');
+}
+
+function openFormGuru() {
+  loadMapelUnik();
+  loadKelasUnik();
+  const mapelCb = buildCheckboxGrid(mapelUnikCache, [], 'mapel');
+  const kelasCb = buildCheckboxGrid(kelasUnikCache, [], 'kelas');
+  const html = `
+    <div class="form-group"><label>NIP (18 digit):</label><input type="text" id="fmGuruId" placeholder="NIP guru" inputmode="numeric"></div>
+    <div class="form-group"><label>Nama Lengkap + Gelar:</label><input type="text" id="fmGuruNama" placeholder="Contoh: SAEPUDIN, S.Pd"></div>
+    <div class="form-group"><label>Jenis Kelamin:</label>
+      <select id="fmGuruJK"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select>
+    </div>
+    <div class="form-group"><label>Pangkat / Golongan:</label><input type="text" id="fmGuruPangkat" placeholder="Contoh: Penata / IIId"></div>
+    <div class="form-group">
+      <label>Mapel yang Diampu:</label>
+      <div class="checkbox-grid" id="fmGuruMapelGrid">${mapelCb || '<div style="padding:8px; color:#666; font-size:11px;">Belum ada mapel. Ketik manual di bawah.</div>'}</div>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <input type="text" id="fmGuruMapelBaru" placeholder="Tambah mapel baru (mis: MTK)" style="flex:1;">
+        <button type="button" class="btn-add" style="width:auto; padding:8px 12px;" onclick="tambahMapelCheckbox()">+ Tambah</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Kelas yang Diampu:</label>
+      <div class="checkbox-grid" id="fmGuruKelasGrid">${kelasCb || '<div style="padding:8px; color:#666; font-size:11px;">Belum ada kelas.</div>'}</div>
+    </div>
+    <div class="form-group"><label>PIN Login (opsional, min 4 digit):</label><input type="text" id="fmGuruPin" placeholder="Kosongkan jika tidak diubah" inputmode="numeric"></div>
+  `;
+  openFormModal('➕ Tambah Guru Baru', html, submitFormGuruBaru);
+}
+
+function tambahMapelCheckbox() {
+  const val = $('fmGuruMapelBaru').value.trim();
+  if (!val) return;
+  const grid = $('fmGuruMapelGrid');
+  if (grid.querySelector(`input[value="${val}"]`)) return;
+  const label = document.createElement('label');
+  label.innerHTML = `<input type="checkbox" data-mapel value="${val}" checked> ${val}`;
+  grid.appendChild(label);
+  $('fmGuruMapelBaru').value = '';
+  if (!mapelUnikCache.includes(val)) mapelUnikCache.push(val);
+}
+
+function getCheckedValues(gridId, attr) {
+  return Array.from($(gridId).querySelectorAll(`input[data-${attr}]:checked`)).map(cb => cb.value);
+}
+
+function submitFormGuruBaru() {
+  const payload = {
+    action: 'save_data_guru',
+    id: $('fmGuruId').value.trim(),
+    nama: $('fmGuruNama').value.trim(),
+    jenis_kelamin: $('fmGuruJK').value,
+    pangkat_gol: $('fmGuruPangkat').value.trim(),
+    mapel: getCheckedValues('fmGuruMapelGrid', 'mapel'),
+    kelas: getCheckedValues('fmGuruKelasGrid', 'kelas'),
+  };
+  const pin = $('fmGuruPin').value.trim();
+  if (pin) payload.pin = pin;
+  if (!payload.id || !payload.nama) return showBigPopup('warning', 'Peringatan', 'NIP dan Nama wajib diisi!');
+  sendRequest(payload, res => {
+    if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataGuru(); }
+    else showBigPopup('danger', 'Gagal', res.message);
+  });
+}
+
+function editGuru(id) {
+  const g = dataGuruCache.find(x => String(x.id) === String(id));
+  if (!g) return showBigPopup('danger', 'Error', 'Data guru tidak ditemukan.');
+  // Merge mapel unik dengan mapel guru ini
+  const mapelAll = Array.from(new Set([...mapelUnikCache, ...(g.mapel || [])]));
+  const kelasAll = Array.from(new Set([...kelasUnikCache, ...(g.kelas || [])]));
+  const mapelCb = buildCheckboxGrid(mapelAll, g.mapel || [], 'mapel');
+  const kelasCb = buildCheckboxGrid(kelasAll, g.kelas || [], 'kelas');
+
+  const html = `
+    <div class="form-group"><label>NIP:</label><input type="text" id="fmGuruId" value="${g.id}" readonly style="background:#f0f0f0;"></div>
+    <div class="form-group"><label>Nama Lengkap + Gelar:</label><input type="text" id="fmGuruNama" value="${g.nama}"></div>
+    <div class="form-group"><label>Jenis Kelamin:</label>
+      <select id="fmGuruJK">
+        <option value="L" ${g.jenis_kelamin === 'L' ? 'selected' : ''}>Laki-laki</option>
+        <option value="P" ${g.jenis_kelamin === 'P' ? 'selected' : ''}>Perempuan</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Pangkat / Golongan:</label><input type="text" id="fmGuruPangkat" value="${g.pangkat_gol || ''}"></div>
+    <div class="form-group">
+      <label>Mapel yang Diampu:</label>
+      <div class="checkbox-grid" id="fmGuruMapelGrid">${mapelCb}</div>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <input type="text" id="fmGuruMapelBaru" placeholder="Tambah mapel baru" style="flex:1;">
+        <button type="button" class="btn-add" style="width:auto; padding:8px 12px;" onclick="tambahMapelCheckbox()">+ Tambah</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Kelas yang Diampu:</label>
+      <div class="checkbox-grid" id="fmGuruKelasGrid">${kelasCb}</div>
+    </div>
+    <div class="form-group"><label>PIN Login (kosongkan jika tidak diubah):</label><input type="text" id="fmGuruPin" placeholder="${g.pin ? 'Sudah diset' : 'Belum diset'}" inputmode="numeric"></div>
+  `;
+  openFormModal(`✏️ Edit Guru: ${g.nama}`, html, () => {
+    const payload = {
+      action: 'save_data_guru',
+      id: g.id,
+      nama: $('fmGuruNama').value.trim(),
+      jenis_kelamin: $('fmGuruJK').value,
+      pangkat_gol: $('fmGuruPangkat').value.trim(),
+      mapel: getCheckedValues('fmGuruMapelGrid', 'mapel'),
+      kelas: getCheckedValues('fmGuruKelasGrid', 'kelas'),
+    };
+    const pin = $('fmGuruPin').value.trim();
+    if (pin) payload.pin = pin;
+    if (!payload.nama) return showBigPopup('warning', 'Peringatan', 'Nama wajib diisi!');
+    sendRequest(payload, res => {
+      if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataGuru(); }
+      else showBigPopup('danger', 'Gagal', res.message);
+    });
+  });
+}
+
+function hapusGuru(id, nama) {
+  const html = `
+    <p style="font-size:13px; text-align:center; margin: 8px 0 16px;">
+      Yakin ingin menghapus guru <b>${nama}</b> (${id})?<br><br>
+      <span style="color:#dc3545; font-weight:700;">Semua data terkait akan dihapus permanen:</span><br>
+      <span style="font-size:11px;">Kehadiran, Historis, Nilai, Sidik Jari, Izin Scan, dan Session</span>
+    </p>
+    <p style="text-align:center; font-size:12px; color:#666;">Tindakan ini tidak dapat dibatalkan.</p>
+  `;
+  openFormModal('⚠️ Konfirmasi Hapus Guru', html, () => {
+    sendRequest({ action: 'delete_data_guru', id }, res => {
+      if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataGuru(); }
+      else showBigPopup('danger', 'Gagal', res.message);
+    });
+  });
+  $('formModalSaveBtn').innerText = '🗑️ Hapus';
+  $('formModalSaveBtn').style.background = 'var(--danger)';
+  setTimeout(() => {
+    $('formModalSaveBtn').innerText = '💾 Simpan';
+    $('formModalSaveBtn').style.background = 'var(--primary)';
+  }, 300);
+}
+
 </script>
 </body>
 </html>
