@@ -563,8 +563,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" data-menu="jadwal-mapel" onclick="checkMenuAccess('jadwal-mapel', this)">📅 Jadwal Mapel</a>
     <a class="nav-item" data-menu="input-nilai" onclick="checkMenuAccess('input-nilai', this)">📈 Input Nilai</a>
     <a class="nav-item" data-menu="daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
+    <a class="nav-item" data-menu="ujian-kelola" onclick="checkMenuAccess('ujian-kelola', this)">📝 Kelola Ujian</a>
     <a class="nav-item" data-menu="download-absensi" onclick="checkMenuAccess('download-absensi', this)">⬇️ Download Absensi</a>
     <a class="nav-item" data-menu="kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
+    <div class="nav-category">UJIAN SISWA</div>
+    <a class="nav-item" data-menu="ujian-siswa" onclick="switchMenu('ujian-siswa', this)">🖊️ Kerjakan Ujian</a>
   </div>
 
   <div class="content-container" id="appContent">
@@ -1065,7 +1068,75 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
+
+    <!-- UJIAN KELOLA (Guru/Admin) -->
+    <div id="menu-ujian-kelola" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">📝 Kelola Ujian Online</h3>
+      <div class="master-toolbar">
+        <button class="btn-add" onclick="openFormUjianBaru()">➕ Buat Ujian Baru</button>
+        <button class="btn-primary btn-sm" onclick="loadUjianList()">🔄 Refresh</button>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead><tr><th>No</th><th>Judul</th><th>Mapel</th><th>Guru</th><th>Durasi</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody id="tableUjianBody"><tr><td colspan="7" style="text-align:center;">Memuat...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- UJIAN SOAL EDITOR -->
+    <div id="menu-ujian-soal" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">📚 Bank Soal Ujian</h3>
+      <div style="background:#e8f0fe; padding:10px; border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div><b id="ujianSoalJudul">-</b> <span id="ujianSoalMapel" style="color:#666; font-size:12px;"></span></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-add btn-sm" onclick="openFormSoalBaru()">➕ Tambah Soal</button>
+          <button class="btn-primary btn-sm" onclick="switchMenu('ujian-kelola', document.querySelector('[data-menu=ujian-kelola]'))">← Kembali</button>
+        </div>
+      </div>
+      <div id="ujianSoalList"></div>
+    </div>
+
+    <!-- UJIAN HASIL -->
+    <div id="menu-ujian-hasil" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">📊 Hasil Ujian</h3>
+      <div style="margin-bottom:10px;">
+        <button class="btn-primary btn-sm" onclick="switchMenu('ujian-kelola', document.querySelector('[data-menu=ujian-kelola]'))">← Kembali</button>
+        <span id="ujianHasilJudul" style="margin-left:10px; font-weight:700; color:var(--primary);"></span>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead><tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Skor</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
+          <tbody id="tableUjianHasilBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- UJIAN SISWA -->
+    <div id="menu-ujian-siswa" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">🖊️ Kerjakan Ujian</h3>
+      <div id="ujianSiswaLoginHint" style="background:#fff3cd; padding:12px; border-radius:8px; margin-bottom:12px; font-size:12px;">
+        Login sebagai <b>Siswa</b> terlebih dahulu (menu profil → Login Siswa) untuk melihat ujian yang tersedia.
+      </div>
+      <div id="ujianSiswaList"></div>
+      <div id="ujianKerjaArea" style="display:none;">
+        <div style="background:var(--primary); color:#fff; padding:12px; border-radius:8px; margin-bottom:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; position:sticky; top:65px; z-index:50;">
+          <div>
+            <div style="font-weight:800;" id="ujiKerjaJudul">-</div>
+            <div style="font-size:11px; opacity:0.9;" id="ujiKerjaMapel">-</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;">Sisa waktu</div>
+            <div style="font-size:22px; font-weight:900;" id="ujiKerjaTimer">--:--</div>
+          </div>
+        </div>
+        <div id="ujiKerjaSoal"></div>
+        <button class="btn-primary" style="margin-top:16px;" onclick="submitUjianSiswa()">📤 Serahkan Jawaban</button>
+      </div>
+    </div>
+
     <!-- DOWNLOAD ABSENSI -->
+
     <div id="menu-download-absensi" class="section">
       <h3 style="color:var(--primary); font-size:15px;">⬇️ Download Absensi</h3>
       <div class="download-card">
@@ -1799,6 +1870,8 @@ function switchMenu(menuName, el, isRestoring = false) {
   }
   if (menuName === 'input-nilai') loadFilterInputNilaiWithGuru();
   if (menuName === 'daftar-nilai') loadFilterDaftarNilaiWithGuru();
+  if (menuName === 'ujian-kelola') loadUjianList();
+  if (menuName === 'ujian-siswa') loadUjianTersediaSiswa();
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'download-absensi') initDownloadAbsensi();
@@ -3879,6 +3952,484 @@ function hapusGuru(id, nama) {
     $('formModalSaveBtn').style.background = 'var(--primary)';
   }, 300);
 }
+
+
+// ===================== UJIAN ONLINE UI =====================
+let ujianListCache = [];
+let ujianEditId = null;
+let ujianSoalUjianId = null;
+let ujianKerjaState = null;
+let ujianTimerInterval = null;
+
+function loadUjianList() {
+  const payload = { action: 'ujian_list' };
+  if (userRole === 'guru' && userData) {
+    payload.role = 'guru';
+    payload.guruNama = userData.nama;
+  }
+  sendRequest(payload, res => {
+    const tbody = $('tableUjianBody');
+    if (!tbody) return;
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;">${res.message || 'Gagal memuat'}</td></tr>`;
+      return;
+    }
+    ujianListCache = res.data || [];
+    if (!ujianListCache.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada ujian. Klik "Buat Ujian Baru".</td></tr>';
+      return;
+    }
+    tbody.innerHTML = ujianListCache.map((u, i) => {
+      const stColor = u.status === 'aktif' ? '#28a745' : (u.status === 'draft' ? '#f59e0b' : '#6c757d');
+      return `<tr>
+        <td>${i+1}</td>
+        <td><b>${u.judul || '-'}</b></td>
+        <td>${u.mapel || '-'}</td>
+        <td>${u.guru || '-'}</td>
+        <td>${u.durasi_menit || 60} mnt</td>
+        <td><span style="background:${stColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(u.status||'').toUpperCase()}</span></td>
+        <td style="white-space:nowrap;">
+          <span class="aksi-btns">
+            <button class="btn-edit" title="Edit meta" onclick="editUjianMeta('${u.id}')">✏️</button>
+            <button class="btn-edit" style="background:#dbeafe;border-color:#3b82f6;color:#1e40af;" title="Soal" onclick="bukaBankSoal('${u.id}')">📚</button>
+            <button class="btn-edit" style="background:#f3e8ff;border-color:#a855f7;color:#6b21a8;" title="Hasil" onclick="bukaHasilUjian('${u.id}')">📊</button>
+            <button class="btn-danger" title="Hapus" onclick="hapusUjian('${u.id}','${(u.judul||'').replace(/'/g,"\\'")}')">🗑️</button>
+          </span>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+}
+
+function openFormUjianBaru() {
+  ujianEditId = null;
+  const guruDefault = (userRole === 'guru' && userData) ? (userData.nama || '') : '';
+  const mapelOpts = ((userRole === 'guru' && userData && userData.mapel) ? userData.mapel : mapelUnikCache || []).map(m => `<option value="${m}">${m}</option>`).join('');
+  const kelasOpts = (kelasUnikCache || []).map(k => `<label><input type="checkbox" data-ukelas value="${k}"> ${k}</label>`).join('');
+  const html = `
+    <div class="form-group"><label>Judul Ujian:</label><input type="text" id="fmUjJudul" placeholder="Contoh: Ulangan Harian 1 Matematika"></div>
+    <div class="form-group"><label>Mapel:</label>
+      <select id="fmUjMapel"><option value="">-- Pilih --</option>${mapelOpts}</select>
+      <input type="text" id="fmUjMapelManual" placeholder="Atau ketik mapel baru" style="margin-top:6px;">
+    </div>
+    <div class="form-group"><label>Guru:</label><input type="text" id="fmUjGuru" value="${guruDefault}" ${userRole==='guru'?'readonly style="background:#f0f0f0;"':''}></div>
+    <div class="form-group"><label>Kelas (kosong = semua):</label><div class="checkbox-grid" id="fmUjKelas">${kelasOpts || '<span style="font-size:11px;color:#666;">Belum ada kelas</span>'}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;min-width:100px;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="60" min="5"></div>
+      <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / UTS / NH1"></div>
+      <div class="form-group" style="flex:1;min-width:100px;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="1" min="1"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;"><label>Waktu Mulai:</label><input type="datetime-local" id="fmUjMulai"></div>
+      <div class="form-group" style="flex:1;"><label>Waktu Selesai:</label><input type="datetime-local" id="fmUjSelesai"></div>
+    </div>
+    <div class="form-group"><label>Status:</label>
+      <select id="fmUjStatus"><option value="draft">Draft</option><option value="aktif">Aktif</option><option value="selesai">Selesai</option></select>
+    </div>
+    <div class="form-group" style="display:flex;gap:16px;">
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakSoal" checked> Acak urutan soal</label>
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakOpsi" checked> Acak opsi jawaban</label>
+    </div>
+    <div class="form-group"><label>Petunjuk:</label><textarea id="fmUjPetunjuk" rows="2" placeholder="Petunjuk untuk siswa..."></textarea></div>
+  `;
+  openFormModal('➕ Buat Ujian Baru', html, submitFormUjian);
+  if (!mapelUnikCache || !mapelUnikCache.length) loadMapelUnik();
+  if (!kelasUnikCache || !kelasUnikCache.length) loadKelasUnik();
+}
+
+function editUjianMeta(id) {
+  const u = ujianListCache.find(x => String(x.id) === String(id));
+  if (!u) return showBigPopup('danger', 'Error', 'Ujian tidak ditemukan.');
+  ujianEditId = id;
+  const kelasArr = Array.isArray(u.kelas) ? u.kelas : [];
+  const mapelOpts = (mapelUnikCache || []).map(m => `<option value="${m}" ${m===u.mapel?'selected':''}>${m}</option>`).join('');
+  const kelasOpts = (kelasUnikCache || []).map(k => `<label><input type="checkbox" data-ukelas value="${k}" ${kelasArr.includes(k)?'checked':''}> ${k}</label>`).join('');
+  const toLocal = (iso) => {
+    if (!iso) return '';
+    try { const d = new Date(iso); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; } catch(e){ return ''; }
+  };
+  const html = `
+    <div class="form-group"><label>Judul:</label><input type="text" id="fmUjJudul" value="${u.judul||''}"></div>
+    <div class="form-group"><label>Mapel:</label>
+      <select id="fmUjMapel"><option value="">-- Pilih --</option>${mapelOpts}</select>
+      <input type="text" id="fmUjMapelManual" value="" placeholder="Atau ketik mapel baru" style="margin-top:6px;">
+    </div>
+    <div class="form-group"><label>Guru:</label><input type="text" id="fmUjGuru" value="${u.guru||''}"></div>
+    <div class="form-group"><label>Kelas:</label><div class="checkbox-grid" id="fmUjKelas">${kelasOpts}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="${u.durasi_menit||60}"></div>
+      <div class="form-group" style="flex:1;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="${u.jenis_nilai||'UH'}"></div>
+      <div class="form-group" style="flex:1;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="${u.max_attempt||1}"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;"><label>Waktu Mulai:</label><input type="datetime-local" id="fmUjMulai" value="${toLocal(u.waktu_mulai)}"></div>
+      <div class="form-group" style="flex:1;"><label>Waktu Selesai:</label><input type="datetime-local" id="fmUjSelesai" value="${toLocal(u.waktu_selesai)}"></div>
+    </div>
+    <div class="form-group"><label>Status:</label>
+      <select id="fmUjStatus">
+        ${['draft','aktif','selesai'].map(s=>`<option value="${s}" ${u.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" style="display:flex;gap:16px;">
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakSoal" ${u.acak_soal?'checked':''}> Acak soal</label>
+      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakOpsi" ${u.acak_opsi?'checked':''}> Acak opsi</label>
+    </div>
+    <div class="form-group"><label>Petunjuk:</label><textarea id="fmUjPetunjuk" rows="2">${u.petunjuk||''}</textarea></div>
+  `;
+  openFormModal('✏️ Edit Ujian', html, submitFormUjian);
+}
+
+function submitFormUjian() {
+  const mapel = ($('fmUjMapelManual')?.value || '').trim() || ($('fmUjMapel')?.value || '').trim();
+  const kelas = Array.from(document.querySelectorAll('#fmUjKelas input[data-ukelas]:checked')).map(c => c.value);
+  const toIso = (v) => v ? new Date(v).toISOString() : null;
+  const payload = {
+    action: 'ujian_save',
+    id: ujianEditId,
+    judul: $('fmUjJudul').value.trim(),
+    mapel,
+    guru: $('fmUjGuru').value.trim(),
+    guru_id: (userData && (userData.nip || userData.id)) || null,
+    kelas,
+    durasi_menit: $('fmUjDurasi').value,
+    jenis_nilai: $('fmUjJenisNilai').value.trim() || 'UH',
+    max_attempt: $('fmUjAttempt').value,
+    waktu_mulai: toIso($('fmUjMulai').value),
+    waktu_selesai: toIso($('fmUjSelesai').value),
+    status: $('fmUjStatus').value,
+    acak_soal: $('fmUjAcakSoal').checked,
+    acak_opsi: $('fmUjAcakOpsi').checked,
+    petunjuk: $('fmUjPetunjuk').value.trim(),
+  };
+  if (!payload.judul || !payload.mapel || !payload.guru) return showBigPopup('warning', 'Peringatan', 'Judul, Mapel, dan Guru wajib diisi.');
+  sendRequest(payload, res => {
+    if (res.status === 'success') {
+      closeFormModal();
+      showBigPopup('success', 'Berhasil', res.message);
+      loadUjianList();
+    } else showBigPopup('danger', 'Gagal', res.message);
+  });
+}
+
+function hapusUjian(id, judul) {
+  openFormModal('⚠️ Hapus Ujian', `<p style="text-align:center;">Hapus ujian <b>${judul}</b> beserta semua soal & hasil?</p>`, () => {
+    sendRequest({ action: 'ujian_delete', id }, res => {
+      closeFormModal();
+      showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message);
+      loadUjianList();
+    });
+  });
+  const btn = $('formModalSaveBtn');
+  if (btn) { btn.innerText = '🗑️ Hapus'; btn.style.background = 'var(--danger)'; }
+}
+
+function bukaBankSoal(ujianId) {
+  ujianSoalUjianId = ujianId;
+  const u = ujianListCache.find(x => String(x.id) === String(ujianId));
+  setText('ujianSoalJudul', u ? u.judul : 'Ujian');
+  setText('ujianSoalMapel', u ? `(${u.mapel})` : '');
+  switchMenu('ujian-soal', null, true);
+  loadUjianSoalList();
+}
+
+function loadUjianSoalList() {
+  if (!ujianSoalUjianId) return;
+  sendRequest({ action: 'ujian_soal_list', ujian_id: ujianSoalUjianId }, res => {
+    const box = $('ujianSoalList');
+    if (res.status !== 'success') { box.innerHTML = `<p style="color:red;">${res.message}</p>`; return; }
+    const list = res.data || [];
+    if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">Belum ada soal. Klik "Tambah Soal".</p>'; return; }
+    const jenisLabel = { pg: 'Pilihan Ganda', checkbox: 'Checkbox', esai: 'Esai', benar_salah: 'Benar/Salah' };
+    box.innerHTML = list.map((s, i) => {
+      const opsiHtml = (s.opsi || []).map(o =>
+        `<div style="font-size:11px;padding:2px 0;">${o.is_benar ? '✅' : '○'} ${o.teks}</div>`
+      ).join('');
+      return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="font-weight:700;color:var(--primary);">#${i+1} · ${jenisLabel[s.jenis]||s.jenis} · ${s.poin} poin</div>
+          <span class="aksi-btns">
+            <button class="btn-danger" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
+          </span>
+        </div>
+        <div style="margin:8px 0;font-size:13px;">${s.pertanyaan}</div>
+        ${opsiHtml}
+      </div>`;
+    }).join('');
+  });
+}
+
+function openFormSoalBaru() {
+  if (!ujianSoalUjianId) return;
+  const html = `
+    <div class="form-group"><label>Jenis Soal:</label>
+      <select id="fmSoalJenis" onchange="toggleSoalOpsiUI()">
+        <option value="pg">Pilihan Ganda (1 jawaban)</option>
+        <option value="checkbox">Checkbox (banyak jawaban)</option>
+        <option value="benar_salah">Benar / Salah</option>
+        <option value="esai">Esai</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Pertanyaan:</label><textarea id="fmSoalTanya" rows="3" placeholder="Tulis pertanyaan..."></textarea></div>
+    <div class="form-group"><label>Poin:</label><input type="number" id="fmSoalPoin" value="1" min="0.5" step="0.5" style="width:100px;"></div>
+    <div id="fmSoalOpsiArea">
+      <label>Opsi (centang = kunci jawaban):</label>
+      <div id="fmSoalOpsiList"></div>
+      <button type="button" class="btn-add btn-sm" style="margin-top:6px;" onclick="tambahBarisOpsi()">+ Opsi</button>
+    </div>
+    <div id="fmSoalBSArea" style="display:none;" class="form-group">
+      <label>Kunci Benar/Salah:</label>
+      <select id="fmSoalKunciBS"><option value="benar">Benar</option><option value="salah">Salah</option></select>
+    </div>
+  `;
+  openFormModal('➕ Tambah Soal', html, submitFormSoal);
+  setTimeout(() => { tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); toggleSoalOpsiUI(); }, 50);
+}
+
+function toggleSoalOpsiUI() {
+  const j = $('fmSoalJenis').value;
+  $('fmSoalOpsiArea').style.display = (j === 'pg' || j === 'checkbox') ? 'block' : 'none';
+  $('fmSoalBSArea').style.display = j === 'benar_salah' ? 'block' : 'none';
+}
+
+function tambahBarisOpsi() {
+  const list = $('fmSoalOpsiList');
+  if (!list) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:4px;';
+  div.innerHTML = `<input type="checkbox" class="fm-opsi-benar" title="Kunci"> <input type="text" class="fm-opsi-teks" placeholder="Teks opsi" style="flex:1;"> <button type="button" class="btn-danger" style="width:24px;height:24px;" onclick="this.parentElement.remove()">×</button>`;
+  list.appendChild(div);
+}
+
+function submitFormSoal() {
+  const jenis = $('fmSoalJenis').value;
+  const pertanyaan = $('fmSoalTanya').value.trim();
+  const poin = $('fmSoalPoin').value;
+  if (!pertanyaan) return showBigPopup('warning', 'Peringatan', 'Pertanyaan wajib diisi.');
+  const opsi = [];
+  if (jenis === 'pg' || jenis === 'checkbox') {
+    document.querySelectorAll('#fmSoalOpsiList > div').forEach(row => {
+      const teks = row.querySelector('.fm-opsi-teks')?.value?.trim();
+      const is_benar = row.querySelector('.fm-opsi-benar')?.checked;
+      if (teks) opsi.push({ teks, is_benar });
+    });
+    if (!opsi.length) return showBigPopup('warning', 'Peringatan', 'Minimal 1 opsi.');
+    if (!opsi.some(o => o.is_benar)) return showBigPopup('warning', 'Peringatan', 'Centang minimal 1 kunci jawaban.');
+  }
+  sendRequest({
+    action: 'ujian_soal_save',
+    ujian_id: ujianSoalUjianId,
+    jenis, pertanyaan, poin, opsi,
+    kunci_bs: $('fmSoalKunciBS')?.value || 'benar',
+  }, res => {
+    if (res.status === 'success') {
+      closeFormModal();
+      showBigPopup('success', 'Berhasil', res.message);
+      loadUjianSoalList();
+    } else showBigPopup('danger', 'Gagal', res.message);
+  });
+}
+
+function hapusSoalUjian(id) {
+  if (!confirm('Hapus soal ini?')) return;
+  sendRequest({ action: 'ujian_soal_delete', id }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message);
+    loadUjianSoalList();
+  });
+}
+
+function bukaHasilUjian(ujianId) {
+  const u = ujianListCache.find(x => String(x.id) === String(ujianId));
+  setText('ujianHasilJudul', u ? u.judul : '');
+  switchMenu('ujian-hasil', null, true);
+  sendRequest({ action: 'ujian_hasil_list', ujian_id: ujianId }, res => {
+    const tbody = $('tableUjianHasilBody');
+    if (res.status !== 'success') { tbody.innerHTML = `<tr><td colspan="8">${res.message}</td></tr>`; return; }
+    const rows = res.data || [];
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>'; return; }
+    tbody.innerHTML = rows.map((r, i) => `<tr>
+      <td>${i+1}</td><td>${r.nisn}</td><td>${r.nama}</td><td>${r.kelas||'-'}</td>
+      <td><b>${r.skor}/${r.skor_max}</b></td><td>${r.status}</td>
+      <td style="font-size:10px;">${(r.selesai_at||'').replace('T',' ').substring(0,19)}</td>
+      <td><button class="btn-edit" onclick="lihatDetailHasil('${r.id}')">👁️</button></td>
+    </tr>`).join('');
+  });
+}
+
+function lihatDetailHasil(pengerjaanId) {
+  sendRequest({ action: 'ujian_hasil_detail', pengerjaan_id: pengerjaanId }, res => {
+    if (res.status !== 'success') return showBigPopup('danger', 'Error', res.message);
+    const p = res.pengerjaan;
+    let html = `<p style="font-size:12px;"><b>${p.nama}</b> (${p.nisn}) · Skor ${p.skor}/${p.skor_max}</p>`;
+    (res.detail || []).forEach((d, i) => {
+      const j = d.jawaban;
+      const s = d.soal;
+      html += `<div style="border-top:1px solid #eee;padding:8px 0;font-size:12px;">
+        <b>#${i+1}</b> [${s.jenis}] ${s.pertanyaan}<br>`;
+      if (s.jenis === 'esai') {
+        html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;">${(j && j.jawaban_teks) || '<i>Tidak dijawab</i>'}</div>`;
+        if (j && !j.dinilai_guru) {
+          html += `<div style="display:flex;gap:6px;align-items:center;">Nilai esai: <input type="number" id="esaiPoin_${j.id}" value="0" min="0" max="${s.poin}" step="0.5" style="width:70px;"> / ${s.poin}
+            <button class="btn-sm btn-primary" onclick="simpanNilaiEsai('${j.id}',${s.poin})">Simpan</button></div>`;
+        } else if (j) {
+          html += `<span style="color:green;">Poin: ${j.poin_diperoleh}</span>`;
+        }
+      } else {
+        const pilih = (j && j.jawaban_opsi) || [];
+        (d.opsi || []).forEach(o => {
+          const selected = pilih.map(String).includes(String(o.id));
+          const mark = o.is_benar ? '✅' : (selected ? '❌' : '○');
+          html += `<div>${mark} ${o.teks}${selected && !o.is_benar ? ' (dipilih)' : ''}</div>`;
+        });
+        html += `<div style="margin-top:4px;">Poin: <b>${j ? j.poin_diperoleh : 0}</b> / ${s.poin}</div>`;
+      }
+      html += `</div>`;
+    });
+    openFormModal('Detail Jawaban', html, () => closeFormModal());
+    $('formModalSaveBtn').innerText = 'Tutup';
+  });
+}
+
+function simpanNilaiEsai(jawabanId, maxPoin) {
+  const poin = parseFloat($(`esaiPoin_${jawabanId}`).value);
+  if (isNaN(poin) || poin < 0 || poin > maxPoin) return showBigPopup('warning', 'Peringatan', `Poin 0–${maxPoin}`);
+  sendRequest({ action: 'ujian_nilai_esai', jawaban_id: jawabanId, poin_diperoleh: poin }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message);
+  });
+}
+
+// ---- Siswa kerjakan ----
+function loadUjianTersediaSiswa() {
+  const hint = $('ujianSiswaLoginHint');
+  const list = $('ujianSiswaList');
+  $('ujianKerjaArea').style.display = 'none';
+  if (!siswaUserData || !siswaUserData.nisn) {
+    if (hint) hint.style.display = 'block';
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (hint) hint.style.display = 'none';
+  sendRequest({ action: 'ujian_tersedia_siswa', nisn: siswaUserData.nisn, kelas: siswaUserData.kelas || '' }, res => {
+    if (res.status !== 'success') { list.innerHTML = `<p style="color:red;">${res.message}</p>`; return; }
+    const data = res.data || [];
+    if (!data.length) { list.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">Tidak ada ujian aktif saat ini.</p>'; return; }
+    list.innerHTML = data.map(u => {
+      let btn = '';
+      if (u.ongoing_id) btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Lanjutkan</button>`;
+      else if (u.bisa_mulai) btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Mulai</button>`;
+      else btn = `<span style="font-size:11px;color:#666;">Sudah dikerjakan (${u.attempt_selesai}/${u.max_attempt})</span>`;
+      const skor = u.last_skor ? ` · Skor terakhir: ${u.last_skor.skor}/${u.last_skor.skor_max}` : '';
+      return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
+        <div style="font-weight:800;color:var(--primary);">${u.judul}</div>
+        <div style="font-size:12px;color:#666;margin:4px 0;">${u.mapel} · ${u.durasi_menit} menit · ${u.guru||''}${skor}</div>
+        ${btn}
+      </div>`;
+    }).join('');
+  });
+}
+
+function mulaiUjianSiswa(ujianId) {
+  if (!siswaUserData) return;
+  showBigPopup('info', 'Memuat', '⏳ Menyiapkan ujian...', 0);
+  sendRequest({
+    action: 'ujian_mulai', ujian_id: ujianId,
+    nisn: siswaUserData.nisn, nama: siswaUserData.nama, kelas: siswaUserData.kelas,
+  }, res => {
+    closeBigPopup();
+    if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message);
+    ujianKerjaState = res;
+    $('ujianSiswaList').innerHTML = '';
+    $('ujianKerjaArea').style.display = 'block';
+    setText('ujiKerjaJudul', res.ujian.judul);
+    setText('ujiKerjaMapel', res.ujian.mapel + (res.ujian.petunjuk ? ' · ' + res.ujian.petunjuk : ''));
+    renderSoalUjianKerja(res.soal, res.jawaban_tersimpan || {});
+    startUjianTimer(res.batas_at);
+  });
+}
+
+function renderSoalUjianKerja(soalList, jawabanMap) {
+  const box = $('ujiKerjaSoal');
+  box.innerHTML = (soalList || []).map((s, i) => {
+    const prev = jawabanMap[s.id] || jawabanMap[String(s.id)] || {};
+    let body = '';
+    if (s.jenis === 'esai') {
+      body = `<textarea class="uji-jawab-teks" data-soal="${s.id}" rows="4" placeholder="Tulis jawaban..." style="width:100%;">${prev.teks || ''}</textarea>`;
+    } else if (s.jenis === 'checkbox') {
+      body = (s.opsi || []).map(o => {
+        const checked = (prev.opsi || []).map(String).includes(String(o.id)) ? 'checked' : '';
+        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">
+          <input type="checkbox" class="uji-jawab-opsi" data-soal="${s.id}" value="${o.id}" ${checked}> ${o.teks}
+        </label>`;
+      }).join('');
+    } else {
+      // pg / benar_salah
+      body = (s.opsi || []).map(o => {
+        const checked = (prev.opsi || []).map(String).includes(String(o.id)) ? 'checked' : '';
+        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">
+          <input type="radio" name="soal_${s.id}" class="uji-jawab-opsi" data-soal="${s.id}" value="${o.id}" ${checked}> ${o.teks}
+        </label>`;
+      }).join('');
+    }
+    return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
+      <div style="margin-bottom:10px;font-size:14px;line-height:1.45;">${s.pertanyaan}</div>
+      ${body}
+    </div>`;
+  }).join('');
+}
+
+function collectJawabanUjian() {
+  const map = {};
+  document.querySelectorAll('.uji-jawab-teks').forEach(el => {
+    const sid = el.getAttribute('data-soal');
+    map[sid] = { soal_id: sid, teks: el.value, opsi_ids: [] };
+  });
+  document.querySelectorAll('.uji-jawab-opsi').forEach(el => {
+    const sid = el.getAttribute('data-soal');
+    if (!map[sid]) map[sid] = { soal_id: sid, teks: '', opsi_ids: [] };
+    if (el.checked) map[sid].opsi_ids.push(el.value);
+  });
+  return Object.values(map);
+}
+
+function startUjianTimer(batasAt) {
+  if (ujianTimerInterval) clearInterval(ujianTimerInterval);
+  const tick = () => {
+    const sisa = new Date(batasAt).getTime() - Date.now();
+    if (sisa <= 0) {
+      setText('ujiKerjaTimer', '00:00');
+      clearInterval(ujianTimerInterval);
+      showBigPopup('warning', 'Waktu Habis', 'Waktu ujian habis. Jawaban akan diserahkan otomatis.', 2000);
+      setTimeout(() => submitUjianSiswa(true), 1500);
+      return;
+    }
+    const m = Math.floor(sisa / 60000);
+    const s = Math.floor((sisa % 60000) / 1000);
+    setText('ujiKerjaTimer', `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+  };
+  tick();
+  ujianTimerInterval = setInterval(tick, 1000);
+}
+
+function submitUjianSiswa(isTimeout) {
+  if (!ujianKerjaState) return;
+  if (!isTimeout && !confirm('Serahkan jawaban sekarang?')) return;
+  if (ujianTimerInterval) clearInterval(ujianTimerInterval);
+  const jawaban = collectJawabanUjian();
+  showBigPopup('info', 'Mengirim', '⏳ Menyerahkan jawaban...', 0);
+  sendRequest({
+    action: 'ujian_submit',
+    pengerjaan_id: ujianKerjaState.pengerjaan_id,
+    jawaban,
+    timeout: !!isTimeout,
+  }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hasil', res.message || 'Selesai');
+    ujianKerjaState = null;
+    $('ujianKerjaArea').style.display = 'none';
+    loadUjianTersediaSiswa();
+  });
+}
+
 
 </script>
 </body>
