@@ -171,23 +171,110 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .form-group { margin-bottom: 10px; }
 label { display: block; font-weight: 600; margin-bottom: 4px; color: var(--text); font-size: 12px; }
 input, select, button, textarea { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; font-family: inherit; }
-.btn-primary { background: var(--primary); color: #fff; border: none; font-weight: bold; cursor: pointer; margin-top: 4px; }
+/* ===== BUTTONS (compact & elegant) ===== */
+.btn-primary {
+  background: var(--primary); color: #fff; border: none;
+  font-weight: 600; cursor: pointer; margin-top: 4px;
+  padding: 8px 14px; border-radius: 6px; font-size: 12px;
+  transition: background 0.15s, transform 0.1s;
+}
 .btn-primary:hover { background: var(--primary-hover); }
-.btn-excel { background: #1d6f42; color: #fff; border: none; font-weight: bold; cursor: pointer; }
+.btn-primary:active { transform: scale(0.98); }
+
+.btn-excel, .btn-pdf {
+  color: #fff; border: none; font-weight: 600; cursor: pointer;
+  padding: 7px 12px; border-radius: 6px; font-size: 11px;
+  width: auto; flex: 1; min-width: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-excel { background: #1d6f42; }
 .btn-excel:hover { background: #155a34; }
-.btn-pdf { background: #d93025; color: #fff; border: none; font-weight: bold; cursor: pointer; }
+.btn-pdf { background: #d93025; }
 .btn-pdf:hover { background: var(--danger-hover); }
-.btn-toggle { background: var(--success); color: #fff; border: none; font-weight: bold; cursor: pointer; }
+.btn-excel:active, .btn-pdf:active { transform: scale(0.98); }
+
+.btn-toggle {
+  background: var(--success); color: #fff; border: none;
+  font-weight: 600; cursor: pointer; padding: 7px 12px;
+  border-radius: 6px; font-size: 12px;
+}
 .btn-toggle.off { background: var(--danger); }
 .btn-toggle:disabled { background: #999 !important; cursor: not-allowed; opacity: 0.7; }
-.btn-danger { background: var(--danger); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-.btn-edit { background: var(--warning); color: #333; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 4px; }
-.btn-success { background: var(--success); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+
+/* Icon action buttons in tables */
+.btn-danger, .btn-edit {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; cursor: pointer; border-radius: 5px;
+  width: 28px; height: 28px; padding: 0;
+  font-size: 12px; line-height: 1;
+  vertical-align: middle; flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.btn-edit {
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #f59e0b; margin-right: 4px;
+}
+.btn-edit:hover { background: #fbbf24; color: #78350f; box-shadow: 0 1px 4px rgba(245,158,11,0.35); }
+.btn-danger {
+  background: #fee2e2; color: #b91c1c;
+  border: 1px solid #ef4444;
+}
+.btn-danger:hover { background: #ef4444; color: #fff; box-shadow: 0 1px 4px rgba(239,68,68,0.35); }
+.btn-edit:active, .btn-danger:active { transform: scale(0.92); }
+
+.btn-success {
+  background: var(--success); color: #fff; border: none;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}
 .btn-success:hover { background: var(--success-hover); }
-.btn-sm { padding: 4px 10px; font-size: 11px; width: auto; }
-.btn-add { background: var(--success); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+
+.btn-sm {
+  padding: 5px 10px !important; font-size: 11px !important;
+  width: auto !important; border-radius: 5px;
+}
+
+.btn-add {
+  background: var(--success); color: #fff; border: none;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}
 .btn-add:hover { background: var(--success-hover); }
-.btn-warning { background: var(--warning); color: #333; border: none; font-weight: bold; cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 12px; }
+
+.btn-warning {
+  background: var(--warning); color: #333; border: none;
+  font-weight: 600; cursor: pointer; padding: 6px 12px;
+  border-radius: 6px; font-size: 12px;
+}
+
+/* Export row: compact side-by-side */
+.export-section {
+  display: flex; gap: 8px; margin: 8px 0 10px;
+  flex-wrap: nowrap; align-items: center;
+}
+.export-section .btn-excel,
+.export-section .btn-pdf {
+  flex: 1; padding: 7px 10px; font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Table action cell */
+td.no-print, th.no-print { white-space: nowrap; }
+.aksi-btns {
+  display: inline-flex; gap: 4px; align-items: center; justify-content: center;
+}
+
+/* Mobile refinements */
+@media (max-width: 600px) {
+  .btn-primary { padding: 7px 12px; font-size: 12px; }
+  .btn-excel, .btn-pdf { padding: 6px 8px; font-size: 10px; }
+  .btn-edit, .btn-danger { width: 26px; height: 26px; font-size: 11px; }
+  .btn-sm { padding: 4px 8px !important; font-size: 10px !important; }
+  .export-section { gap: 6px; }
+  table { font-size: 10px; }
+  th, td { padding: 5px 6px; }
+  .content-container { padding: 10px; }
+}
 
 /* TABLE */
 #reader { width: 100%; max-width: 400px; border-radius: 8px; overflow: hidden; margin-top: 10px; background: #111; }
@@ -203,7 +290,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .input-nilai-sm { width: 70px; text-align: center; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
 .jadwal-header { background: #e8f0fe; padding: 12px 15px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 15px; }
 .jadwal-header h4 { margin: 0; color: var(--primary); font-size: 14px; }
-.export-section { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
+/* export-section defined above */
 
 /* FINGERPRINT */
 .fingerprint-section { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--primary-light); margin-top: 15px; text-align: center; }
@@ -2491,9 +2578,11 @@ function loadDaftarNilaiData() {
           <td>${item.kelas}</td>
           ${nilaiCells}
           <td style="text-align:center; font-weight:800; color:var(--primary); background:#fffbeb;">${item.rataRata || '0.00'}</td>
-          <td style="text-align:center; white-space:nowrap;" class="no-print">
-            <button class="btn-edit" onclick="editDaftarNilaiRow(${idx})" title="Edit nilai">✏️</button>
-            <button class="btn-danger" onclick="hapusDaftarNilaiRow(${idx})" title="Hapus semua nilai baris ini">🗑️</button>
+          <td style="text-align:center;" class="no-print">
+            <span class="aksi-btns">
+              <button class="btn-edit" onclick="editDaftarNilaiRow(${idx})" title="Edit nilai">✏️</button>
+              <button class="btn-danger" onclick="hapusDaftarNilaiRow(${idx})" title="Hapus semua nilai baris ini">🗑️</button>
+            </span>
           </td>
         </tr>`;
       }).join('');
@@ -3067,8 +3156,10 @@ function loadDataSiswa() {
         <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${s.alamat || ''}">${s.alamat || '-'}</td>
         <td>${s.status || 'Aktif'}</td>
         <td style="text-align:center; white-space:nowrap;">
-          <button class="btn-edit" onclick="editSiswa('${s.id}')">✏️ Edit</button>
-          <button class="btn-danger" onclick="hapusSiswa('${s.id}','${s.nama.replace(/'/g, "\\'")}')">🗑️</button>
+          <span class="aksi-btns">
+            <button class="btn-edit" onclick="editSiswa('${s.id}')" title="Edit">✏️</button>
+            <button class="btn-danger" onclick="hapusSiswa('${s.id}','${s.nama.replace(/'/g, "\\'")}')" title="Hapus">🗑️</button>
+          </span>
         </td>
       </tr>`;
     }).join('');
@@ -3364,8 +3455,10 @@ function loadDataGuru() {
         <td>${kelasTags}</td>
         <td style="text-align:center;">${pinStatus}</td>
         <td style="text-align:center; white-space:nowrap;">
-          <button class="btn-edit" onclick="editGuru('${g.id}')">✏️ Edit</button>
-          <button class="btn-danger" onclick="hapusGuru('${g.id}','${g.nama.replace(/'/g, "\\'")}')">🗑️</button>
+          <span class="aksi-btns">
+            <button class="btn-edit" onclick="editGuru('${g.id}')" title="Edit">✏️</button>
+            <button class="btn-danger" onclick="hapusGuru('${g.id}','${g.nama.replace(/'/g, "\\'")}')" title="Hapus">🗑️</button>
+          </span>
         </td>
       </tr>`;
     }).join('');
