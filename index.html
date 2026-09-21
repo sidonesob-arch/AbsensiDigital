@@ -2120,7 +2120,7 @@ function renderSyaratResult(d) {
         <div class="syarat-periode">📅 ${d.periodeMulai} s/d ${d.periodeAkhir}</div>
       </div>
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px;">
-        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Absensi Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
+        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Sekolah Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
         <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>🕐 Akumulasi Sesi Efektif</span><b>${d.totalSesiEfektif} sesi</b></div>
       </div>
       <ul class="syarat-list">
@@ -2520,10 +2520,17 @@ function loadInputNilaiData() {
   });
 }
 function simpanDataNilai() {
-  const guru = $('guruNamaDisplay').innerText;
+  let guru = ($('guruNamaDisplay').innerText || '').trim();
+  // Fallback: ambil dari session guru jika display kosong/admin
+  if ((!guru || guru === '-' || /^(admin|administrator|super admin)$/i.test(guru)) && userRole === 'guru' && userData) {
+    guru = (userData.nama || '').trim();
+    if (guru) setText('guruNamaDisplay', guru);
+  }
   const mapel = $('filterInputNilaiMapel').value;
-  const jenisNilai = $('inputNamaJenisNilai').value.trim() || 'NH1';
-  if (!guru || guru === '-') return showBigPopup("warning", "Peringatan", "Guru tidak teridentifikasi!");
+  const jenisNilai = ($('inputNamaJenisNilai').value || '').trim() || 'NH1';
+  if (!guru || guru === '-' || /^(admin|administrator|super admin)$/i.test(guru)) {
+    return showBigPopup("warning", "Peringatan", "Guru tidak teridentifikasi! Login sebagai Guru agar nama guru terisi otomatis.");
+  }
   if (!mapel) return showBigPopup("warning", "Peringatan", "Pilih Mapel!");
   if (!currentInputNilaiList.length) return showBigPopup("warning", "Peringatan", "Tidak ada daftar siswa!");
   let hasValue = false;
@@ -2533,9 +2540,21 @@ function simpanDataNilai() {
     return { nisn: item.nisn, nama: item.nama, kelas: item.kelas, nilai: val || '' };
   });
   if (!hasValue) return showBigPopup("warning", "Peringatan", "Tidak ada nilai yang diisi!");
+
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan nilai ke database...', 0);
   sendRequest({ action: 'save_nilai', guru, mapel, jenisNilai, listNilai: payloadList }, res => {
-    showBigPopup(res.status === 'success' ? 'success' : 'danger', "Info", res.message);
-    if (res.status === 'success') currentInputNilaiList.forEach((_, idx) => $(`nilai_${idx}`).value = '');
+    const ok = res.status === 'success' || res.status === 'warning';
+    let msg = res.message || 'Selesai';
+    if (res.detail && res.detail.length) {
+      msg += '<br><small style="color:#666;">' + res.detail.slice(0, 5).join('<br>') + '</small>';
+    }
+    if (typeof res.verified === 'number') {
+      msg += `<br><small>Terverifikasi di DB: ${res.verified} baris</small>`;
+    }
+    showBigPopup(ok ? (res.failed > 0 ? 'warning' : 'success') : 'danger', ok ? 'Hasil Simpan' : 'Gagal Simpan', msg);
+    if (res.status === 'success') {
+      currentInputNilaiList.forEach((_, idx) => { const el = $(`nilai_${idx}`); if (el) el.value = ''; });
+    }
   });
 }
 
