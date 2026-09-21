@@ -1279,29 +1279,45 @@ function restoreSession() {
     return;
   }
   try {
-    const { userId, role, sessionToken } = JSON.parse(saved);
-    if (!userId || !role || !sessionToken) {
+    const sess = JSON.parse(saved);
+    if (!sess || !sess.role) {
       sessionStorage.removeItem('userSession');
       restoreSiswaSession();
       return;
     }
-    sendRequest({ action: 'check_session', userId, role, sessionToken }, res => {
-      if (res.status === 'success') {
-        userRole = res.role;
-        userData = res.userData;
-        applyRoleAccessUI();
-        updateTopbarUserInfo();
-        if (userRole === 'guru' && userData) {
-          setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapelForGuru(); }, 500);
-        }
-        closeSidebar();
-      } else {
-        sessionStorage.removeItem('userSession');
+    // Restore langsung dari sessionStorage (login berbasis PIN, tanpa tabel sessions)
+    // agar refresh halaman tidak logout / tidak dilempar ke dashboard.
+    userRole = sess.role;
+    if (sess.role === 'guru') {
+      userData = sess.userData || {
+        nip: sess.userId,
+        id: sess.userId,
+        nama: sess.nama || 'Guru',
+        mapel: sess.mapel || [],
+        kelas: sess.kelas || []
+      };
+      if (userData && !userData.nip && (userData.id || sess.userId)) {
+        userData.nip = userData.id || sess.userId;
       }
-      sessionRestored = true;
-      restoreActiveMenu();
-    });
+    } else {
+      // admin / super_admin
+      userData = sess.userData || { id: sess.userId || 'admin', nama: sess.nama || (sess.role === 'super_admin' ? 'Super Admin' : 'Admin') };
+    }
+    applyRoleAccessUI();
+    updateTopbarUserInfo();
+    sessionRestored = true;
+    if (userRole === 'guru' && userData) {
+      setTimeout(() => {
+        checkFingerprintStatus();
+        if (typeof loadFilterInputNilaiWithGuru === 'function') loadFilterInputNilaiWithGuru();
+        if (typeof loadJadwalMapelForGuru === 'function') loadJadwalMapelForGuru();
+        else if (typeof loadJadwalMapel === 'function') loadJadwalMapel();
+      }, 500);
+    }
+    restoreActiveMenu();
+    closeSidebar();
   } catch (e) {
+    console.error('restoreSession error', e);
     sessionStorage.removeItem('userSession');
     restoreSiswaSession();
   }
@@ -1400,12 +1416,19 @@ function updateSiswaFingerprintUI() {
   const badge = $('siswaRegBadge');
   const statusText = $('siswaRegStatusText');
   const statusDiv = $('siswaRegStatus');
+  if (!btnAbsen || !btnRegister) return;
   if (siswaFingerprintRegistered && currentSiswaNISN) {
-    btnAbsen.disabled = false;
     btnRegister.classList.add('hidden');
     badge.className = 'fingerprint-badge active';
-    badge.innerText = 'Terdaftar';
-    statusText.innerHTML = `✅ Siswa <b>${currentSiswaNISN}</b> sudah terdaftar sidik jari.`;
+    if (siswaFingerprintAllowed) {
+      btnAbsen.disabled = false;
+      badge.innerText = 'Terdaftar';
+      statusText.innerHTML = `✅ Siswa <b>${currentSiswaNISN}</b> sudah terdaftar sidik jari.`;
+    } else {
+      btnAbsen.disabled = true;
+      badge.innerText = 'Izin Dicabut';
+      statusText.innerHTML = `🚫 Siswa <b>${currentSiswaNISN}</b> tidak diizinkan absensi sidik jari. Hubungi admin.`;
+    }
     statusDiv.style.display = 'block';
   } else if (currentSiswaNISN) {
     btnAbsen.disabled = true;
@@ -1426,12 +1449,23 @@ function logoutSiswaSession() {
   updateSyaratAccessUI();
   showBigPopup('success', 'Logout Berhasil', 'Anda telah keluar dari akun siswa.');
 }
+let siswaFingerprintAllowed = true;
+
 function checkSiswaFingerprintStatus(nisn) {
   if (!nisn) { siswaFingerprintRegistered = false; currentSiswaNISN = ''; return updateSiswaFingerprintUI(); }
+  currentSiswaNISN = nisn;
   sendRequest({ action: 'webauthn_check', userId: nisn }, res => {
     siswaFingerprintRegistered = !!(res.status === 'success' && res.registered);
-    currentSiswaNISN = nisn;
     updateSiswaFingerprintUI();
+  });
+  sendRequest({ action: 'get_allowed_users' }, res => {
+    if (res.status === 'success' && Array.isArray(res.data)) {
+      const me = res.data.find(u =>
+        String(u.id) === String(nisn) && String(u.role || '').toLowerCase() === 'siswa'
+      );
+      siswaFingerprintAllowed = !(me && (me.allowed === false || me.allowed === 'false' || me.allowed === 0));
+      updateSiswaFingerprintUI();
+    }
   });
 }
 
@@ -1553,12 +1587,37 @@ function submitLogin() {
       applyRoleAccessUI();
       updateTopbarUserInfo();
       showBigPopup("success", "Login Berhasil", res.message);
-      sessionStorage.setItem('userSession', JSON.stringify({ userId: res.nip || 'admin', role: res.role, sessionToken: 'user_' + Date.now() }));
+      const sessionPayload = {
+        userId: res.nip || res.id || 'admin',
+        role: res.role,
+        sessionToken: 'user_' + Date.now(),
+        nama: res.nama || null,
+        userData: res.role === 'guru' ? {
+          nip: res.nip || res.id,
+          id: res.nip || res.id,
+          nama: res.nama,
+          mapel: res.mapel || [],
+          kelas: res.kelas || []
+        } : {
+          id: res.nip || res.id || 'admin',
+          nama: res.nama || (res.role === 'super_admin' ? 'Super Admin' : 'Admin')
+        }
+      };
+      sessionStorage.setItem('userSession', JSON.stringify(sessionPayload));
       if (userRole === 'guru' && userData) {
-        setTimeout(() => { checkFingerprintStatus(); loadFilterInputNilaiWithGuru(); loadJadwalMapel(); }, 500);
+        setTimeout(() => {
+          checkFingerprintStatus();
+          if (typeof loadFilterInputNilaiWithGuru === 'function') loadFilterInputNilaiWithGuru();
+          if (typeof loadJadwalMapel === 'function') loadJadwalMapel();
+          if (typeof loadJadwalMapelForGuru === 'function') loadJadwalMapelForGuru();
+        }, 500);
       }
       sessionRestored = true;
-      restoreActiveMenu();
+      // Jangan paksa ke dashboard — biarkan user tetap di menu aktif (atau restore)
+      const currentMenu = getSavedActiveMenu();
+      if (currentMenu && currentMenu !== 'dashboard') {
+        restoreActiveMenu();
+      }
       closeSidebar();
     } else {
       showBigPopup("danger", "Login Gagal", res.message);
@@ -2658,6 +2717,8 @@ function downloadTemplateExcel() {
 
 // ===================== FINGERPRINT =====================
 function isWebAuthnSupported() { return window.PublicKeyCredential !== undefined; }
+let fingerprintAllowed = true; // izin sidik jari dari allowed_users.allowed
+
 function updateFingerprintUI() {
   const statusBadge = $('fingerprintStatusBadge');
   const btnAbsen = $('btnAbsenFingerprint');
@@ -2665,25 +2726,43 @@ function updateFingerprintUI() {
   if (!statusBadge || !btnAbsen || !btnRegister) return;
   if (fingerprintRegistered) {
     statusBadge.className = 'fingerprint-badge active';
-    statusBadge.innerText = 'Terdaftar';
-    btnAbsen.disabled = false;
+    statusBadge.innerText = fingerprintAllowed ? 'Terdaftar' : 'Terdaftar (Izin Dicabut)';
     btnAbsen.style.display = 'inline-block';
     btnRegister.style.display = 'none';
+    // Nonaktifkan tombol absen jika izin dicabut admin
+    btnAbsen.disabled = !fingerprintAllowed;
+    if (!fingerprintAllowed) {
+      btnAbsen.title = 'Izin sidik jari Anda dicabut oleh admin.';
+    } else {
+      btnAbsen.title = '';
+    }
   } else {
     statusBadge.className = 'fingerprint-badge inactive';
     statusBadge.innerText = 'Belum Terdaftar';
     btnAbsen.disabled = true;
     btnAbsen.style.display = 'none';
     btnRegister.style.display = 'inline-block';
+    btnAbsen.title = '';
   }
 }
 function checkFingerprintStatus() {
   if (userRole !== 'guru' || !userData) return;
   const userId = userData.nip || userData.id;
   if (!userId) return;
+  // Cek registrasi WebAuthn + izin allowed secara paralel
   sendRequest({ action: 'webauthn_check', userId }, res => {
     if (res.status === 'success') {
       fingerprintRegistered = res.registered;
+      updateFingerprintUI();
+    }
+  });
+  sendRequest({ action: 'get_allowed_users' }, res => {
+    if (res.status === 'success' && Array.isArray(res.data)) {
+      const me = res.data.find(u =>
+        String(u.id) === String(userId) && String(u.role || '').toLowerCase() === 'guru'
+      );
+      // default true jika belum ada record; false jika explicitly ditolak
+      fingerprintAllowed = !(me && (me.allowed === false || me.allowed === 'false' || me.allowed === 0));
       updateFingerprintUI();
     }
   });
@@ -2738,24 +2817,44 @@ async function doRegisterFingerprint(userId, userName, statusFn, btnId) {
 async function doAbsenFingerprint(userId, role, statusFn, btnId) {
   if (!isWebAuthnSupported()) return statusFn('error', 'Browser tidak mendukung WebAuthn.');
   if (!currentActiveSesiName) return statusFn('error', 'Tidak ada sesi absen aktif!');
-  statusFn('info', 'Mohon tempelkan jari...');
   const btn = $(btnId);
   btn.disabled = true;
-  sendRequest({ action: 'webauthn_login', userId }, async res => {
-    if (res.status !== 'success') { statusFn('error', res.message); btn.disabled = false; return; }
-    try {
-      await verifyWebAuthnCredential(res.credentialId);
-      statusFn('info', 'Terverifikasi. Mengirim absensi...');
-      sendRequest({ action: 'absen_qr', role, code: userId, sesi: currentActiveSesiName }, absenRes => {
-        showBigPopup(absenRes.status === 'success' ? 'success' : 'danger', 'Absen', absenRes.message);
-        statusFn(absenRes.status === 'success' ? 'success' : 'error', absenRes.message);
+  statusFn('info', 'Memeriksa izin sidik jari...');
+
+  // Cek izin di allowed_users (field "allowed") sebelum proses sidik jari
+  sendRequest({ action: 'get_allowed_users' }, async allowRes => {
+    if (allowRes.status === 'success' && Array.isArray(allowRes.data)) {
+      const me = allowRes.data.find(u =>
+        String(u.id) === String(userId) &&
+        String(u.role || '').toLowerCase() === String(role || '').toLowerCase()
+      );
+      // Jika record ada dan explicitly diset false → tolak
+      if (me && (me.allowed === false || me.allowed === 'false' || me.allowed === 0)) {
+        const msg = 'Maaf, Anda tidak diizinkan absensi sidik jari. Hubungi admin.';
+        statusFn('error', msg);
+        showBigPopup('danger', 'Izin Ditolak', msg);
         btn.disabled = false;
-        fetchDashboardData();
-      });
-    } catch (err) {
-      statusFn('error', 'Verifikasi gagal: ' + err.message);
-      btn.disabled = false;
+        return;
+      }
     }
+
+    statusFn('info', 'Mohon tempelkan jari...');
+    sendRequest({ action: 'webauthn_login', userId }, async res => {
+      if (res.status !== 'success') { statusFn('error', res.message); btn.disabled = false; return; }
+      try {
+        await verifyWebAuthnCredential(res.credentialId);
+        statusFn('info', 'Terverifikasi. Mengirim absensi...');
+        sendRequest({ action: 'absen_qr', role, code: userId, sesi: currentActiveSesiName }, absenRes => {
+          showBigPopup(absenRes.status === 'success' ? 'success' : 'danger', 'Absen', absenRes.message);
+          statusFn(absenRes.status === 'success' ? 'success' : 'error', absenRes.message);
+          btn.disabled = false;
+          fetchDashboardData();
+        });
+      } catch (err) {
+        statusFn('error', 'Verifikasi gagal: ' + err.message);
+        btn.disabled = false;
+      }
+    });
   });
 }
 function showFingerprintStatus(type, message) {
