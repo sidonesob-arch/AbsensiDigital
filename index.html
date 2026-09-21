@@ -1430,6 +1430,9 @@ function restoreSiswaSession() {
       if (res.status === 'success') {
         siswaUserData = res;
         currentSiswaNISN = nisn;
+        if (typeof res.fingerprintAllowed === 'boolean') {
+          siswaFingerprintAllowed = res.fingerprintAllowed;
+        }
         updateSiswaUI();
         setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
         updateTopbarUserInfo();
@@ -1477,13 +1480,20 @@ function submitLoginSiswa() {
     if (res.status === 'success') {
       siswaUserData = res;
       currentSiswaNISN = nisn;
+      // Gunakan flag dari server jika ada
+      if (typeof res.fingerprintAllowed === 'boolean') {
+        siswaFingerprintAllowed = res.fingerprintAllowed;
+      }
       closeLoginSiswaModal();
       sessionStorage.setItem('siswaSession', JSON.stringify({ nisn, sessionToken: 'siswa_' + Date.now() + '_' + nisn }));
       updateSiswaUI();
       setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
       updateTopbarUserInfo();
       updateSyaratAccessUI();
-      showBigPopup('success', 'Login Berhasil', 'Selamat datang, ' + res.nama + '!');
+      const msg = res.fingerprintAllowed === false
+        ? ('Selamat datang, ' + res.nama + '!\n\nCatatan: izin absensi sidik jari Anda sedang dinonaktifkan. Hubungi admin bila perlu.')
+        : ('Selamat datang, ' + res.nama + '!');
+      showBigPopup(res.fingerprintAllowed === false ? 'warning' : 'success', 'Login Berhasil', msg);
       closeSidebar();
     } else showBigPopup('danger', 'Login Gagal', res.message);
   });
