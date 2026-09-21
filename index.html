@@ -2458,6 +2458,9 @@ function loadFilterDaftarNilaiWithGuru() {
     });
   }
 }
+let daftarNilaiCache = [];
+let daftarNilaiHeaders = [];
+
 function loadDaftarNilaiData() {
   const mapel = $('filterDaftarNilaiMapel').value;
   const kelas = $('filterDaftarNilaiKelas').value;
@@ -2468,10 +2471,13 @@ function loadDaftarNilaiData() {
     const tbody = $('tableDaftarNilaiBody');
     if (res.status === 'success' && res.data && res.data.length > 0) {
       const headers = res.headers || [];
+      daftarNilaiHeaders = headers;
+      daftarNilaiCache = res.data;
       thead.innerHTML = `<tr>
         <th style="width:40px;">No</th><th>NISN</th><th>Nama</th><th>Kelas</th>
         ${headers.map(h => `<th style="text-align:center;">${h}</th>`).join('')}
         <th style="text-align:center; background:#fef3c7;">Rata-rata</th>
+        <th style="text-align:center; width:110px;" class="no-print">Aksi</th>
       </tr>`;
       tbody.innerHTML = res.data.map((item, idx) => {
         const nilaiCells = headers.map((_, hIdx) => {
@@ -2479,17 +2485,140 @@ function loadDaftarNilaiData() {
           return `<td style="text-align:center;">${v !== undefined && v > 0 ? v : '-'}</td>`;
         }).join('');
         return `<tr>
-          <td>${idx + 1}</td><td>${item.nisn}</td><td><b>${item.nama}</b></td><td>${item.kelas}</td>
+          <td>${idx + 1}</td>
+          <td>${item.nisn}</td>
+          <td><b>${item.nama}</b></td>
+          <td>${item.kelas}</td>
           ${nilaiCells}
           <td style="text-align:center; font-weight:800; color:var(--primary); background:#fffbeb;">${item.rataRata || '0.00'}</td>
+          <td style="text-align:center; white-space:nowrap;" class="no-print">
+            <button class="btn-edit" onclick="editDaftarNilaiRow(${idx})" title="Edit nilai">✏️</button>
+            <button class="btn-danger" onclick="hapusDaftarNilaiRow(${idx})" title="Hapus semua nilai baris ini">🗑️</button>
+          </td>
         </tr>`;
       }).join('');
     } else {
-      thead.innerHTML = `<tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Rata-rata</th></tr>`;
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px;">Belum ada data nilai yang tersinkron.</td></tr>`;
+      daftarNilaiCache = [];
+      daftarNilaiHeaders = [];
+      thead.innerHTML = `<tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Rata-rata</th><th class="no-print">Aksi</th></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:15px;">Belum ada data nilai yang tersinkron.</td></tr>`;
     }
   });
 }
+
+function editDaftarNilaiRow(idx) {
+  const item = daftarNilaiCache[idx];
+  if (!item) return showBigPopup('danger', 'Error', 'Data nilai tidak ditemukan.');
+  const headers = daftarNilaiHeaders.length ? daftarNilaiHeaders : Object.keys(item.nilaiMap || {});
+  const fields = headers.map((h, hIdx) => {
+    const val = (item.nilaiList && item.nilaiList[hIdx] !== undefined) ? item.nilaiList[hIdx] : (item.nilaiMap && item.nilaiMap[h] != null ? item.nilaiMap[h] : '');
+    const idVal = (item.idList && item.idList[hIdx] != null) ? item.idList[hIdx] : '';
+    const displayVal = (val === 0 || val === '0') ? '' : val;
+    return `
+      <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+        <label style="min-width:70px; margin:0;">${h}:</label>
+        <input type="number" min="0" max="100" step="0.01" class="fm-nilai-input"
+          data-jenis="${h}" data-id="${idVal}"
+          value="${displayVal}" placeholder="Kosongkan = hapus"
+          style="flex:1; text-align:center;">
+      </div>`;
+  }).join('');
+
+  const html = `
+    <div style="background:var(--primary-lighter); padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:12px;">
+      <div><b>NISN:</b> ${item.nisn}</div>
+      <div><b>Nama:</b> ${item.nama}</div>
+      <div><b>Kelas:</b> ${item.kelas || '-'}</div>
+      <div><b>Guru:</b> ${item.guru || '-'}</div>
+      <div><b>Mapel:</b> ${item.mapel || '-'}</div>
+    </div>
+    <p style="font-size:11px; color:#666; margin:0 0 10px;">Ubah nilai di bawah. Kosongkan kolom untuk menghapus jenis nilai tersebut.</p>
+    ${fields || '<p style="color:#666;">Tidak ada kolom nilai.</p>'}
+    <div class="form-group" style="margin-top:12px; border-top:1px dashed #ddd; padding-top:10px;">
+      <label>Tambah jenis nilai baru (opsional):</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="fmNilaiJenisBaru" placeholder="Contoh: NH3 / UTS / UAS" style="flex:1;">
+        <input type="number" id="fmNilaiValBaru" min="0" max="100" step="0.01" placeholder="Nilai" style="width:90px; text-align:center;">
+      </div>
+    </div>
+  `;
+  openFormModal(`✏️ Edit Nilai: ${item.nama}`, html, () => {
+    const inputs = document.querySelectorAll('#formModalContent .fm-nilai-input');
+    const nilaiItems = [];
+    inputs.forEach(inp => {
+      nilaiItems.push({
+        jenisNilai: inp.getAttribute('data-jenis'),
+        id: inp.getAttribute('data-id') || null,
+        nilai: inp.value.trim(),
+      });
+    });
+    const jenisBaru = ($('fmNilaiJenisBaru')?.value || '').trim().toUpperCase();
+    const valBaru = ($('fmNilaiValBaru')?.value || '').trim();
+    if (jenisBaru && valBaru !== '') {
+      nilaiItems.push({ jenisNilai: jenisBaru, id: null, nilai: valBaru });
+    }
+    if (!nilaiItems.length) return showBigPopup('warning', 'Peringatan', 'Tidak ada data nilai.');
+
+    sendRequest({
+      action: 'update_nilai',
+      nisn: item.nisn,
+      nama: item.nama,
+      kelas: item.kelas,
+      guru: item.guru,
+      mapel: item.mapel,
+      nilaiItems,
+    }, res => {
+      if (res.status === 'success') {
+        closeFormModal();
+        showBigPopup('success', 'Berhasil', res.message);
+        loadDaftarNilaiData();
+      } else {
+        showBigPopup('danger', 'Gagal', res.message || 'Gagal memperbarui nilai.');
+      }
+    });
+  });
+}
+
+function hapusDaftarNilaiRow(idx) {
+  const item = daftarNilaiCache[idx];
+  if (!item) return showBigPopup('danger', 'Error', 'Data nilai tidak ditemukan.');
+  const html = `
+    <p style="font-size:13px; text-align:center; margin: 8px 0 16px;">
+      Yakin ingin menghapus <b>semua nilai</b> siswa<br>
+      <b>${item.nama}</b> (${item.nisn})?<br><br>
+      <span style="font-size:12px; color:#666;">Guru: ${item.guru || '-'} &nbsp;|&nbsp; Mapel: ${item.mapel || '-'}</span><br>
+      <span style="color:#dc3545; font-weight:700; font-size:12px;">Tindakan ini tidak dapat dibatalkan.</span>
+    </p>
+  `;
+  openFormModal('⚠️ Hapus Nilai Siswa', html, () => {
+    sendRequest({
+      action: 'delete_nilai_row',
+      nisn: item.nisn,
+      guru: item.guru,
+      mapel: item.mapel,
+      nama: item.nama,
+      ids: item.allIds || [],
+    }, res => {
+      if (res.status === 'success') {
+        closeFormModal();
+        showBigPopup('success', 'Berhasil', res.message);
+        loadDaftarNilaiData();
+      } else {
+        showBigPopup('danger', 'Gagal', res.message || 'Gagal menghapus nilai.');
+      }
+    });
+  });
+  const saveBtn = $('formModalSaveBtn');
+  if (saveBtn) {
+    saveBtn.innerText = '🗑️ Hapus';
+    saveBtn.style.background = 'var(--danger)';
+    setTimeout(() => {
+      saveBtn.innerText = '💾 Simpan';
+      saveBtn.style.background = 'var(--primary)';
+    }, 500);
+  }
+}
+
 function exportDaftarNilaiToExcel() {
   const wb = XLSX.utils.table_to_book($('tableDaftarNilaiResult'), { sheet: "Daftar Nilai" });
   XLSX.writeFile(wb, "Daftar_Nilai_Siswa.xlsx");
@@ -2894,6 +3023,11 @@ function openFormModal(title, contentHTML, onSubmit) {
 function closeFormModal() {
   $('formModal').classList.remove('show');
   formModalCallback = null;
+  const saveBtn = $('formModalSaveBtn');
+  if (saveBtn) {
+    saveBtn.innerText = '💾 Simpan';
+    saveBtn.style.background = 'var(--primary)';
+  }
 }
 function submitFormModal() {
   if (typeof formModalCallback === 'function') formModalCallback();
