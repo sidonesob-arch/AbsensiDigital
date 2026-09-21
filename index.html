@@ -262,7 +262,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .download-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .download-summary { background: var(--primary-lighter); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 12px; font-size: 12px; color: var(--primary); }
 
-/* ====== BARU: Info kunci scanner ====== */
+/* ====== Info kunci scanner ====== */
 .scanner-lock-info {
   display: none;
   background: #f8d7da; color: #721c24;
@@ -507,7 +507,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <div id="menu-scanner" class="section">
       <h3 style="color:var(--primary); font-size:15px;">📷 Scanner QR Barcode</h3>
 
-      <!-- ====== BARU: Info status izin scan ====== -->
       <div id="scannerLockInfo" class="scanner-lock-info">
         🔒 <b>Akses Scanner Terkunci</b><br>
         Anda belum diizinkan admin untuk melakukan scan QR siswa. Hubungi admin untuk mengaktifkan izin scan QR Anda di menu <b>Pengaturan → Izin Sidik Jari</b>.
@@ -515,7 +514,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div id="scannerOkInfo" class="scanner-ok-info">
         ✅ <b>Izin Scan QR Aktif</b> — Anda dapat melakukan scan QR siswa.
       </div>
-      <!-- ====== AKHIR BARU ====== -->
 
       <div class="fingerprint-section">
         <span class="icon-large">🔐</span>
@@ -632,12 +630,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllUsers()">✅ Izinkan Semua (Sidik Jari)</button>
           <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="denyAllUsers()">❌ Tolak Semua (Sidik Jari)</button>
         </div>
-        <!-- ====== BARU: Tombol bulk untuk izin scan QR guru ====== -->
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllGuruScan(true)">✅ Izinkan Semua Guru Scan QR</button>
           <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="allowAllGuruScan(false)">❌ Tolak Semua Guru Scan QR</button>
         </div>
-        <!-- ====== AKHIR BARU ====== -->
         <div class="table-responsive">
           <table>
             <thead>
@@ -819,7 +815,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             <input type="date" id="downloadTglSelesai">
           </div>
         </div>
-        <button class="btn-primary" style="width:auto; padding:10px 28px;" onclick="loadDownloadPreview()">🔍 Tampilkan Pratinjau</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn-primary" style="width:auto; padding:10px 28px;" onclick="loadDownloadPreview()">🔍 Tampilkan Pratinjau</button>
+          <button class="btn-primary" style="width:auto; padding:10px 28px; background:#05285e;" onclick="generateTemplateDaftarHadir()">📋 Generate Template Daftar Hadir</button>
+        </div>
       </div>
       <div id="downloadSummary" class="download-summary" style="display:none;"></div>
       <div class="export-section">
@@ -846,7 +845,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
-<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.4</div>
+<div class="footer">&copy; 2026 SMP NEGERI 1 SOBANG &bull; v.2.5</div>
 
 <script>
 // ===================== KONFIGURASI SUPABASE =====================
@@ -882,7 +881,8 @@ let lastScanTime = 0;
 let sesiDataCache = [];
 let currentActiveSesiName = '';
 let sessionRestored = false;
-let guruScanAllowed = false;   // ====== BARU: status izin scan QR guru ======
+let guruScanAllowed = null;   // null = belum dicek, true = diizinkan, false = ditolak
+let scannerCheckInProgress = false;
 
 // ===================== FUNGSI PENGGANTI sendRequest =====================
 function sendRequest(payload, callback, retryCount = 0) {
@@ -1390,7 +1390,7 @@ function logoutSession() {
   userRole = 'tamu';
   userData = null;
   fingerprintRegistered = false;
-  guruScanAllowed = false;   // ====== BARU: reset izin scan ======
+  guruScanAllowed = null;
   sessionStorage.removeItem('userSession');
   if (siswaUserData) logoutSiswaSession();
   setText('guruNamaDisplay', '-');
@@ -1452,7 +1452,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'download-absensi') initDownloadAbsensi();
 }
 
-// ===================== BARU: SETUP SCANNER + VALIDASI IZIN SCAN =====================
+// ===================== SETUP SCANNER + VALIDASI IZIN SCAN =====================
 function setupScannerView() {
   const adminSwitch = $('scannerAdminSwitch');
   const lockInfo = $('scannerLockInfo');
@@ -1475,6 +1475,7 @@ function setupScannerView() {
   // Guru: cek izin allowed_scan
   if (userRole === 'guru' && userData) {
     const userId = userData.nip || userData.id;
+    guruScanAllowed = null; // reset supaya bisa dicek ulang
     btn.disabled = true;
     btn.innerText = "⏳ Memeriksa izin...";
 
@@ -1512,28 +1513,72 @@ function applyScannerAccessUI() {
     btn.title = "Anda belum diizinkan admin untuk scan QR siswa.";
     lockInfo.classList.add('show');
     okInfo.classList.remove('show');
-    // Pastikan kamera mati jika sedang menyala
     if (isCameraOn) stopCamera();
   }
 }
-// ====================================================================================
 
 function setRole(role) {
   currentRole = role;
   $('btnSiswaAdmin').style.background = role === 'siswa' ? 'var(--primary)' : '#6c757d';
   $('btnGuruAdmin').style.background = role === 'guru' ? 'var(--primary)' : '#6c757d';
 }
+
+// ===================== TOGGLE CAMERA DENGAN AUTO-RETRY =====================
 function toggleCamera() {
-  // ====== BARU: cek izin sebelum buka kamera ======
+  // 1. Kalau sedang cek izin, tunggu
+  if (scannerCheckInProgress) {
+    return showBigPopup('info', 'Sedang Memeriksa',
+      'Sedang memeriksa izin Anda... Silakan tunggu sebentar lalu klik lagi.', 2000);
+  }
+
+  // 2. Kalau izin guru belum pernah dicek (null), cek ulang dulu
+  if (userRole === 'guru' && guruScanAllowed === null) {
+    scannerCheckInProgress = true;
+    const userId = userData?.nip || userData?.id;
+    sendRequest({ action: 'get_allowed_users' }, res => {
+      scannerCheckInProgress = false;
+      if (res.status === 'success' && res.data) {
+        const me = res.data.find(u => String(u.id) === String(userId) && u.role === 'guru');
+        guruScanAllowed = !!(me && (me.allowed_scan === true || me.allowed_scan === 'true'));
+      } else {
+        guruScanAllowed = false;
+      }
+      applyScannerAccessUI();
+      if (guruScanAllowed) toggleCamera(); // retry sekali
+    });
+    return;
+  }
+
+  // 3. Cek izin scan guru
   if (!guruScanAllowed) {
     return showBigPopup('warning', 'Akses Ditolak',
-      'Anda belum diizinkan admin untuk melakukan scan QR siswa. Hubungi admin untuk mengaktifkan izin scan QR Anda.');
+      'Anda belum diizinkan admin untuk melakukan scan QR siswa. ' +
+      'Hubungi admin untuk mengaktifkan izin scan QR Anda di menu Pengaturan → Izin Sidik Jari.');
   }
-  // ===============================================
-  const sesiAktif = sesiDataCache.find(s => s.sesi === currentActiveSesiName);
-  if (!sesiAktif && !currentActiveSesiName) return showBigPopup("warning", "Sesi Tutup", "Tidak ada sesi aktif saat ini!");
+
+  // 4. Cek sesi aktif — kalau kosong, coba fetch ulang
+  if (!currentActiveSesiName) {
+    sendRequest({ action: 'get_pengaturan' }, res => {
+      if (res.status === 'success') {
+        cachedPinConfig = res.data;
+        updateRealtimeSesi(res.data);
+      }
+      if (!currentActiveSesiName) {
+        const now = new Date();
+        const jam = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        return showBigPopup('warning', 'Sesi Tidak Aktif',
+          `Tidak ada sesi absen yang aktif saat ini (sekarang <b>${jam}</b>).<br><br>` +
+          `Hubungi admin untuk memeriksa jadwal sesi di <b>Pengaturan → Sesi Absensi</b>.`);
+      }
+      isCameraOn ? stopCamera() : startCamera();
+    });
+    return;
+  }
+
   isCameraOn ? stopCamera() : startCamera();
 }
+// ============================================================================
+
 function startCamera() {
   if (html5QrcodeScanner) {
     try { html5QrcodeScanner.clear(); } catch(e) {}
@@ -1902,7 +1947,7 @@ function hapusHariLibur(rowIndex) {
   });
 }
 
-// ===================== BARU: LOAD ALLOWED USERS (2 TOGGLE) =====================
+// ===================== LOAD ALLOWED USERS (2 TOGGLE) =====================
 function loadAllowedUsers() {
   sendRequest({ action: 'get_allowed_users' }, res => {
     const tbody = $('tableAllowedUsersBody');
@@ -1963,7 +2008,6 @@ function allowAllGuruScan(allow) {
     }, 800);
   });
 }
-// ==============================================================================
 
 function syncAllowedUsers() {
   sendRequest({ action: 'sync_allowed_users' }, res => {
@@ -2303,6 +2347,166 @@ function downloadPDF() {
     html2canvas: { scale: 2 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
   }).from(wrapper).save();
+}
+
+// ===================== TEMPLATE DAFTAR HADIR =====================
+async function generateTemplateDaftarHadir() {
+  const role = $('downloadRole').value;
+  const kelas = role === 'siswa' ? $('downloadKelas').value : '';
+  const tglMulai = $('downloadTglMulai').value;
+  const tglSelesai = $('downloadTglSelesai').value;
+
+  if (!tglMulai || !tglSelesai) {
+    return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
+  }
+
+  showBigPopup('info', 'Memuat', '⏳ Menyiapkan template daftar hadir...', 0);
+
+  sendRequest({
+    action: 'get_template_absensi',
+    role, kelas, tglMulai, tglSelesai
+  }, res => {
+    closeBigPopup();
+    if (res.status !== 'success') {
+      return showBigPopup('danger', 'Gagal', res.message || 'Gagal memuat data.');
+    }
+    renderTemplateDaftarHadir(res);
+  });
+}
+
+function renderTemplateDaftarHadir(data) {
+  const role = data.role;
+  const isGuru = role === 'guru';
+  const daftarTanggal = data.daftarTanggal || [];
+  const baris = data.data || [];
+  const jumlahHari = daftarTanggal.length;
+
+  const wrapper = document.createElement('div');
+  wrapper.id = 'templateAbsensiWrapper';
+  wrapper.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.75); z-index: 9999; overflow: auto; padding: 20px;
+    display: flex; justify-content: center; align-items: flex-start;
+  `;
+
+  const inner = document.createElement('div');
+  inner.style.cssText = `
+    background: #fff; padding: 20px; border-radius: 8px;
+    max-width: 100%; overflow-x: auto;
+  `;
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex; gap:10px; margin-bottom:12px; justify-content:flex-end; flex-wrap:wrap;';
+  actions.innerHTML = `
+    <button onclick="downloadTemplatePDF()" style="background:#d93025; color:#fff; border:none; padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:bold; width:auto;">📄 Download PDF</button>
+    <button onclick="downloadTemplateExcel()" style="background:#1d6f42; color:#fff; border:none; padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:bold; width:auto;">📊 Download Excel</button>
+    <button onclick="closeTemplatePreview()" style="background:#6c757d; color:#fff; border:none; padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:bold; width:auto;">✖ Tutup</button>
+  `;
+
+  const tableId = 'tableTemplateAbsensi';
+
+  let html = `
+    <div id="templatePrintArea" style="background:#fff; font-family:'Times New Roman', serif;">
+      <div style="text-align:center; font-weight:bold; font-size:14px; line-height:1.4; margin-bottom:8px;">
+        SMP NEGERI 1 SOBANG<br>
+        ${isGuru ? 'DAFTAR HADIR GURU' : 'DAFTAR HADIR SISWA'}<br>
+        BULAN ${data.judulBulan.toUpperCase()}
+      </div>
+      ${!isGuru && data.kelas && data.kelas !== '-' ? `<div style="font-weight:bold; font-size:12px; margin-bottom:6px;">KELAS : ${data.kelas}</div>` : ''}
+      <table id="${tableId}" style="border-collapse:collapse; width:100%; font-size:10px;">
+        <thead>
+          <tr>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:24px;">No</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; min-width:180px;">${isGuru ? 'Nama/NIP/Pangkat Gol' : 'Nama Siswa'}</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">L/P</th>
+            <th colspan="${jumlahHari}" style="border:1px solid #000; padding:2px 4px; text-align:center;">TANGGAL</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">S</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">I</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">A</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:26px;">Jml</th>
+          </tr>
+          <tr>
+  `;
+
+  daftarTanggal.forEach(t => {
+    html += `<th style="border:1px solid #000; padding:2px 0; text-align:center; width:16px; font-size:9px;">${t.tglNum}</th>`;
+  });
+
+  html += `</tr></thead><tbody>`;
+
+  if (baris.length === 0) {
+    html += `<tr><td colspan="${4 + jumlahHari}" style="border:1px solid #000; padding:8px; text-align:center;">Tidak ada data.</td></tr>`;
+  } else {
+    baris.forEach((b, idx) => {
+      html += `<tr>`;
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${idx + 1}</td>`;
+      if (isGuru) {
+        html += `<td style="border:1px solid #000; padding:2px 4px; line-height:1.2;">
+          <div style="font-weight:bold; text-align:center;">${b.nama}</div>
+          <div style="text-align:center;">${b.id}</div>
+          <div style="text-align:center;">${b.pangkat_gol || '-'}</div>
+        </td>`;
+      } else {
+        html += `<td style="border:1px solid #000; padding:2px 4px;">${b.nama}</td>`;
+      }
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.jenis_kelamin || '-'}</td>`;
+
+      daftarTanggal.forEach(t => {
+        const simbol = b.perTanggal[t.tgl] || '';
+        const bg = t.isLibur ? 'background:#ff4d4d; color:#fff;' : '';
+        html += `<td style="border:1px solid #000; padding:2px 0; text-align:center; ${bg}">${simbol}</td>`;
+      });
+
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalS || ''}</td>`;
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalI || ''}</td>`;
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalA || ''}</td>`;
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center; font-weight:bold;">${b.totalJml || ''}</td>`;
+      html += `</tr>`;
+    });
+  }
+
+  html += `</tbody></table></div>`;
+
+  inner.appendChild(actions);
+  inner.insertAdjacentHTML('beforeend', html);
+  wrapper.appendChild(inner);
+  document.body.appendChild(wrapper);
+
+  window._templateData = data;
+}
+
+function closeTemplatePreview() {
+  const el = document.getElementById('templateAbsensiWrapper');
+  if (el) el.remove();
+}
+
+function downloadTemplatePDF() {
+  const el = document.getElementById('templatePrintArea');
+  if (!el) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
+
+  const role = window._templateData?.role || 'guru';
+  const judul = role === 'guru' ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
+  const bulan = (window._templateData?.judulBulan || '').replace(/\s+/g, '_');
+
+  html2pdf().set({
+    margin: [8, 8, 8, 8],
+    filename: `${judul}_${bulan}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, windowWidth: el.scrollWidth },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+  }).from(el).save();
+}
+
+function downloadTemplateExcel() {
+  const table = document.getElementById('tableTemplateAbsensi');
+  if (!table) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
+
+  const role = window._templateData?.role || 'guru';
+  const judul = role === 'guru' ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
+  const bulan = (window._templateData?.judulBulan || '').replace(/\s+/g, '_');
+
+  const wb = XLSX.utils.table_to_book(table, { sheet: "Daftar Hadir", raw: true });
+  XLSX.writeFile(wb, `${judul}_${bulan}.xlsx`);
 }
 
 // ===================== FINGERPRINT =====================
