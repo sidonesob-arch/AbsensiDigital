@@ -4219,17 +4219,52 @@ function uploadUjianMediaFile(file) {
   });
 }
 
+function compressDataUrlIfNeeded(dataUrl, maxWidth) {
+  return new Promise((resolve) => {
+    try {
+      if (!dataUrl || dataUrl.indexOf('data:image') !== 0) return resolve(dataUrl);
+      // skip if already small (< 400KB string ~ 300KB file)
+      if (dataUrl.length < 400000) return resolve(dataUrl);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const mw = maxWidth || 1200;
+          let w = img.width, h = img.height;
+          if (w > mw) { h = Math.round(h * mw / w); w = mw; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        } catch (e) { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
+}
+
 function uploadUjianMediaDataUrl(dataUrl, fileName) {
-  return new Promise((resolve, reject) => {
-    sendRequest({
-      action: 'upload_ujian_media',
-      dataBase64: dataUrl,
-      fileName: fileName || 'chart.png',
-      contentType: 'image/png',
-    }, res => {
-      if (res.status === 'success' && res.url) resolve(res.url);
-      else reject(new Error(res.message || 'Upload gagal'));
-    });
+  return new Promise(async (resolve, reject) => {
+    try {
+      let payload = dataUrl;
+      payload = await compressDataUrlIfNeeded(payload, 1200);
+      const mimeMatch = String(payload).match(/^data:([^;]+);/);
+      const contentType = (mimeMatch && mimeMatch[1]) || 'image/png';
+      let name = fileName || 'upload.png';
+      if (contentType.indexOf('jpeg') >= 0 && !/\.jpe?g$/i.test(name)) name = name.replace(/\.\w+$/, '') + '.jpg';
+      sendRequest({
+        action: 'upload_ujian_media',
+        dataBase64: payload,
+        fileName: name,
+        contentType,
+      }, res => {
+        if (res.status === 'success' && res.url) resolve(res.url);
+        else reject(new Error(res.message || 'Upload gagal'));
+      });
+    } catch (e) {
+      reject(e);
+    }
   });
 }
 
@@ -4974,9 +5009,17 @@ function previewImportSoal(ev) {
       const h = s.pertanyaan || '';
       return n + (h.match(/<img\b/gi) || []).length + (h.match(/<table\b/gi) || []).length;
     }, 0);
-    box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal` +
-      (mediaCount ? ` · <span style="color:#0d9488;">${mediaCount} media (gambar/tabel) ikut terbawa</span>` : '') +
-      `</p>` +
+    const dataInParsed = parsed.reduce((n, s) => n + ((s.pertanyaan || '').match(/data:image\//gi) || []).length, 0);
+    const stats = window._importSoalMediaStats || {};
+    let mediaInfo = '';
+    if (mediaCount) {
+      mediaInfo = ` · <span style="color:#0d9488;">${mediaCount} media di soal (siap di-upload saat Simpan)</span>`;
+    } else if (stats.imgCount > 0) {
+      mediaInfo = ` · <span style="color:#b45309;">Word punya ${stats.imgCount} gambar, tapi belum menempel ke blok soal — pastikan gambar di bawah PERTANYAAN sebelum opsi A/B/C</span>`;
+    } else if (isHtml) {
+      mediaInfo = ` · <span style="color:#64748b;">Tidak ada gambar terdeteksi di file (tabel tetap ikut jika ada)</span>`;
+    }
+    box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal` + mediaInfo + `</p>` +
       parsed.slice(0, 12).map((s, i) => {
         const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => String(o.teks || '').replace(/<[^>]+>/g,'').slice(0,40));
         const hasImg = /<img\b/i.test(s.pertanyaan || '');
@@ -5011,20 +5054,35 @@ function previewImportSoal(ev) {
     try {
       const arrayBuffer = reader.result;
       // HTML lengkap: gambar jadi data-URL, tabel tetap HTML
-      const htmlResult = await mammoth.convertToHtml(
-        { arrayBuffer },
-        {
-          convertImage: mammoth.images.imgElement(function (image) {
-            return image.read('base64').then(function (imageBuffer) {
-              return {
-                src: 'data:' + image.contentType + ';base64,' + imageBuffer
-              };
-            });
-          })
+      let htmlVal = '';
+      try {
+        const htmlResult = await mammoth.convertToHtml(
+          { arrayBuffer },
+          { convertImage: mammoth.images.dataUri }
+        );
+        htmlVal = htmlResult.value || '';
+        if (htmlResult.messages && htmlResult.messages.length) {
+          console.log('mammoth messages', htmlResult.messages);
         }
-      );
-      const htmlVal = htmlResult.value || '';
+      } catch (e1) {
+        console.warn('mammoth dataUri gagal, coba imgElement', e1);
+        const htmlResult2 = await mammoth.convertToHtml(
+          { arrayBuffer },
+          {
+            convertImage: mammoth.images.imgElement(function (image) {
+              return image.read('base64').then(function (imageBuffer) {
+                return { src: 'data:' + image.contentType + ';base64,' + imageBuffer };
+              });
+            })
+          }
+        );
+        htmlVal = htmlResult2.value || '';
+      }
+      const imgCount = (htmlVal.match(/<img\b/gi) || []).length;
+      const dataImgCount = (htmlVal.match(/data:image\//gi) || []).length;
+      console.log('Word HTML imgs=', imgCount, 'dataURI=', dataImgCount, 'len=', htmlVal.length);
       if (htmlVal.trim()) {
+        window._importSoalMediaStats = { imgCount, dataImgCount };
         done(htmlVal, true);
         return;
       }
@@ -5046,32 +5104,53 @@ function previewImportSoal(ev) {
 /** Ubah HTML Word → daftar soal; pertahankan img & table di pertanyaan */
 function parseSoalFromHtml(html) {
   if (!html) return [];
-  // Sisipkan newline di batas blok agar pola SOAL/opsi tetap terbaca
   let work = String(html)
     .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/&nbsp;/gi, ' ');
 
-  // Versi teks untuk deteksi struktur
   const tmp = document.createElement('div');
   tmp.innerHTML = work;
-  // Jangan hapus img/table dari HTML asli — parse struktur dari textContent per blok
-
-  // Split HTML mentah berdasarkan teks "SOAL"
-  // Strategi: ekstrak plain text dengan marker posisi, atau split dengan regex pada teks lalu map media
   const plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
   const fromText = parseSoalFromText(plain);
   if (!fromText.length) return [];
 
-  // Ambil potongan HTML per soal: split string HTML di kemunculan "SOAL"
   const htmlParts = splitHtmlBySoalMarker(work);
+
+  // Semua gambar di dokumen (fallback jika tidak ketempel di part)
+  const allImgs = [];
+  tmp.querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src') || '';
+    if (src) allImgs.push(src);
+  });
+
   fromText.forEach((s, i) => {
     const part = htmlParts[i] || '';
-    if (!part) return;
-    // Ambil konten kaya: img, table, dan paragraf pertanyaan (buang meta & opsi murni teks)
     const rich = extractRichPertanyaanFromHtmlPart(part, s);
     if (rich) s.pertanyaan = rich;
+
+    // Jika soal ini belum punya gambar, tapi part-nya punya → pastikan ikut
+    const partBox = document.createElement('div');
+    partBox.innerHTML = part;
+    const partImgs = [...partBox.querySelectorAll('img')].map(im => im.getAttribute('src')).filter(Boolean);
+    const hasImg = /<img\b/i.test(s.pertanyaan || '');
+    if (!hasImg && partImgs.length) {
+      const imgsHtml = partImgs.map(src =>
+        `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
+      ).join('');
+      s.pertanyaan = (s.pertanyaan || '') + imgsHtml;
+    }
   });
+
+  // Fallback: dokumen punya gambar tapi tidak satu pun menempel ke soal → tempel ke soal pertama
+  const anyImgInSoal = fromText.some(s => /<img\b/i.test(s.pertanyaan || ''));
+  if (!anyImgInSoal && allImgs.length && fromText.length) {
+    const imgsHtml = allImgs.map(src =>
+      `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
+    ).join('');
+    fromText[0].pertanyaan = (fromText[0].pertanyaan || '') + imgsHtml;
+  }
+
   return fromText;
 }
 
@@ -5095,7 +5174,7 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
   const box = document.createElement('div');
   box.innerHTML = partHtml;
 
-  // Hapus teks meta murni di node teks (JENIS:, POIN:, SOAL n)
+  // Hapus teks meta
   const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
   const textNodes = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode);
@@ -5109,78 +5188,74 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
     node.nodeValue = t;
   });
 
-  // Kumpulkan HTML: prioritas img & table utuh + paragraf yang bukan opsi A/B/C
-  const chunks = [];
-  const pushEl = (el) => {
-    if (!el) return;
-    const html = el.outerHTML || '';
-    if (html) chunks.push(html);
-  };
+  // Hapus node yang hanya berisi opsi A. B. C. D. (teks murni opsi)
+  box.querySelectorAll('p, li, div, span').forEach(el => {
+    if (el.querySelector('img, table')) return;
+    const t = (el.textContent || '').trim();
+    if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 200) {
+      el.remove();
+    }
+  });
 
   box.querySelectorAll('img').forEach(img => {
-    // bungkus agar aman di editor
     img.style.maxWidth = '100%';
     img.style.height = 'auto';
-    pushEl(img);
+    img.style.display = 'block';
+    img.style.margin = '8px 0';
   });
   box.querySelectorAll('table').forEach(tbl => {
     tbl.classList.add('soal-table');
     tbl.style.borderCollapse = 'collapse';
     tbl.style.width = '100%';
+    tbl.style.margin = '8px 0';
     tbl.querySelectorAll('td,th').forEach(c => {
       c.style.border = c.style.border || '1px solid #94a3b8';
       c.style.padding = c.style.padding || '6px 8px';
     });
-    pushEl(tbl);
   });
 
-  // Teks pertanyaan: dari plain yang sudah di-parse (tanpa opsi)
-  let textQ = (soalMeta && soalMeta.pertanyaan) ? String(soalMeta.pertanyaan) : '';
-  // textQ mungkin sudah berisi <br>
-  textQ = textQ.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
-
-  let out = '';
-  if (textQ) out += textQ.replace(/\n/g, '<br>');
-  if (chunks.length) {
-    out += (out ? '<br>' : '') + chunks.join('<br>');
+  let out = box.innerHTML.trim();
+  // Jika HTML kosong dari media, fallback teks parse
+  const hasMedia = /<img\b/i.test(out) || /<table\b/i.test(out);
+  const textOnly = out.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!hasMedia && soalMeta && soalMeta.pertanyaan) {
+    return soalMeta.pertanyaan;
   }
-  // Jika tidak ada teks tapi ada media, tetap pakai media
-  if (!out && soalMeta && soalMeta.pertanyaan) out = soalMeta.pertanyaan;
+  if (!textOnly && !hasMedia && soalMeta) return soalMeta.pertanyaan;
   return out || (soalMeta ? soalMeta.pertanyaan : '');
 }
 
-/** Upload semua data:image/... di HTML ke Storage, ganti src jadi URL publik */
 async function uploadEmbeddedDataImages(html) {
-  if (!html || html.indexOf('data:image') === -1) return html;
-  const re = /(<img\b[^>]*\bsrc\s*=\s*)(["'])(data:image\/[^"']+)\2/gi;
-  const matches = [];
+  if (!html || html.indexOf('data:image') === -1) return { html, uploaded: 0, failed: 0, errors: [] };
+  const re = /src\s*=\s*(["'])(data:image\/[^"']+)\1/gi;
+  const dataUrls = [];
   let m;
   const copy = String(html);
   while ((m = re.exec(copy)) !== null) {
-    matches.push({ full: m[0], prefix: m[1], quote: m[2], dataUrl: m[3], index: m.index });
+    if (!dataUrls.includes(m[2])) dataUrls.push(m[2]);
   }
-  if (!matches.length) return html;
+  if (!dataUrls.length) return { html, uploaded: 0, failed: 0, errors: [] };
 
   let result = html;
-  // unikkan dataUrl agar tidak upload dobel
-  const map = new Map();
-  for (let i = 0; i < matches.length; i++) {
-    const dataUrl = matches[i].dataUrl;
-    if (map.has(dataUrl)) continue;
+  let uploaded = 0, failed = 0;
+  const errors = [];
+  for (let i = 0; i < dataUrls.length; i++) {
+    const dataUrl = dataUrls[i];
     try {
-      const url = await uploadUjianMediaDataUrl(dataUrl, 'soal_import_' + Date.now() + '_' + i + '.png');
-      map.set(dataUrl, url);
+      const mime = (dataUrl.match(/^data:(image\/[^;]+)/) || [])[1] || 'image/png';
+      const sub = mime.split('/')[1] || 'png';
+      const ext = sub === 'jpeg' ? 'jpg' : sub;
+      const url = await uploadUjianMediaDataUrl(dataUrl, 'soal_import_' + Date.now() + '_' + i + '.' + ext);
+      if (!url || String(url).indexOf('data:') === 0) throw new Error('URL Storage tidak valid');
+      result = result.split(dataUrl).join(url);
+      uploaded++;
     } catch (e) {
+      failed++;
+      errors.push(e.message || String(e));
       console.warn('upload embed gagal', e);
-      // biarkan data-url jika gagal (masih tampil, tapi boros DB)
-      map.set(dataUrl, dataUrl);
     }
   }
-  map.forEach((url, dataUrl) => {
-    // replace all occurrences of this dataUrl as img src
-    result = result.split(dataUrl).join(url);
-  });
-  return result;
+  return { html: result, uploaded, failed, errors };
 }
 
 
@@ -5360,18 +5435,28 @@ async function submitImportSoal() {
 
     // Upload gambar embedded (data-url) → Storage
     let pertanyaan = s.pertanyaan || '';
+    let mediaUploaded = 0, mediaFailed = 0;
     try {
-      pertanyaan = await uploadEmbeddedDataImages(pertanyaan);
+      const r = await uploadEmbeddedDataImages(pertanyaan);
+      pertanyaan = r.html;
+      mediaUploaded += r.uploaded || 0;
+      mediaFailed += r.failed || 0;
+      if (r.errors && r.errors.length) errors.push(`#${i+1} media: ` + r.errors[0]);
     } catch (e) {
       errors.push(`#${i+1}: media ${e.message || e}`);
     }
-    // Opsi juga bisa berisi gambar (jarang dari Word)
     const opsi = [];
     for (const o of (s.opsi || [])) {
       let teks = o.teks || '';
-      try { teks = await uploadEmbeddedDataImages(teks); } catch (e) {}
+      try {
+        const r2 = await uploadEmbeddedDataImages(teks);
+        teks = r2.html;
+        mediaUploaded += r2.uploaded || 0;
+        mediaFailed += r2.failed || 0;
+      } catch (e) {}
       opsi.push({ teks, is_benar: !!o.is_benar });
     }
+    if (mediaUploaded) errors.push(`#${i+1}: ${mediaUploaded} gambar di-upload ke Storage`);
 
     const payload = {
       action: 'ujian_soal_save',
@@ -5398,8 +5483,14 @@ async function submitImportSoal() {
   closeBigPopup();
   closeFormModal();
   window._importSoalParsed = [];
+  const mediaNotes = errors.filter(e => /gambar di-upload|media:/i.test(e));
+  const otherErr = errors.filter(e => !/gambar di-upload/i.test(e));
   let msg = `Import selesai. Berhasil: ${ok}, gagal: ${fail}.`;
-  if (errors.length) msg += '<br><small>' + errors.slice(0, 8).join('<br>') + '</small>';
+  if (mediaNotes.length) msg += '<br><span style="color:#0d9488;">' + mediaNotes.slice(0, 5).join('<br>') + '</span>';
+  if (otherErr.length) msg += '<br><small>' + otherErr.slice(0, 8).join('<br>') + '</small>';
+  if (!mediaNotes.length && ok) {
+    msg += '<br><small style="color:#64748b;">Jika soal berisi gambar tapi Storage kosong: pastikan gambar di Word adalah gambar inline (Insert → Pictures), bukan objek tertaut/OLE.</small>';
+  }
   showBigPopup(fail && !ok ? 'danger' : (fail ? 'warning' : 'success'), 'Import Soal', msg);
   loadUjianSoalList();
 }
