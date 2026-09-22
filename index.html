@@ -4853,6 +4853,7 @@ function loadUjianSoalList() {
     const box = $('ujianSoalList');
     if (res.status !== 'success') { box.innerHTML = `<p style="color:red;">${res.message}</p>`; return; }
     const list = res.data || [];
+    window._ujianSoalCache = list;
     if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">Belum ada soal. Klik "Tambah Soal".</p>'; return; }
     const jenisLabel = { pg: 'Pilihan Ganda', checkbox: 'Checkbox', esai: 'Esai', benar_salah: 'Benar/Salah' };
     box.innerHTML = list.map((s, i) => {
@@ -4865,8 +4866,9 @@ function loadUjianSoalList() {
       return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
           <div style="font-weight:700;color:var(--primary);">#${i+1} · ${jenisLabel[s.jenis]||s.jenis} · ${s.poin} poin</div>
-          <span class="aksi-btns">
-            <button class="btn-danger" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
+          <span class="aksi-btns" style="display:flex;gap:4px;">
+            <button class="btn-primary btn-sm" style="padding:4px 8px;" title="Edit soal" onclick="editSoalUjian('${s.id}')">✏️</button>
+            <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
         <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(s.pertanyaan)}</div>
@@ -5497,8 +5499,113 @@ async function submitImportSoal() {
 
 
 
+
+function editSoalUjian(soalId) {
+  if (!ujianSoalUjianId) return;
+  const list = window._ujianSoalCache || [];
+  const s = list.find(x => String(x.id) === String(soalId));
+  if (!s) {
+    // fallback fetch list
+    sendRequest({ action: 'ujian_soal_list', ujian_id: ujianSoalUjianId }, res => {
+      if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message || 'Tidak bisa memuat soal');
+      window._ujianSoalCache = res.data || [];
+      const found = (res.data || []).find(x => String(x.id) === String(soalId));
+      if (!found) return showBigPopup('warning', 'Info', 'Soal tidak ditemukan.');
+      openFormSoalEdit(found);
+    });
+    return;
+  }
+  openFormSoalEdit(s);
+}
+
+function openFormSoalEdit(s) {
+  window._editingSoalId = s.id;
+  opsiQuillList = [];
+  const formHtml = `
+    <div class="form-group"><label>Jenis Soal:</label>
+      <select id="fmSoalJenis" onchange="toggleSoalOpsiUI()">
+        <option value="pg">Pilihan Ganda (1 jawaban · A/B/C/D)</option>
+        <option value="checkbox">Checkbox (banyak jawaban)</option>
+        <option value="benar_salah">Benar / Salah</option>
+        <option value="esai">Esai</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span></label>
+      <div id="fmSoalTanyaEditor" style="background:#fff;"></div>
+    </div>
+    <div class="form-group"><label>Poin:</label><input type="number" id="fmSoalPoin" value="1" min="0.5" step="0.5" style="width:100px;"></div>
+    <div id="fmSoalOpsiArea">
+      <label id="fmSoalOpsiLabel">Opsi jawaban:</label>
+      <div id="fmSoalOpsiList"></div>
+      <button type="button" class="btn-add btn-sm" style="margin-top:8px;" onclick="tambahBarisOpsi()">+ Tambah Opsi</button>
+    </div>
+    <div id="fmSoalBSArea" style="display:none;" class="form-group">
+      <label>Kunci Benar/Salah:</label>
+      <select id="fmSoalKunciBS"><option value="benar">Benar</option><option value="salah">Salah</option></select>
+    </div>
+  `;
+  openFormModal('✏️ Edit Soal', formHtml, submitFormSoal);
+  setTimeout(() => {
+    try {
+      if ($('formModalSaveBtn')) $('formModalSaveBtn').innerText = '💾 Simpan Perubahan';
+      $('fmSoalJenis').value = s.jenis || 'pg';
+      $('fmSoalPoin').value = s.poin != null ? s.poin : 1;
+      // Kunci B/S
+      if (s.jenis === 'benar_salah') {
+        const benarOpsi = (s.opsi || []).find(o => o.is_benar);
+        const kunci = benarOpsi && /salah/i.test(String(benarOpsi.teks || '')) ? 'salah' : 'benar';
+        // prefer explicit: if second opsi is benar -> salah is key when first is not
+        if ((s.opsi || []).length >= 2) {
+          const o0 = s.opsi[0], o1 = s.opsi[1];
+          if (o1 && o1.is_benar) $('fmSoalKunciBS').value = 'salah';
+          else $('fmSoalKunciBS').value = 'benar';
+        } else {
+          $('fmSoalKunciBS').value = kunci;
+        }
+      }
+      toggleSoalOpsiUI();
+      initSoalRichEditor('fmSoalTanyaEditor', s.pertanyaan || '');
+      // Opsi PG / checkbox
+      if (s.jenis === 'pg' || s.jenis === 'checkbox') {
+        const opsi = s.opsi || [];
+        if (!opsi.length) {
+          tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi();
+        } else {
+          opsi.forEach((o, oi) => {
+            tambahBarisOpsi();
+            // isi setelah quill init
+            setTimeout(() => {
+              const rows = document.querySelectorAll('#fmSoalOpsiList .fm-opsi-row');
+              const row = rows[oi];
+              if (!row) return;
+              const kunci = row.querySelector('.fm-opsi-benar');
+              if (kunci) kunci.checked = !!o.is_benar;
+              if (row._quill) {
+                try {
+                  row._quill.root.innerHTML = o.teks || '';
+                } catch (e) {
+                  const ed = row.querySelector('.ql-editor');
+                  if (ed) ed.innerHTML = o.teks || '';
+                }
+              } else {
+                const ed = row.querySelector('.ql-editor');
+                if (ed) ed.innerHTML = o.teks || '';
+              }
+            }, 80 + oi * 40);
+          });
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      showBigPopup('danger', 'Error', 'Gagal membuka form edit: ' + (e.message || e));
+    }
+  }, 60);
+}
+
+
 function openFormSoalBaru() {
   if (!ujianSoalUjianId) return;
+  window._editingSoalId = null;
   opsiQuillList = [];
   const html = `
     <div class="form-group"><label>Jenis Soal:</label>
@@ -5672,17 +5779,21 @@ function submitFormSoal() {
       return showBigPopup('warning', 'Peringatan', 'PG hanya boleh satu kunci jawaban.');
     }
   }
-  sendRequest({
+  const payload = {
     action: 'ujian_soal_save',
     ujian_id: ujianSoalUjianId,
     jenis, pertanyaan, poin, opsi,
     kunci_bs: $('fmSoalKunciBS')?.value || 'benar',
-  }, res => {
+  };
+  const isEdit = !!window._editingSoalId;
+  if (isEdit) payload.id = window._editingSoalId;
+  sendRequest(payload, res => {
     if (res.status === 'success') {
       closeFormModal();
       activeSoalQuill = null;
       opsiQuillList = [];
-      showBigPopup('success', 'Berhasil', res.message);
+      window._editingSoalId = null;
+      showBigPopup('success', 'Berhasil', isEdit ? 'Soal berhasil diperbarui.' : res.message);
       loadUjianSoalList();
     } else showBigPopup('danger', 'Gagal', res.message);
   });
