@@ -5014,15 +5014,76 @@ function previewImportSoal(ev) {
 function parseSoalFromText(raw) {
   if (!raw) return [];
   let text = String(raw).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Rapikan spasi berlebih tapi jaga baris
+  text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+
   const parts = text.split(/(?=^\s*SOAL\b)/im).map(p => p.trim()).filter(Boolean);
   const result = [];
+
+  function extractOpsiFromText(chunk) {
+    const opsi = [];
+    if (!chunk) return opsi;
+    // Pola 1: opsi di awal baris  A. teks  / A) teks
+    const lineRe = /^\s*([A-H])\s*[.、．\)]\s+(.+)$/gim;
+    let m;
+    const found = [];
+    while ((m = lineRe.exec(chunk)) !== null) {
+      found.push({ letter: m[1].toUpperCase(), teks: m[2].trim(), index: m.index });
+    }
+    if (found.length >= 2) {
+      found.forEach(f => {
+        let teks = f.teks;
+        let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks) || /\*\s*\)\s*$/.test(teks);
+        // juga dukung * di tengah akhir kata
+        if (!is_benar && /\*[)\]]?\s*$/.test(teks)) is_benar = true;
+        teks = teks.replace(/\s*\*\s*$/, '').replace(/\(\s*\*\s*\)\s*$/, '').replace(/\*\s*\)\s*$/, '').trim();
+        if (teks) opsi.push({ teks, is_benar, letter: f.letter });
+      });
+      return opsi;
+    }
+
+    // Pola 2: semua opsi dalam SATU baris:  A. ... B. ... C. ... D. ...
+    // Cari huruf opsi yang diikuti titik/kurung
+    const inlineRe = /(?:^|[\s])([A-H])\s*[.、．\)]\s*/gi;
+    const marks = [];
+    let im;
+    while ((im = inlineRe.exec(chunk)) !== null) {
+      marks.push({ letter: im[1].toUpperCase(), start: im.index, contentStart: im.index + im[0].length });
+    }
+    if (marks.length >= 2) {
+      for (let i = 0; i < marks.length; i++) {
+        const end = i + 1 < marks.length ? marks[i + 1].start : chunk.length;
+        let teks = chunk.slice(marks[i].contentStart, end).trim();
+        // potong jika ketemu KUNCI: di sisa
+        teks = teks.split(/\n\s*KUNCI\s*[:：]/i)[0].trim();
+        let is_benar = /\*/.test(teks);
+        // * sering di akhir opsi
+        teks = teks.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim();
+        // buang trailing tanda yang nyisa dari opsi berikutnya
+        teks = teks.replace(/\s+[A-H]\s*$/, '').trim();
+        if (teks) opsi.push({ teks, is_benar, letter: marks[i].letter });
+      }
+    }
+    return opsi;
+  }
+
+  function stripOpsiFromPertanyaan(pertanyaan, opsiChunk) {
+    if (!pertanyaan) return '';
+    let p = pertanyaan;
+    // Hapus bagian yang dimulai opsi A. jika ikut tertangkap
+    p = p.replace(/\s+[A-H]\s*[.、．\)]\s+[\s\S]*$/i, '').trim();
+    // Jika masih ada pola A. di tengah
+    const idx = p.search(/\s[A-H]\s*[.、．\)]\s+/i);
+    if (idx > 10) p = p.slice(0, idx).trim();
+    return p;
+  }
 
   for (const block of parts) {
     if (!/^SOAL\b/i.test(block)) continue;
 
-    const jenisMatch = block.match(/^\s*JENIS\s*[:：]\s*(\S+)/im);
-    const poinMatch = block.match(/^\s*POIN\s*[:：]\s*([\d.,]+)/im);
-    const kunciMatch = block.match(/^\s*KUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/im);
+    const jenisMatch = block.match(/JENIS\s*[:：]\s*(\S+)/i);
+    const poinMatch = block.match(/POIN\s*[:：]\s*([\d.,]+)/i);
+    const kunciMatch = block.match(/KUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/i);
 
     let jenisRaw = (jenisMatch ? jenisMatch[1] : 'PG').toUpperCase().replace(/[\s-]+/g, '_');
     let jenis = 'pg';
@@ -5033,49 +5094,66 @@ function parseSoalFromText(raw) {
 
     const poin = poinMatch ? (parseFloat(String(poinMatch[1]).replace(',', '.')) || 1) : 1;
 
-    let pertanyaan = '';
-    const pMatch = block.match(/PERTANYAAN\s*[:：]\s*([\s\S]*?)(?=^\s*[A-Z]\s*[.\)]\s+|^\s*KUNCI\s*[:：]|$)/im);
-    if (pMatch) {
-      pertanyaan = pMatch[1].trim();
+    // Ambil body setelah PERTANYAAN:
+    let body = '';
+    const pIdx = block.search(/PERTANYAAN\s*[:：]/i);
+    if (pIdx >= 0) {
+      body = block.slice(pIdx).replace(/^PERTANYAAN\s*[:：]\s*/i, '');
     } else {
-      const lines = block.split('\n');
-      const buf = [];
-      let startP = false;
-      for (const ln of lines) {
-        if (/^\s*PERTANYAAN\s*[:：]/i.test(ln)) {
-          startP = true;
-          const rest = ln.replace(/^\s*PERTANYAAN\s*[:：]\s*/i, '');
-          if (rest) buf.push(rest);
-          continue;
-        }
-        if (startP) {
-          if (/^\s*[A-Z]\s*[.\)]\s+/.test(ln) || /^\s*KUNCI\s*[:：]/i.test(ln) || /^\s*SOAL\b/i.test(ln)) break;
-          if (/^\s*(JENIS|POIN)\s*[:：]/i.test(ln)) continue;
-          buf.push(ln);
-        }
-      }
-      pertanyaan = buf.join('\n').trim();
+      // fallback: setelah baris meta
+      body = block.replace(/^SOAL[^\n]*/i, '')
+        .replace(/JENIS\s*[:：]\s*\S+/i, '')
+        .replace(/POIN\s*[:：]\s*[\d.,]+/i, '')
+        .trim();
     }
-    pertanyaan = pertanyaan.replace(/^\s*(JENIS|POIN)\s*[:：].*$/gim, '').trim();
+
+    // Pisahkan KUNCI jika ada di body
+    let kunci_bs = 'benar';
+    if (jenis === 'benar_salah') {
+      const km = body.match(/KUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/i);
+      if (km) {
+        const k = km[1].toUpperCase();
+        kunci_bs = (k === 'SALAH' || k === 'FALSE' || k === 'S') ? 'salah' : 'benar';
+        body = body.replace(/KUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/i, '').trim();
+      } else if (kunciMatch) {
+        const k = kunciMatch[1].toUpperCase();
+        kunci_bs = (k === 'SALAH' || k === 'FALSE' || k === 'S') ? 'salah' : 'benar';
+      }
+    }
+
+    let opsi = [];
+    let pertanyaan = body.trim();
+
+    if (jenis === 'pg' || jenis === 'checkbox') {
+      opsi = extractOpsiFromText(body);
+      if (opsi.length) {
+        // pertanyaan = bagian sebelum opsi pertama
+        const firstLetter = opsi[0].letter || 'A';
+        // cari posisi A. pertama di body
+        const reFirst = new RegExp('(?:^|[\\s])' + firstLetter + '\\s*[.、．\\)]\\s+', 'i');
+        const fm = reFirst.exec(body);
+        if (fm) {
+          pertanyaan = body.slice(0, fm.index).trim();
+        } else {
+          pertanyaan = stripOpsiFromPertanyaan(body, body);
+        }
+      } else {
+        pertanyaan = stripOpsiFromPertanyaan(body, body);
+      }
+      // bersihkan meta sisa
+      pertanyaan = pertanyaan.replace(/^\s*(JENIS|POIN|SOAL)\s*[:：].*$/gim, '').trim();
+    } else {
+      pertanyaan = body.replace(/^\s*(JENIS|POIN|SOAL)\s*[:：].*$/gim, '').trim();
+      pertanyaan = stripOpsiFromPertanyaan(pertanyaan, pertanyaan);
+    }
+
     if (!pertanyaan) continue;
 
-    const opsi = [];
-    if (jenis === 'pg' || jenis === 'checkbox') {
-      const optRe = /^\s*([A-Z])\s*[.\)]\s+(.+?)\s*$/gm;
-      let m;
-      while ((m = optRe.exec(block)) !== null) {
-        let teks = m[2].trim();
-        let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks);
-        teks = teks.replace(/\*\s*$/, '').replace(/\(\s*\*\s*\)\s*$/, '').trim();
-        if (teks) opsi.push({ teks, is_benar });
-      }
-    }
-
-    let kunci_bs = 'benar';
-    if (jenis === 'benar_salah' && kunciMatch) {
-      const k = kunciMatch[1].toUpperCase();
-      kunci_bs = (k === 'SALAH' || k === 'FALSE' || k === 'S') ? 'salah' : 'benar';
-    }
+    // Normalisasi is_benar: pastikan boolean murni
+    opsi = opsi.map(o => ({
+      teks: o.teks,
+      is_benar: !!o.is_benar,
+    }));
 
     result.push({
       jenis,
