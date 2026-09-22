@@ -14,6 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/mathlive-static.css">
+<script src="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/mathlive.min.js"></script>
 <script>
   const ASSETS_BASE_URL = './assets/';
   const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
@@ -50,6 +52,33 @@
     display: block;
   }
   .ql-snow .ql-toolbar button.ql-chart { width: 28px; }
+
+  .mathlive-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 10050;
+    display: flex; align-items: center; justify-content: center; padding: 12px;
+  }
+  .mathlive-modal-box {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 560px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25); overflow: hidden;
+  }
+  .mathlive-modal-box h4 {
+    margin: 0; padding: 12px 16px; background: var(--primary, #05285e); color: #fff; font-size: 14px;
+  }
+  .mathlive-modal-body { padding: 14px 16px; }
+  .mathlive-modal-body math-field {
+    display: block; width: 100%; min-height: 56px; font-size: 22px;
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;
+  }
+  .mathlive-modal-hint { font-size: 11px; color: #64748b; margin-top: 8px; line-height: 1.4; }
+  .mathlive-modal-actions {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 10px 16px 14px;
+  }
+  .mathlive-modal-actions button {
+    border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; cursor: pointer; font-size: 12px;
+  }
+  .mathlive-btn-cancel { background: #e2e8f0; color: #334155; }
+  .mathlive-btn-ok { background: var(--primary, #05285e); color: #fff; }
+
   .soal-html-content table.soal-table,
   .ql-editor table.soal-table {
     border-collapse: collapse;
@@ -4239,6 +4268,76 @@ function previewChartBuilder() {
 }
 
 
+
+function openMathLiveEditor(onInsert) {
+  // Tutup jika sudah ada
+  const old = document.getElementById('mathliveModalRoot');
+  if (old) old.remove();
+
+  const root = document.createElement('div');
+  root.id = 'mathliveModalRoot';
+  root.className = 'mathlive-modal-backdrop';
+  root.innerHTML = `
+    <div class="mathlive-modal-box" onclick="event.stopPropagation()">
+      <h4>Σ Editor Rumus Matematika</h4>
+      <div class="mathlive-modal-body">
+        <math-field id="mathliveField" virtual-keyboard-mode="manual">x^2</math-field>
+        <div class="mathlive-modal-hint">
+          Ketik atau klik ikon keyboard virtual di field.<br>
+          Contoh: pecahan <code>a/b</code>, akar <code>\\sqrt{x}</code>, pangkat <code>x^2</code>,
+          integral <code>\\int</code>, matrix lewat menu virtual keyboard.
+        </div>
+      </div>
+      <div class="mathlive-modal-actions">
+        <button type="button" class="mathlive-btn-cancel" id="mathliveCancel">Batal</button>
+        <button type="button" class="mathlive-btn-ok" id="mathliveOk">Sisipkan ke Soal</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(root);
+
+  const mf = root.querySelector('#mathliveField');
+  // Fokus + buka virtual keyboard MathLive
+  setTimeout(() => {
+    try {
+      mf.focus();
+      if (mf.executeCommand) mf.executeCommand('showVirtualKeyboard');
+    } catch (e) {}
+  }, 100);
+
+  const close = () => {
+    try { if (mf.executeCommand) mf.executeCommand('hideVirtualKeyboard'); } catch (e) {}
+    root.remove();
+  };
+  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  root.querySelector('#mathliveCancel').onclick = close;
+  root.querySelector('#mathliveOk').onclick = () => {
+    let latex = '';
+    try { latex = mf.getValue('latex') || mf.value || ''; } catch (e) { latex = mf.value || ''; }
+    latex = String(latex).trim();
+    if (!latex) {
+      showBigPopup('warning', 'Rumus', 'Rumus masih kosong.');
+      return;
+    }
+    close();
+    if (typeof onInsert === 'function') onInsert(latex);
+  };
+}
+
+function insertLatexIntoQuill(quill, latex) {
+  try {
+    const htmlFormula = katex.renderToString(latex, { throwOnError: false, displayMode: true });
+    const range = quill.getSelection(true) || { index: quill.getLength() };
+    // Simpan juga latex mentah di data-attribute agar bisa di-edit ulang nanti jika perlu
+    const block = '<span class="ql-formula-embed" data-latex="' +
+      latex.replace(/"/g, '&quot;') + '">&nbsp;' + htmlFormula + '&nbsp;</span>';
+    quill.clipboard.dangerouslyPasteHTML(range.index, block);
+    quill.setSelection(range.index + 1);
+  } catch (err) {
+    showBigPopup('danger', 'Formula error', err.message || String(err));
+  }
+}
+
 function initSoalRichEditor(containerId, initialHtml) {
   const el = document.getElementById(containerId);
   if (!el) return null;
@@ -4298,15 +4397,7 @@ function initSoalRichEditor(containerId, initialHtml) {
             quill.setSelection(range.index + 1);
           },
           formula: function () {
-            const latex = prompt('Tulis rumus LaTeX (contoh: x^2 + y^2 = r^2 atau \\\\frac{a}{b}):');
-            if (!latex) return;
-            try {
-              const html = katex.renderToString(latex, { throwOnError: false, displayMode: true });
-              const range = quill.getSelection(true) || { index: quill.getLength() };
-              quill.clipboard.dangerouslyPasteHTML(range.index, '<span class="ql-formula-embed">&nbsp;' + html + '&nbsp;</span>');
-            } catch (err) {
-              showBigPopup('danger', 'Formula error', err.message);
-            }
+            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex));
           }
         }
       }
@@ -4669,15 +4760,7 @@ function initMiniOpsiEditor(containerId) {
         handlers: {
           image: function () { insertImageToQuill(quill); },
           formula: function () {
-            const latex = prompt('Rumus LaTeX (contoh: H_2O atau x^2):');
-            if (!latex) return;
-            try {
-              const htmlFormula = katex.renderToString(latex, { throwOnError: false, displayMode: false });
-              const range = quill.getSelection(true) || { index: quill.getLength() };
-              quill.clipboard.dangerouslyPasteHTML(range.index, '<span class="ql-formula-embed">&nbsp;' + htmlFormula + '&nbsp;</span>');
-            } catch (err) {
-              showBigPopup('danger', 'Formula', err.message);
-            }
+            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex));
           }
         }
       }
