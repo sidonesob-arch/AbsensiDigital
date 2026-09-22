@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive-static.css">
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive.min.js"></script>
 <script>
@@ -1235,6 +1236,8 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <div><b id="ujianSoalJudul">-</b> <span id="ujianSoalMapel" style="color:#666; font-size:12px;"></span></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-add btn-sm" onclick="openFormSoalBaru()">➕ Tambah Soal</button>
+          <button class="btn-sm" style="background:#1d6f42;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="openImportSoalModal()">📥 Import Word</button>
+          <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="downloadTemplateSoal()">📄 Template Soal</button>
           <button class="btn-primary btn-sm" onclick="switchMenu('ujian-kelola', document.querySelector('[data-menu=ujian-kelola]'))">← Kembali</button>
         </div>
       </div>
@@ -4844,6 +4847,297 @@ let opsiQuillList = []; // editor kaya per opsi jawaban
 function letterLabel(i) {
   return String.fromCharCode(65 + i); // A, B, C, ...
 }
+
+
+// ===================== IMPORT SOAL DARI WORD =====================
+function downloadTemplateSoal() {
+  // File .doc (HTML Word-compatible) + petunjuk format
+  const content = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Template Import Soal</title>
+<style>
+body{font-family:Calibri,Arial,sans-serif;font-size:12pt;line-height:1.45;max-width:800px;margin:24px auto;padding:0 16px;}
+h1{color:#05285e;font-size:18pt;}
+h2{color:#0b3c85;font-size:13pt;margin-top:24px;}
+.code{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:12px;font-family:Consolas,monospace;font-size:10pt;white-space:pre-wrap;}
+.note{background:#ecfdf5;border-left:4px solid #10b981;padding:10px 12px;margin:12px 0;}
+.warn{background:#fff7ed;border-left:4px solid #f59e0b;padding:10px 12px;margin:12px 0;}
+</style>
+</head>
+<body>
+<h1>Template Import Soal Ujian</h1>
+<div class="note">
+  <b>Cara pakai:</b> Salin format contoh di bawah, isi soal Anda, simpan sebagai <b>.docx</b> atau <b>.doc</b>,
+  lalu di aplikasi klik <b>Import Word</b>. Tanda <b>*</b> di akhir opsi = kunci jawaban.
+</div>
+<div class="warn">
+  Jangan ubah kata kunci: SOAL, JENIS, POIN, PERTANYAAN, KUNCI.<br>
+  JENIS harus salah satu: <b>PG</b> | <b>CHECKBOX</b> | <b>BENAR_SALAH</b> | <b>ESAI</b>
+</div>
+
+<h2>Contoh 1 — Pilihan Ganda (PG)</h2>
+<div class="code">SOAL 1
+JENIS: PG
+POIN: 1
+PERTANYAAN:
+Nilai x dan y yang memenuhi 2x+y=8 dan x-y=1 adalah ....
+A. (2, 3)
+B. (3, 2)*
+C. (4, 1)
+D. (1, 4)</div>
+
+<h2>Contoh 2 — Checkbox (banyak jawaban benar)</h2>
+<div class="code">SOAL 2
+JENIS: CHECKBOX
+POIN: 2
+PERTANYAAN:
+Yang termasuk bilangan genap adalah ....
+A. 2*
+B. 3
+C. 4*
+D. 5</div>
+
+<h2>Contoh 3 — Benar / Salah</h2>
+<div class="code">SOAL 3
+JENIS: BENAR_SALAH
+POIN: 1
+PERTANYAAN:
+Ibu kota Indonesia adalah Jakarta.
+KUNCI: BENAR</div>
+
+<h2>Contoh 4 — Esai</h2>
+<div class="code">SOAL 4
+JENIS: ESAI
+POIN: 5
+PERTANYAAN:
+Jelaskan perbedaan antara mitokondria dan kloroplas!</div>
+
+<h2>Aturan ringkas</h2>
+<ul>
+  <li>Setiap soal diawali baris <b>SOAL</b> (boleh SOAL 1, SOAL 2, …)</li>
+  <li>Opsi PG/Checkbox: baris diawali <b>A.</b> <b>B.</b> <b>C.</b> … (huruf + titik)</li>
+  <li>Kunci PG/Checkbox: tambahkan <b>*</b> di akhir opsi yang benar</li>
+  <li>Benar/Salah: baris <b>KUNCI: BENAR</b> atau <b>KUNCI: SALAH</b></li>
+  <li>Gambar dari Word: teks tetap terimport; gambar perlu ditambahkan manual di editor jika diperlukan</li>
+</ul>
+</body></html>`;
+
+  const blob = new Blob([content], { type: 'application/msword' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Template_Import_Soal.doc';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showBigPopup('success', 'Template', 'Template soal berhasil diunduh. Buka dengan Microsoft Word, edit, lalu Import Word.');
+}
+
+function openImportSoalModal() {
+  if (!ujianSoalUjianId) return showBigPopup('warning', 'Info', 'Buka bank soal ujian terlebih dahulu.');
+  const html = `
+    <div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;">
+      <b>📥 Import soal dari Word</b>
+      <div style="margin-top:6px;line-height:1.5;">
+        Format: <code>SOAL</code> → <code>JENIS</code> → <code>POIN</code> → <code>PERTANYAAN</code> → opsi A/B/C…<br>
+        Kunci PG/Checkbox: tandai dengan <b>*</b> di akhir opsi.<br>
+        JENIS: <b>PG</b> | <b>CHECKBOX</b> | <b>BENAR_SALAH</b> | <b>ESAI</b>
+      </div>
+      <button type="button" class="btn-sm" style="margin-top:8px;background:#0d9488;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="downloadTemplateSoal()">📄 Unduh Template</button>
+    </div>
+    <div class="form-group">
+      <label>Pilih file (.docx / .doc / .txt):</label>
+      <input type="file" id="importSoalFile" accept=".docx,.doc,.txt,.text" onchange="previewImportSoal(event)">
+    </div>
+    <div id="importSoalPreview" style="margin-top:10px;max-height:220px;overflow:auto;font-size:12px;"></div>
+  `;
+  window._importSoalParsed = [];
+  openFormModal('📥 Import Soal dari Word', html, submitImportSoal);
+}
+
+function previewImportSoal(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const name = (file.name || '').toLowerCase();
+  const box = $('importSoalPreview');
+
+  const done = (text) => {
+    const parsed = parseSoalFromText(text);
+    window._importSoalParsed = parsed;
+    if (!parsed.length) {
+      box.innerHTML = '<p style="color:#dc2626;">Tidak ada soal yang terbaca. Pastikan format sesuai template (SOAL, JENIS, PERTANYAAN, opsi A/B/C).</p>';
+      return;
+    }
+    const jenisLabel = { pg: 'PG', checkbox: 'Checkbox', benar_salah: 'B/S', esai: 'Esai' };
+    box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal</p>` +
+      parsed.slice(0, 12).map((s, i) => {
+        const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => o.teks.replace(/<[^>]+>/g,'').slice(0,40));
+        return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
+          <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —
+          ${(s.pertanyaan||'').replace(/<[^>]+>/g,' ').slice(0,80)}…
+          ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.join(' | ')}</span>` : ''}
+          ${s.jenis==='benar_salah' ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${s.kunci_bs}</span>` : ''}
+        </div>`;
+      }).join('') +
+      (parsed.length > 12 ? `<div style="color:#666;">… dan ${parsed.length-12} soal lainnya</div>` : '');
+  };
+
+  if (name.endsWith('.txt') || name.endsWith('.text')) {
+    const reader = new FileReader();
+    reader.onload = () => done(String(reader.result || ''));
+    reader.readAsText(file);
+    return;
+  }
+
+  // .docx / .doc via mammoth
+  if (typeof mammoth === 'undefined') {
+    box.innerHTML = '<p style="color:#dc2626;">Library mammoth belum termuat. Cek koneksi internet atau gunakan file .txt.</p>';
+    return;
+  }
+  box.innerHTML = '<p>⏳ Membaca file Word…</p>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const result = await mammoth.extractRawText({ arrayBuffer: reader.result });
+      done(result.value || '');
+    } catch (e) {
+      // fallback: try as text
+      try {
+        const t = new TextDecoder().decode(reader.result);
+        done(t);
+      } catch (e2) {
+        box.innerHTML = `<p style="color:#dc2626;">Gagal membaca file: ${e.message}</p>`;
+      }
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseSoalFromText(raw) {
+  if (!raw) return [];
+  let text = String(raw).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const parts = text.split(/(?=^\s*SOAL\b)/im).map(p => p.trim()).filter(Boolean);
+  const result = [];
+
+  for (const block of parts) {
+    if (!/^SOAL\b/i.test(block)) continue;
+
+    const jenisMatch = block.match(/^\s*JENIS\s*[:：]\s*(\S+)/im);
+    const poinMatch = block.match(/^\s*POIN\s*[:：]\s*([\d.,]+)/im);
+    const kunciMatch = block.match(/^\s*KUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/im);
+
+    let jenisRaw = (jenisMatch ? jenisMatch[1] : 'PG').toUpperCase().replace(/[\s-]+/g, '_');
+    let jenis = 'pg';
+    if (/CHECK|MULTI|CB/.test(jenisRaw)) jenis = 'checkbox';
+    else if (/BENAR|SALAH|BS|TRUE|FALSE|TF/.test(jenisRaw)) jenis = 'benar_salah';
+    else if (/ESAI|ESSAY|URAIAN/.test(jenisRaw)) jenis = 'esai';
+    else jenis = 'pg';
+
+    const poin = poinMatch ? (parseFloat(String(poinMatch[1]).replace(',', '.')) || 1) : 1;
+
+    let pertanyaan = '';
+    const pMatch = block.match(/PERTANYAAN\s*[:：]\s*([\s\S]*?)(?=^\s*[A-Z]\s*[.\)]\s+|^\s*KUNCI\s*[:：]|$)/im);
+    if (pMatch) {
+      pertanyaan = pMatch[1].trim();
+    } else {
+      const lines = block.split('\n');
+      const buf = [];
+      let startP = false;
+      for (const ln of lines) {
+        if (/^\s*PERTANYAAN\s*[:：]/i.test(ln)) {
+          startP = true;
+          const rest = ln.replace(/^\s*PERTANYAAN\s*[:：]\s*/i, '');
+          if (rest) buf.push(rest);
+          continue;
+        }
+        if (startP) {
+          if (/^\s*[A-Z]\s*[.\)]\s+/.test(ln) || /^\s*KUNCI\s*[:：]/i.test(ln) || /^\s*SOAL\b/i.test(ln)) break;
+          if (/^\s*(JENIS|POIN)\s*[:：]/i.test(ln)) continue;
+          buf.push(ln);
+        }
+      }
+      pertanyaan = buf.join('\n').trim();
+    }
+    pertanyaan = pertanyaan.replace(/^\s*(JENIS|POIN)\s*[:：].*$/gim, '').trim();
+    if (!pertanyaan) continue;
+
+    const opsi = [];
+    if (jenis === 'pg' || jenis === 'checkbox') {
+      const optRe = /^\s*([A-Z])\s*[.\)]\s+(.+?)\s*$/gm;
+      let m;
+      while ((m = optRe.exec(block)) !== null) {
+        let teks = m[2].trim();
+        let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks);
+        teks = teks.replace(/\*\s*$/, '').replace(/\(\s*\*\s*\)\s*$/, '').trim();
+        if (teks) opsi.push({ teks, is_benar });
+      }
+    }
+
+    let kunci_bs = 'benar';
+    if (jenis === 'benar_salah' && kunciMatch) {
+      const k = kunciMatch[1].toUpperCase();
+      kunci_bs = (k === 'SALAH' || k === 'FALSE' || k === 'S') ? 'salah' : 'benar';
+    }
+
+    result.push({
+      jenis,
+      poin,
+      pertanyaan: pertanyaan.replace(/\n/g, '<br>'),
+      opsi,
+      kunci_bs,
+    });
+  }
+  return result;
+}
+
+async function submitImportSoal() {
+  const list = window._importSoalParsed || [];
+  if (!list.length) return showBigPopup('warning', 'Peringatan', 'Tidak ada soal untuk diimport. Pilih file sesuai template.');
+  if (!ujianSoalUjianId) return showBigPopup('danger', 'Error', 'Ujian tidak aktif.');
+
+  showBigPopup('info', 'Import', `⏳ Menyimpan ${list.length} soal...`, 0);
+  let ok = 0, fail = 0;
+  const errors = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && (!s.opsi || !s.opsi.length)) {
+      fail++; errors.push(`#${i+1}: tidak ada opsi`); continue;
+    }
+    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && !s.opsi.some(o => o.is_benar)) {
+      // PG tanpa kunci → tandai opsi A sebagai kunci agar tetap tersimpan, beri peringatan
+      if (s.opsi.length) s.opsi[0].is_benar = true;
+      errors.push(`#${i+1}: kunci tidak ditandai *, default opsi pertama`);
+    }
+    const payload = {
+      action: 'ujian_soal_save',
+      ujian_id: ujianSoalUjianId,
+      jenis: s.jenis,
+      pertanyaan: s.pertanyaan,
+      poin: s.poin,
+      opsi: s.opsi || [],
+      kunci_bs: s.kunci_bs || 'benar',
+    };
+    try {
+      await new Promise((resolve) => {
+        sendRequest(payload, res => {
+          if (res.status === 'success') ok++;
+          else { fail++; errors.push(`#${i+1}: ${res.message || 'gagal'}`); }
+          resolve();
+        });
+      });
+    } catch (e) {
+      fail++; errors.push(`#${i+1}: ${e.message}`);
+    }
+  }
+
+  closeBigPopup();
+  closeFormModal();
+  window._importSoalParsed = [];
+  let msg = `Import selesai. Berhasil: ${ok}, gagal: ${fail}.`;
+  if (errors.length) msg += '<br><small>' + errors.slice(0, 8).join('<br>') + '</small>';
+  showBigPopup(fail && !ok ? 'danger' : (fail ? 'warning' : 'success'), 'Import Soal', msg);
+  loadUjianSoalList();
+}
+
 
 function openFormSoalBaru() {
   if (!ujianSoalUjianId) return;
