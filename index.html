@@ -14,8 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/mathlive-static.css">
-<script src="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/mathlive.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive-static.css">
+<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive.min.js"></script>
 <script>
   const ASSETS_BASE_URL = './assets/';
   const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
@@ -4171,60 +4171,82 @@ function insertImageToQuill(quill) {
   };
 }
 
+
 function openChartBuilder(quill) {
-  const formHtml = `
-    <div class="form-group"><label>Jenis grafik:</label>
-      <select id="chartJenis">
-        <option value="bar">Batang (Bar)</option>
-        <option value="line">Garis (Line)</option>
-        <option value="pie">Lingkaran (Pie)</option>
-        <option value="doughnut">Donat (Doughnut)</option>
-      </select>
+  if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
+  const old = document.getElementById('chartModalRoot');
+  if (old) old.remove();
+
+  const root = document.createElement('div');
+  root.id = 'chartModalRoot';
+  root.className = 'mathlive-modal-backdrop';
+  root.innerHTML = `
+    <div class="mathlive-modal-box" style="max-width:640px;" onclick="event.stopPropagation()">
+      <h4>📊 Sisipkan Grafik</h4>
+      <div class="mathlive-modal-body">
+        <div class="form-group"><label>Jenis grafik:</label>
+          <select id="chartJenis">
+            <option value="bar">Batang (Bar)</option>
+            <option value="line">Garis (Line)</option>
+            <option value="pie">Lingkaran (Pie)</option>
+            <option value="doughnut">Donat (Doughnut)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Judul grafik:</label>
+          <input type="text" id="chartJudul" placeholder="Contoh: Hasil Percobaan">
+        </div>
+        <div class="form-group"><label>Label (pisahkan koma):</label>
+          <input type="text" id="chartLabels" placeholder="Jan, Feb, Mar, Apr" value="Jan, Feb, Mar, Apr">
+        </div>
+        <div class="form-group"><label>Nilai (pisahkan koma):</label>
+          <input type="text" id="chartValues" placeholder="10, 25, 15, 30" value="10, 25, 15, 30">
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
+          <canvas id="chartPreviewCanvas" height="180"></canvas>
+        </div>
+        <button type="button" class="btn-primary btn-sm" style="margin-top:8px;" id="chartPreviewBtn">🔄 Preview</button>
+      </div>
+      <div class="mathlive-modal-actions">
+        <button type="button" class="mathlive-btn-cancel" id="chartCancel">Batal</button>
+        <button type="button" class="mathlive-btn-ok" id="chartOk">📥 Sisipkan ke Soal</button>
+      </div>
     </div>
-    <div class="form-group"><label>Judul grafik:</label>
-      <input type="text" id="chartJudul" placeholder="Contoh: Hasil Percobaan">
-    </div>
-    <div class="form-group"><label>Label (pisahkan koma):</label>
-      <input type="text" id="chartLabels" placeholder="Jan, Feb, Mar, Apr">
-    </div>
-    <div class="form-group"><label>Nilai (pisahkan koma, urutan sama dengan label):</label>
-      <input type="text" id="chartValues" placeholder="10, 25, 15, 30">
-    </div>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
-      <canvas id="chartPreviewCanvas" height="180"></canvas>
-    </div>
-    <button type="button" class="btn-primary btn-sm" style="margin-top:8px;" onclick="previewChartBuilder()">🔄 Preview</button>
   `;
-  openFormModal('📊 Sisipkan Grafik', formHtml, async () => {
+  document.body.appendChild(root);
+
+  const close = () => {
+    if (window._chartBuilderInstance) {
+      try { window._chartBuilderInstance.destroy(); } catch (e) {}
+      window._chartBuilderInstance = null;
+    }
+    root.remove();
+  };
+  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  root.querySelector('#chartCancel').onclick = close;
+  root.querySelector('#chartPreviewBtn').onclick = () => previewChartBuilder();
+  root.querySelector('#chartJenis').onchange = () => previewChartBuilder();
+  setTimeout(() => previewChartBuilder(), 80);
+
+  root.querySelector('#chartOk').onclick = async () => {
     try {
-      const canvas = $('chartPreviewCanvas');
-      if (!canvas || !window._chartBuilderInstance) {
-        previewChartBuilder();
-      }
-      await new Promise(r => setTimeout(r, 100));
+      if (!window._chartBuilderInstance) previewChartBuilder();
+      await new Promise(r => setTimeout(r, 120));
       const c = $('chartPreviewCanvas');
+      if (!c) throw new Error('Canvas tidak ditemukan');
       const dataUrl = c.toDataURL('image/png');
       showBigPopup('info', 'Upload', '⏳ Menyimpan grafik ke Storage...', 0);
       const url = await uploadUjianMediaDataUrl(dataUrl, 'grafik_' + Date.now() + '.png');
       closeBigPopup();
-      closeFormModal();
-      if (window._chartBuilderInstance) {
-        window._chartBuilderInstance.destroy();
-        window._chartBuilderInstance = null;
-      }
+      close();
       const range = quill.getSelection(true) || { index: quill.getLength() };
       quill.insertEmbed(range.index, 'image', url, 'user');
       quill.setSelection(range.index + 1);
-      showBigPopup('success', 'Grafik', 'Grafik berhasil disisipkan.');
+      showBigPopup('success', 'Grafik', 'Grafik berhasil disisipkan ke soal.');
     } catch (e) {
       closeBigPopup();
       showBigPopup('danger', 'Gagal', e.message || String(e));
     }
-  });
-  setTimeout(() => {
-    $('formModalSaveBtn').innerText = '📥 Sisipkan ke Soal';
-    previewChartBuilder();
-  }, 80);
+  };
 }
 
 function previewChartBuilder() {
@@ -4233,20 +4255,26 @@ function previewChartBuilder() {
   const labels = ($('chartLabels')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
   const values = ($('chartValues')?.value || '').split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
   const canvas = $('chartPreviewCanvas');
-  if (!canvas || typeof Chart === 'undefined') return;
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') {
+    showBigPopup('danger', 'Chart.js', 'Library Chart.js belum termuat. Cek koneksi internet.');
+    return;
+  }
   if (window._chartBuilderInstance) {
-    window._chartBuilderInstance.destroy();
+    try { window._chartBuilderInstance.destroy(); } catch (e) {}
     window._chartBuilderInstance = null;
   }
   const colors = ['#05285e','#0d9488','#f59e0b','#dc2626','#7c3aed','#16a34a','#ea580c','#2563eb'];
-  const bg = labels.map((_, i) => colors[i % colors.length]);
+  const labs = labels.length ? labels : ['A', 'B', 'C'];
+  const vals = values.length ? values : [3, 7, 5];
+  const bg = labs.map((_, i) => colors[i % colors.length]);
   window._chartBuilderInstance = new Chart(canvas.getContext('2d'), {
     type: jenis,
     data: {
-      labels: labels.length ? labels : ['A', 'B', 'C'],
+      labels: labs,
       datasets: [{
         label: judul || 'Data',
-        data: values.length ? values : [3, 7, 5],
+        data: vals,
         backgroundColor: jenis === 'line' ? 'rgba(5,40,94,0.15)' : bg,
         borderColor: jenis === 'line' ? '#05285e' : bg,
         borderWidth: 2,
@@ -4256,21 +4284,17 @@ function previewChartBuilder() {
     },
     options: {
       responsive: true,
+      animation: false,
       plugins: {
         title: { display: !!judul, text: judul },
         legend: { display: jenis === 'pie' || jenis === 'doughnut' }
       },
-      scales: (jenis === 'pie' || jenis === 'doughnut') ? {} : {
-        y: { beginAtZero: true }
-      }
+      scales: (jenis === 'pie' || jenis === 'doughnut') ? {} : { y: { beginAtZero: true } }
     }
   });
 }
 
-
-
 function openMathLiveEditor(onInsert) {
-  // Tutup jika sudah ada
   const old = document.getElementById('mathliveModalRoot');
   if (old) old.remove();
 
@@ -4281,11 +4305,31 @@ function openMathLiveEditor(onInsert) {
     <div class="mathlive-modal-box" onclick="event.stopPropagation()">
       <h4>Σ Editor Rumus Matematika</h4>
       <div class="mathlive-modal-body">
-        <math-field id="mathliveField" virtual-keyboard-mode="manual">x^2</math-field>
+        <div id="mathliveFieldHost" style="min-height:64px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;background:#fff;"></div>
         <div class="mathlive-modal-hint">
-          Ketik atau klik ikon keyboard virtual di field.<br>
-          Contoh: pecahan <code>a/b</code>, akar <code>\\sqrt{x}</code>, pangkat <code>x^2</code>,
-          integral <code>\\int</code>, matrix lewat menu virtual keyboard.
+          Klik di dalam kotak putih lalu ketik. Keyboard virtual MathLive bisa muncul di bawah layar.<br>
+          Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.
+        </div>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;" id="mathliveSnippets">
+          <button type="button" data-ml-snippet="\\frac{#@}{#0}">a/b</button>
+          <button type="button" data-ml-snippet="\\sqrt{#0}">√</button>
+          <button type="button" data-ml-snippet="#@^{#0}">x²</button>
+          <button type="button" data-ml-snippet="\\int_{#@}^{#0}">∫</button>
+          <button type="button" data-ml-snippet="\\sum_{#@}^{#0}">Σ</button>
+          <button type="button" data-ml-snippet="\\pi">π</button>
+          <button type="button" data-ml-snippet="\\theta">θ</button>
+          <button type="button" data-ml-snippet="\\alpha">α</button>
+          <button type="button" data-ml-snippet="\\beta">β</button>
+          <button type="button" data-ml-snippet="\\times">×</button>
+          <button type="button" data-ml-snippet="\\div">÷</button>
+          <button type="button" data-ml-snippet="\\pm">±</button>
+          <button type="button" data-ml-snippet="\\leq">≤</button>
+          <button type="button" data-ml-snippet="\\geq">≥</button>
+          <button type="button" data-ml-snippet="\\neq">≠</button>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="font-size:11px;color:#64748b;">Atau tempel LaTeX manual:</label>
+          <input type="text" id="mathliveLatexManual" placeholder="contoh: x^2 + \\frac{a}{b}" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;">
         </div>
       </div>
       <div class="mathlive-modal-actions">
@@ -4294,29 +4338,89 @@ function openMathLiveEditor(onInsert) {
       </div>
     </div>
   `;
+  // style snippet buttons
+  root.querySelectorAll('#mathliveSnippets button').forEach(b => {
+    b.style.cssText = 'background:#e8f0fe;border:1px solid #93c5fd;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;';
+  });
   document.body.appendChild(root);
 
-  const mf = root.querySelector('#mathliveField');
-  // Fokus + buka virtual keyboard MathLive
+  const host = root.querySelector('#mathliveFieldHost');
+  let mf = null;
+  let mode = 'none';
+
+  function tryInit() {
+    try {
+      if (window.MathLive && typeof MathLive.makeMathField === 'function') {
+        mf = MathLive.makeMathField(host, {
+          virtualKeyboardMode: 'onfocus',
+          smartMode: true,
+        });
+        mode = 'makeMathField';
+        return true;
+      }
+    } catch (e) { console.warn('makeMathField', e); }
+    try {
+      host.innerHTML = '';
+      const el = document.createElement('math-field');
+      el.setAttribute('virtual-keyboard-mode', 'onfocus');
+      el.style.cssText = 'width:100%;font-size:22px;border:none;min-height:48px;';
+      host.appendChild(el);
+      mf = el;
+      mode = 'math-field';
+      return true;
+    } catch (e) { console.warn('math-field', e); }
+    host.innerHTML = '<p style="color:#b45309;font-size:12px;margin:0 0 6px;">MathLive tidak termuat — gunakan input LaTeX di bawah atau tombol pintasan.</p>';
+    mode = 'fallback';
+    return false;
+  }
+  tryInit();
+
   setTimeout(() => {
     try {
-      mf.focus();
-      if (mf.executeCommand) mf.executeCommand('showVirtualKeyboard');
+      if (mf && typeof mf.focus === 'function') mf.focus();
+      else if (mf && mf.focus) mf.focus();
+      if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('showVirtualKeyboard');
     } catch (e) {}
-  }, 100);
+  }, 200);
+
+  root.querySelectorAll('[data-ml-snippet]').forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.preventDefault();
+      const sn = btn.getAttribute('data-ml-snippet');
+      try {
+        if (mf && typeof mf.executeCommand === 'function') {
+          mf.executeCommand(['insert', sn]);
+          if (mf.focus) mf.focus();
+        } else if (mf && 'value' in mf) {
+          mf.value = String(mf.value || '') + sn.replace(/#@|#0/g, 'x');
+        } else {
+          const man = $('mathliveLatexManual');
+          if (man) man.value = (man.value || '') + sn.replace(/#@|#0/g, 'x');
+        }
+      } catch (e) {
+        const man = $('mathliveLatexManual');
+        if (man) man.value = (man.value || '') + sn.replace(/#@|#0/g, 'x');
+      }
+    };
+  });
 
   const close = () => {
-    try { if (mf.executeCommand) mf.executeCommand('hideVirtualKeyboard'); } catch (e) {}
+    try { if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('hideVirtualKeyboard'); } catch (e) {}
     root.remove();
   };
   root.addEventListener('click', (e) => { if (e.target === root) close(); });
   root.querySelector('#mathliveCancel').onclick = close;
   root.querySelector('#mathliveOk').onclick = () => {
     let latex = '';
-    try { latex = mf.getValue('latex') || mf.value || ''; } catch (e) { latex = mf.value || ''; }
-    latex = String(latex).trim();
+    try {
+      if (mf && typeof mf.getValue === 'function') latex = mf.getValue('latex');
+      else if (mf && mf.value != null) latex = String(mf.value);
+    } catch (e) {}
+    const manual = ($('mathliveLatexManual')?.value || '').trim();
+    if (manual) latex = manual; // prioritaskan manual jika diisi
+    latex = String(latex || '').trim();
     if (!latex) {
-      showBigPopup('warning', 'Rumus', 'Rumus masih kosong.');
+      showBigPopup('warning', 'Rumus', 'Rumus masih kosong. Ketik di kotak atau isi LaTeX manual.');
       return;
     }
     close();
@@ -4325,12 +4429,12 @@ function openMathLiveEditor(onInsert) {
 }
 
 function insertLatexIntoQuill(quill, latex) {
+  if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
   try {
     const htmlFormula = katex.renderToString(latex, { throwOnError: false, displayMode: true });
     const range = quill.getSelection(true) || { index: quill.getLength() };
-    // Simpan juga latex mentah di data-attribute agar bisa di-edit ulang nanti jika perlu
-    const block = '<span class="ql-formula-embed" data-latex="' +
-      latex.replace(/"/g, '&quot;') + '">&nbsp;' + htmlFormula + '&nbsp;</span>';
+    const safe = String(latex).replace(/&/g,'&amp;').replace(/"/g, '&quot;');
+    const block = '<span class="ql-formula-embed" data-latex="' + safe + '">&nbsp;' + htmlFormula + '&nbsp;</span>';
     quill.clipboard.dangerouslyPasteHTML(range.index, block);
     quill.setSelection(range.index + 1);
   } catch (err) {
