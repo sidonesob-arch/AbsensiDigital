@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
   const ASSETS_BASE_URL = './assets/';
   const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
@@ -33,6 +34,42 @@
   .fm-opsi-row .ql-toolbar.ql-snow { padding: 3px 4px; }
 
   .ql-formula-btn, .ql-video-btn { width: auto !important; padding: 0 6px !important; }
+
+  .ql-snow .ql-toolbar button.ql-table::before,
+  .ql-snow.ql-toolbar button.ql-table::before {
+    content: "▦";
+    font-size: 14px;
+    line-height: 1;
+    display: block;
+  }
+  .ql-snow .ql-toolbar button.ql-table { width: 28px; }
+  .ql-snow .ql-toolbar button.ql-chart::before,
+  .ql-snow.ql-toolbar button.ql-chart::before {
+    content: "📊";
+    font-size: 13px;
+    display: block;
+  }
+  .ql-snow .ql-toolbar button.ql-chart { width: 28px; }
+  .soal-html-content table.soal-table,
+  .ql-editor table.soal-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+  .soal-html-content table.soal-table th,
+  .soal-html-content table.soal-table td,
+  .ql-editor table.soal-table th,
+  .ql-editor table.soal-table td {
+    border: 1px solid #94a3b8;
+    padding: 6px 8px;
+  }
+  .soal-html-content table.soal-table th,
+  .ql-editor table.soal-table th {
+    background: #e8f0fe;
+    font-weight: 700;
+  }
+
 </style>
 <style>
 :root {
@@ -4039,6 +4076,169 @@ function loadUjianList() {
 // ===================== RICH EDITOR (Quill + KaTeX) =====================
 let activeSoalQuill = null;
 
+
+// Upload file ke Supabase Storage via edge function (bukan base64 di DB)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function uploadUjianMediaFile(file) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!file) return reject(new Error('File kosong'));
+      if (file.size > 2 * 1024 * 1024) return reject(new Error('Maksimal 2 MB'));
+      const dataUrl = await fileToBase64(file);
+      sendRequest({
+        action: 'upload_ujian_media',
+        dataBase64: dataUrl,
+        fileName: file.name || 'image.png',
+        contentType: file.type || 'image/png',
+      }, res => {
+        if (res.status === 'success' && res.url) resolve(res.url);
+        else reject(new Error(res.message || 'Upload gagal'));
+      });
+    } catch (e) { reject(e); }
+  });
+}
+
+function uploadUjianMediaDataUrl(dataUrl, fileName) {
+  return new Promise((resolve, reject) => {
+    sendRequest({
+      action: 'upload_ujian_media',
+      dataBase64: dataUrl,
+      fileName: fileName || 'chart.png',
+      contentType: 'image/png',
+    }, res => {
+      if (res.status === 'success' && res.url) resolve(res.url);
+      else reject(new Error(res.message || 'Upload gagal'));
+    });
+  });
+}
+
+function insertImageToQuill(quill) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.click();
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    showBigPopup('info', 'Upload', '⏳ Mengunggah gambar ke Storage...', 0);
+    try {
+      const url = await uploadUjianMediaFile(file);
+      closeBigPopup();
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+      quill.insertEmbed(range.index, 'image', url, 'user');
+      quill.setSelection(range.index + 1);
+    } catch (e) {
+      closeBigPopup();
+      showBigPopup('danger', 'Upload gagal', e.message || String(e));
+    }
+  };
+}
+
+function openChartBuilder(quill) {
+  const formHtml = `
+    <div class="form-group"><label>Jenis grafik:</label>
+      <select id="chartJenis">
+        <option value="bar">Batang (Bar)</option>
+        <option value="line">Garis (Line)</option>
+        <option value="pie">Lingkaran (Pie)</option>
+        <option value="doughnut">Donat (Doughnut)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Judul grafik:</label>
+      <input type="text" id="chartJudul" placeholder="Contoh: Hasil Percobaan">
+    </div>
+    <div class="form-group"><label>Label (pisahkan koma):</label>
+      <input type="text" id="chartLabels" placeholder="Jan, Feb, Mar, Apr">
+    </div>
+    <div class="form-group"><label>Nilai (pisahkan koma, urutan sama dengan label):</label>
+      <input type="text" id="chartValues" placeholder="10, 25, 15, 30">
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
+      <canvas id="chartPreviewCanvas" height="180"></canvas>
+    </div>
+    <button type="button" class="btn-primary btn-sm" style="margin-top:8px;" onclick="previewChartBuilder()">🔄 Preview</button>
+  `;
+  openFormModal('📊 Sisipkan Grafik', formHtml, async () => {
+    try {
+      const canvas = $('chartPreviewCanvas');
+      if (!canvas || !window._chartBuilderInstance) {
+        previewChartBuilder();
+      }
+      await new Promise(r => setTimeout(r, 100));
+      const c = $('chartPreviewCanvas');
+      const dataUrl = c.toDataURL('image/png');
+      showBigPopup('info', 'Upload', '⏳ Menyimpan grafik ke Storage...', 0);
+      const url = await uploadUjianMediaDataUrl(dataUrl, 'grafik_' + Date.now() + '.png');
+      closeBigPopup();
+      closeFormModal();
+      if (window._chartBuilderInstance) {
+        window._chartBuilderInstance.destroy();
+        window._chartBuilderInstance = null;
+      }
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+      quill.insertEmbed(range.index, 'image', url, 'user');
+      quill.setSelection(range.index + 1);
+      showBigPopup('success', 'Grafik', 'Grafik berhasil disisipkan.');
+    } catch (e) {
+      closeBigPopup();
+      showBigPopup('danger', 'Gagal', e.message || String(e));
+    }
+  });
+  setTimeout(() => {
+    $('formModalSaveBtn').innerText = '📥 Sisipkan ke Soal';
+    previewChartBuilder();
+  }, 80);
+}
+
+function previewChartBuilder() {
+  const jenis = $('chartJenis')?.value || 'bar';
+  const judul = $('chartJudul')?.value || '';
+  const labels = ($('chartLabels')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const values = ($('chartValues')?.value || '').split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+  const canvas = $('chartPreviewCanvas');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (window._chartBuilderInstance) {
+    window._chartBuilderInstance.destroy();
+    window._chartBuilderInstance = null;
+  }
+  const colors = ['#05285e','#0d9488','#f59e0b','#dc2626','#7c3aed','#16a34a','#ea580c','#2563eb'];
+  const bg = labels.map((_, i) => colors[i % colors.length]);
+  window._chartBuilderInstance = new Chart(canvas.getContext('2d'), {
+    type: jenis,
+    data: {
+      labels: labels.length ? labels : ['A', 'B', 'C'],
+      datasets: [{
+        label: judul || 'Data',
+        data: values.length ? values : [3, 7, 5],
+        backgroundColor: jenis === 'line' ? 'rgba(5,40,94,0.15)' : bg,
+        borderColor: jenis === 'line' ? '#05285e' : bg,
+        borderWidth: 2,
+        fill: jenis === 'line',
+        tension: 0.25,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: !!judul, text: judul },
+        legend: { display: jenis === 'pie' || jenis === 'doughnut' }
+      },
+      scales: (jenis === 'pie' || jenis === 'doughnut') ? {} : {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+
+
 function initSoalRichEditor(containerId, initialHtml) {
   const el = document.getElementById(containerId);
   if (!el) return null;
@@ -4050,7 +4250,7 @@ function initSoalRichEditor(containerId, initialHtml) {
     [{ color: [] }, { background: [] }],
     [{ list: 'ordered' }, { list: 'bullet' }],
     [{ align: [] }],
-    ['link', 'image', 'video'],
+    ['link', 'image', 'video', 'table', 'chart'],
     ['formula'],
     ['clean']
   ];
@@ -4060,27 +4260,32 @@ function initSoalRichEditor(containerId, initialHtml) {
       toolbar: {
         container: toolbarOptions,
         handlers: {
-          image: function () {
-            const input = document.createElement('input');
-            input.setAttribute('type', 'file');
-            input.setAttribute('accept', 'image/*');
-            input.click();
-            input.onchange = () => {
-              const file = input.files && input.files[0];
-              if (!file) return;
-              if (file.size > 2 * 1024 * 1024) {
-                showBigPopup('warning', 'Gambar terlalu besar', 'Maksimal 2 MB. Kompres dulu jika perlu.');
-                return;
+          table: function () {
+            const rows = parseInt(prompt('Jumlah baris tabel (termasuk header):', '3') || '0', 10);
+            const cols = parseInt(prompt('Jumlah kolom:', '3') || '0', 10);
+            if (!rows || !cols || rows < 1 || cols < 1) return;
+            if (rows > 20 || cols > 10) {
+              showBigPopup('warning', 'Tabel', 'Maksimal 20 baris × 10 kolom.');
+              return;
+            }
+            let table = '<table class="soal-table" style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px;">';
+            for (let r = 0; r < rows; r++) {
+              table += '<tr>';
+              for (let c = 0; c < cols; c++) {
+                const tag = r === 0 ? 'th' : 'td';
+                const style = 'border:1px solid #94a3b8;padding:6px 8px;' + (r === 0 ? 'background:#e8f0fe;font-weight:700;' : '');
+                const placeholder = r === 0 ? ('Kolom ' + (c + 1)) : '';
+                table += '<' + tag + ' style="' + style + '">' + placeholder + '</' + tag + '>';
               }
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                const range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', e.target.result, 'user');
-                quill.setSelection(range.index + 1);
-              };
-              reader.readAsDataURL(file);
-            };
+              table += '</tr>';
+            }
+            table += '</table><p><br></p>';
+            const range = quill.getSelection(true) || { index: quill.getLength() };
+            quill.clipboard.dangerouslyPasteHTML(range.index, table);
+            quill.setSelection(range.index + 1);
           },
+          image: function () { insertImageToQuill(quill); },
+          chart: function () { openChartBuilder(quill); },
           video: function () {
             const url = prompt('Tempel URL YouTube (atau link video):');
             if (!url) return;
@@ -4462,26 +4667,7 @@ function initMiniOpsiEditor(containerId) {
           ['clean']
         ],
         handlers: {
-          image: function () {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.click();
-            input.onchange = () => {
-              const file = input.files && input.files[0];
-              if (!file) return;
-              if (file.size > 1.5 * 1024 * 1024) {
-                showBigPopup('warning', 'Gambar', 'Maksimal 1.5 MB untuk opsi.');
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                const range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', e.target.result, 'user');
-              };
-              reader.readAsDataURL(file);
-            };
-          },
+          image: function () { insertImageToQuill(quill); },
           formula: function () {
             const latex = prompt('Rumus LaTeX (contoh: H_2O atau x^2):');
             if (!latex) return;
