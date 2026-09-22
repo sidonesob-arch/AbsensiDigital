@@ -1037,7 +1037,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
       <!-- PANEL: IZIN SIDIK JARI -->
       <div class="pengaturan-panel" id="panel-izin">
-        <h4 class="panel-title">👆 Izin Sidik Jari & Izin Scan QR</h4>
+        <h4 class="panel-title">👆 Izin Sidik Jari, Scan QR & Ujian</h4>
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:6px 16px;" onclick="syncAllowedUsers()">🔄 Sinkronisasi</button>
           <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllUsers()">✅ Izinkan Semua (Sidik Jari)</button>
@@ -1055,16 +1055,21 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
                 <th>ID / NISN</th>
                 <th>Nama</th>
                 <th style="width:80px;">Role</th>
-                <th style="width:110px; text-align:center;">Izin Sidik Jari</th>
-                <th style="width:110px; text-align:center;">Izin Scan QR</th>
+                <th style="width:100px; text-align:center;">Izin Sidik Jari</th>
+                <th style="width:100px; text-align:center;">Izin Scan QR</th>
+                <th style="width:100px; text-align:center;">Izin Ujian</th>
               </tr>
             </thead>
-            <tbody id="tableAllowedUsersBody"><tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr></tbody>
+            <tbody id="tableAllowedUsersBody"><tr><td colspan="7" style="text-align:center;">Memuat data...</td></tr></tbody>
           </table>
         </div>
         <p style="font-size:11px; color:var(--muted); margin-top:10px;">
-          ℹ️ <b>Izin Scan QR</b> hanya berlaku untuk guru. Jika dinonaktifkan, guru tersebut tidak dapat membuka kamera scanner untuk mengabsen siswa.
+          ℹ️ <b>Izin Scan QR</b> hanya untuk guru. <b>Izin Ujian</b> hanya untuk siswa — nonaktifkan untuk memblokir siswa dari ujian (manual), terpisah dari status Alpa/Bolos otomatis.
         </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="bulkUpdateAllowedUjian(true)">✅ Izinkan Semua Ujian (Siswa)</button>
+          <button class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="bulkUpdateAllowedUjian(false)">🚫 Blokir Semua Ujian (Siswa)</button>
+        </div>
       </div>
 
       <!-- PANEL: RESET SIDIK JARI -->
@@ -2531,6 +2536,8 @@ function loadAllowedUsers() {
     if (res.status === 'success' && res.data && res.data.length > 0) {
       tbody.innerHTML = res.data.map((item, idx) => {
         const isGuru = item.role === 'guru';
+        const isSiswa = item.role === 'siswa';
+        const ujianOn = item.allowed_ujian !== false;
         return `<tr>
           <td>${idx + 1}</td>
           <td><b>${item.id}</b></td>
@@ -2552,11 +2559,34 @@ function loadAllowedUsers() {
               </label>
             ` : '<span style="color:#999; font-size:10px;">—</span>'}
           </td>
+          <td style="text-align:center;">
+            ${isSiswa ? `
+              <label class="switch">
+                <input type="checkbox" ${ujianOn ? 'checked' : ''}
+                  onchange="updateAllowedUser('${item.id}', 'allowed_ujian', this.checked)">
+                <span class="slider"></span>
+              </label>
+            ` : '<span style="color:#999; font-size:10px;">—</span>'}
+          </td>
         </tr>`;
       }).join('');
     } else {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada data.</td></tr>';
     }
+  });
+}
+function bulkUpdateAllowedUjian(allow) {
+  sendRequest({ action: 'get_allowed_users' }, res => {
+    if (res.status !== 'success' || !res.data) return;
+    const siswa = res.data.filter(u => u.role === 'siswa');
+    if (!siswa.length) return showBigPopup('warning', 'Info', 'Tidak ada data siswa.');
+    siswa.forEach(u => {
+      sendRequest({ action: 'update_allowed_users', userId: u.id, allowed_ujian: allow }, () => {});
+    });
+    setTimeout(() => {
+      loadAllowedUsers();
+      showBigPopup('success', 'Berhasil', allow ? 'Semua siswa diizinkan ujian.' : 'Semua siswa diblokir dari ujian.');
+    }, 900);
   });
 }
 function updateAllowedUser(userId, field, value) {
@@ -5089,11 +5119,24 @@ function loadUjianTersediaSiswa() {
     if (res.status !== 'success') { list.innerHTML = `<p style="color:red;">${res.message}</p>`; return; }
     const data = res.data || [];
     if (!data.length) { list.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">Tidak ada ujian aktif saat ini.</p>'; return; }
-    list.innerHTML = data.map(u => {
+    // Banner kehadiran
+    let banner = '';
+    if (res.kehadiran_hari_ini && res.kehadiran_hari_ini.blocked) {
+      banner = `<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;">
+        🚫 <b>Akses ujian diblokir</b><br>${res.kehadiran_hari_ini.reason || 'Status Alpa/Bolos hari ini.'}
+      </div>`;
+    }
+    list.innerHTML = banner + data.map(u => {
       let btn = '';
-      if (u.ongoing_id) btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Lanjutkan</button>`;
-      else if (u.bisa_mulai) btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Mulai</button>`;
-      else btn = `<span style="font-size:11px;color:#666;">Sudah dikerjakan (${u.attempt_selesai}/${u.max_attempt})</span>`;
+      if (u.blokir_kehadiran) {
+        btn = `<span style="font-size:11px;color:#b91c1c;font-weight:700;">🚫 Diblokir (Alpa/Bolos)</span>`;
+      } else if (u.ongoing_id) {
+        btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Lanjutkan</button>`;
+      } else if (u.bisa_mulai) {
+        btn = `<button class="btn-primary btn-sm" onclick="mulaiUjianSiswa('${u.id}')">▶️ Mulai</button>`;
+      } else {
+        btn = `<span style="font-size:11px;color:#666;">Sudah dikerjakan (${u.attempt_selesai}/${u.max_attempt})</span>`;
+      }
       const skor = u.last_skor ? ` · Skor terakhir: ${u.last_skor.skor}/${u.last_skor.skor_max}` : '';
       return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
         <div style="font-weight:800;color:var(--primary);">${u.judul}</div>
