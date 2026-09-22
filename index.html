@@ -8,10 +8,26 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script>
   const ASSETS_BASE_URL = './assets/';
   const PROFILE_IMAGES_PATH = ASSETS_BASE_URL + 'images/profiles/';
 </script>
+<style>
+  .ql-toolbar.ql-snow { border-radius: 8px 8px 0 0; border-color: var(--border, #d0dbe8); background: #f8fafc; }
+  .ql-container.ql-snow { border-radius: 0 0 8px 8px; border-color: var(--border, #d0dbe8); min-height: 140px; font-size: 14px; background: #fff; }
+  .ql-editor { min-height: 120px; }
+  .ql-editor img { max-width: 100%; height: auto; }
+  .ql-editor iframe { max-width: 100%; }
+  .soal-html-content img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; }
+  .soal-html-content iframe { max-width: 100%; border-radius: 6px; margin: 6px 0; }
+  .soal-html-content .katex { font-size: 1.05em; }
+  .ql-formula-btn, .ql-video-btn { width: auto !important; padding: 0 6px !important; }
+</style>
 <style>
 :root {
   --primary: #05285e;
@@ -1870,7 +1886,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   }
   if (menuName === 'input-nilai') loadFilterInputNilaiWithGuru();
   if (menuName === 'daftar-nilai') loadFilterDaftarNilaiWithGuru();
-  if (menuName === 'ujian-kelola') loadUjianList();
+  if (menuName === 'ujian-kelola') { loadKelasUnik(); loadMapelUnik(); loadUjianList(); }
   if (menuName === 'ujian-siswa') loadUjianTersediaSiswa();
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
@@ -2105,20 +2121,32 @@ function loadOpsiKelas() {
     if (dlKelas) dlKelas.innerHTML = '<option value="">-- Semua --</option>' + opts;
   });
 }
-function loadKelasUnik() {
+function loadKelasUnik(callback) {
   sendRequest({ action: 'get_kelas' }, res => {
-    if (res.status !== 'success') return;
-    kelasUnikCache = res.data || [];
-    const opts = kelasUnikCache.map(k => `<option value="${k}">${k}</option>`).join('');
-    const filterSiswa = $('siswaFilterKelas');
-    if (filterSiswa) filterSiswa.innerHTML = '<option value="">-- Semua --</option>' + opts;
-    const qrKelas = $('qrFilterKelas');
-    if (qrKelas) qrKelas.innerHTML = '<option value="">-- Semua Kelas --</option>' + opts;
+    if (res.status === 'success') {
+      kelasUnikCache = res.data || [];
+      const opts = kelasUnikCache.map(k => `<option value="${k}">${k}</option>`).join('');
+      const filterSiswa = $('siswaFilterKelas');
+      if (filterSiswa) filterSiswa.innerHTML = '<option value="">-- Semua --</option>' + opts;
+      const qrKelas = $('qrFilterKelas');
+      if (qrKelas) qrKelas.innerHTML = '<option value="">-- Semua Kelas --</option>' + opts;
+      // refresh daftar nilai / input filters if present
+      ['filterDaftarNilaiKelas', 'filterInputNilaiKelas', 'rekapKelas', 'downloadKelas'].forEach(id => {
+        const el = $(id);
+        if (el && el.tagName === 'SELECT') {
+          const cur = el.value;
+          el.innerHTML = '<option value="">-- Semua --</option>' + opts;
+          if (cur) el.value = cur;
+        }
+      });
+    }
+    if (typeof callback === 'function') callback(kelasUnikCache);
   });
 }
-function loadMapelUnik() {
+function loadMapelUnik(callback) {
   sendRequest({ action: 'get_mapel_unik' }, res => {
     if (res.status === 'success') mapelUnikCache = res.data || [];
+    if (typeof callback === 'function') callback(mapelUnikCache);
   });
 }
 
@@ -4001,46 +4029,175 @@ function loadUjianList() {
   });
 }
 
+
+// ===================== RICH EDITOR (Quill + KaTeX) =====================
+let activeSoalQuill = null;
+
+function initSoalRichEditor(containerId, initialHtml) {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  el.innerHTML = '';
+  // Custom toolbar buttons
+  const toolbarOptions = [
+    [{ header: [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ color: [] }, { background: [] }],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ align: [] }],
+    ['link', 'image', 'video'],
+    ['formula'],
+    ['clean']
+  ];
+  const quill = new Quill('#' + containerId, {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: toolbarOptions,
+        handlers: {
+          image: function () {
+            const input = document.createElement('input');
+            input.setAttribute('type', 'file');
+            input.setAttribute('accept', 'image/*');
+            input.click();
+            input.onchange = () => {
+              const file = input.files && input.files[0];
+              if (!file) return;
+              if (file.size > 2 * 1024 * 1024) {
+                showBigPopup('warning', 'Gambar terlalu besar', 'Maksimal 2 MB. Kompres dulu jika perlu.');
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', e.target.result, 'user');
+                quill.setSelection(range.index + 1);
+              };
+              reader.readAsDataURL(file);
+            };
+          },
+          video: function () {
+            const url = prompt('Tempel URL YouTube (atau link video):');
+            if (!url) return;
+            let embed = url.trim();
+            // Convert youtu.be / watch?v= to embed
+            const yt = embed.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
+            if (yt) embed = 'https://www.youtube.com/embed/' + yt[1];
+            const range = quill.getSelection(true) || { index: quill.getLength() };
+            quill.insertEmbed(range.index, 'video', embed, 'user');
+            quill.setSelection(range.index + 1);
+          },
+          formula: function () {
+            const latex = prompt('Tulis rumus LaTeX (contoh: x^2 + y^2 = r^2 atau \\\\frac{a}{b}):');
+            if (!latex) return;
+            try {
+              const html = katex.renderToString(latex, { throwOnError: false, displayMode: true });
+              const range = quill.getSelection(true) || { index: quill.getLength() };
+              quill.clipboard.dangerouslyPasteHTML(range.index, '<span class="ql-formula-embed">&nbsp;' + html + '&nbsp;</span>');
+            } catch (err) {
+              showBigPopup('danger', 'Formula error', err.message);
+            }
+          }
+        }
+      }
+    },
+    placeholder: 'Tulis soal di sini… bisa sisipkan gambar, video YouTube, dan rumus matematika (Σ).'
+  });
+  if (initialHtml) {
+    quill.root.innerHTML = initialHtml;
+  }
+  activeSoalQuill = quill;
+  return quill;
+}
+
+function getSoalRichHtml() {
+  if (!activeSoalQuill) return '';
+  return activeSoalQuill.root.innerHTML;
+}
+
+function renderSoalHtml(html) {
+  if (!html) return '';
+  // Jika plain text tanpa tag, escape
+  if (html.indexOf('<') === -1) {
+    return html.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+  return html;
+}
+
+function enhanceSoalHtmlInDom(rootEl) {
+  if (!rootEl || typeof renderMathInElement !== 'function') return;
+  try {
+    renderMathInElement(rootEl, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+        { left: '\\(', right: '\\)', display: false },
+        { left: '\\[', right: '\\]', display: true }
+      ],
+      throwOnError: false
+    });
+  } catch (e) { console.warn('katex render', e); }
+}
+
+
 function openFormUjianBaru() {
   ujianEditId = null;
-  const guruDefault = (userRole === 'guru' && userData) ? (userData.nama || '') : '';
-  const mapelOpts = ((userRole === 'guru' && userData && userData.mapel) ? userData.mapel : mapelUnikCache || []).map(m => `<option value="${m}">${m}</option>`).join('');
-  const kelasOpts = (kelasUnikCache || []).map(k => `<label><input type="checkbox" data-ukelas value="${k}"> ${k}</label>`).join('');
-  const html = `
-    <div class="form-group"><label>Judul Ujian:</label><input type="text" id="fmUjJudul" placeholder="Contoh: Ulangan Harian 1 Matematika"></div>
-    <div class="form-group"><label>Mapel:</label>
-      <select id="fmUjMapel"><option value="">-- Pilih --</option>${mapelOpts}</select>
-      <input type="text" id="fmUjMapelManual" placeholder="Atau ketik mapel baru" style="margin-top:6px;">
-    </div>
-    <div class="form-group"><label>Guru:</label><input type="text" id="fmUjGuru" value="${guruDefault}" ${userRole==='guru'?'readonly style="background:#f0f0f0;"':''}></div>
-    <div class="form-group"><label>Kelas (kosong = semua):</label><div class="checkbox-grid" id="fmUjKelas">${kelasOpts || '<span style="font-size:11px;color:#666;">Belum ada kelas</span>'}</div></div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <div class="form-group" style="flex:1;min-width:100px;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="60" min="5"></div>
-      <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / UTS / NH1"></div>
-      <div class="form-group" style="flex:1;min-width:100px;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="1" min="1"></div>
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <div class="form-group" style="flex:1;"><label>Waktu Mulai:</label><input type="datetime-local" id="fmUjMulai"></div>
-      <div class="form-group" style="flex:1;"><label>Waktu Selesai:</label><input type="datetime-local" id="fmUjSelesai"></div>
-    </div>
-    <div class="form-group"><label>Status:</label>
-      <select id="fmUjStatus"><option value="draft">Draft</option><option value="aktif">Aktif</option><option value="selesai">Selesai</option></select>
-    </div>
-    <div class="form-group" style="display:flex;gap:16px;">
-      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakSoal" checked> Acak urutan soal</label>
-      <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakOpsi" checked> Acak opsi jawaban</label>
-    </div>
-    <div class="form-group"><label>Petunjuk:</label><textarea id="fmUjPetunjuk" rows="2" placeholder="Petunjuk untuk siswa..."></textarea></div>
-  `;
-  openFormModal('➕ Buat Ujian Baru', html, submitFormUjian);
-  if (!mapelUnikCache || !mapelUnikCache.length) loadMapelUnik();
-  if (!kelasUnikCache || !kelasUnikCache.length) loadKelasUnik();
+  const buildAndShow = () => {
+    const guruDefault = (userRole === 'guru' && userData) ? (userData.nama || '') : '';
+    const mapelSrc = (userRole === 'guru' && userData && userData.mapel && userData.mapel.length)
+      ? userData.mapel : (mapelUnikCache || []);
+    const mapelOpts = mapelSrc.map(m => `<option value="${m}">${m}</option>`).join('');
+    const kelasOpts = (kelasUnikCache || []).map(k =>
+      `<label><input type="checkbox" data-ukelas value="${k}"> ${k}</label>`
+    ).join('');
+    const formHtml = `
+      <div class="form-group"><label>Judul Ujian:</label><input type="text" id="fmUjJudul" placeholder="Contoh: Ulangan Harian 1 Matematika"></div>
+      <div class="form-group"><label>Mapel:</label>
+        <select id="fmUjMapel"><option value="">-- Pilih --</option>${mapelOpts}</select>
+        <input type="text" id="fmUjMapelManual" placeholder="Atau ketik mapel baru" style="margin-top:6px;">
+      </div>
+      <div class="form-group"><label>Guru:</label><input type="text" id="fmUjGuru" value="${guruDefault}" ${userRole==='guru'?'readonly style="background:#f0f0f0;"':''}></div>
+      <div class="form-group"><label>Kelas (kosong = semua):</label>
+        <div class="checkbox-grid" id="fmUjKelas">${kelasOpts || '<span style="font-size:11px;color:#666;">Belum ada data kelas di database siswa</span>'}</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:100px;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="60" min="5"></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / UTS / NH1"></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="1" min="1"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;"><label>Waktu Mulai:</label><input type="datetime-local" id="fmUjMulai"></div>
+        <div class="form-group" style="flex:1;"><label>Waktu Selesai:</label><input type="datetime-local" id="fmUjSelesai"></div>
+      </div>
+      <div class="form-group"><label>Status:</label>
+        <select id="fmUjStatus"><option value="draft">Draft</option><option value="aktif">Aktif</option><option value="selesai">Selesai</option></select>
+      </div>
+      <div class="form-group" style="display:flex;gap:16px;">
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakSoal" checked> Acak urutan soal</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="fmUjAcakOpsi" checked> Acak opsi jawaban</label>
+      </div>
+      <div class="form-group"><label>Petunjuk:</label><textarea id="fmUjPetunjuk" rows="2" placeholder="Petunjuk untuk siswa..."></textarea></div>
+    `;
+    openFormModal('➕ Buat Ujian Baru', formHtml, submitFormUjian);
+  };
+  // Pastikan kelas & mapel sudah ter-load sebelum buka form
+  const needKelas = !kelasUnikCache || !kelasUnikCache.length;
+  const needMapel = !mapelUnikCache || !mapelUnikCache.length;
+  if (needKelas || needMapel) {
+    showBigPopup('info', 'Memuat', '⏳ Memuat daftar kelas/mapel...', 0);
+    let pending = (needKelas ? 1 : 0) + (needMapel ? 1 : 0);
+    const done = () => { pending--; if (pending <= 0) { closeBigPopup(); buildAndShow(); } };
+    if (needKelas) loadKelasUnik(done); else done();
+    if (needMapel) loadMapelUnik(done); else done();
+  } else {
+    buildAndShow();
+  }
 }
 
 function editUjianMeta(id) {
   const u = ujianListCache.find(x => String(x.id) === String(id));
   if (!u) return showBigPopup('danger', 'Error', 'Ujian tidak ditemukan.');
   ujianEditId = id;
+  const showEdit = () => {
   const kelasArr = Array.isArray(u.kelas) ? u.kelas : [];
   const mapelOpts = (mapelUnikCache || []).map(m => `<option value="${m}" ${m===u.mapel?'selected':''}>${m}</option>`).join('');
   const kelasOpts = (kelasUnikCache || []).map(k => `<label><input type="checkbox" data-ukelas value="${k}" ${kelasArr.includes(k)?'checked':''}> ${k}</label>`).join('');
@@ -4077,6 +4234,11 @@ function editUjianMeta(id) {
     <div class="form-group"><label>Petunjuk:</label><textarea id="fmUjPetunjuk" rows="2">${u.petunjuk||''}</textarea></div>
   `;
   openFormModal('✏️ Edit Ujian', html, submitFormUjian);
+  };
+  if (!kelasUnikCache || !kelasUnikCache.length) {
+    showBigPopup('info', 'Memuat', '⏳ Memuat daftar kelas...', 0);
+    loadKelasUnik(() => { closeBigPopup(); showEdit(); });
+  } else showEdit();
 }
 
 function submitFormUjian() {
@@ -4151,10 +4313,11 @@ function loadUjianSoalList() {
             <button class="btn-danger" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div style="margin:8px 0;font-size:13px;">${s.pertanyaan}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(s.pertanyaan)}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
+    enhanceSoalHtmlInDom(box);
   });
 }
 
@@ -4169,7 +4332,9 @@ function openFormSoalBaru() {
         <option value="esai">Esai</option>
       </select>
     </div>
-    <div class="form-group"><label>Pertanyaan:</label><textarea id="fmSoalTanya" rows="3" placeholder="Tulis pertanyaan..."></textarea></div>
+    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(bisa gambar, video YouTube, rumus Σ)</span></label>
+      <div id="fmSoalTanyaEditor" style="background:#fff;"></div>
+    </div>
     <div class="form-group"><label>Poin:</label><input type="number" id="fmSoalPoin" value="1" min="0.5" step="0.5" style="width:100px;"></div>
     <div id="fmSoalOpsiArea">
       <label>Opsi (centang = kunci jawaban):</label>
@@ -4182,7 +4347,11 @@ function openFormSoalBaru() {
     </div>
   `;
   openFormModal('➕ Tambah Soal', html, submitFormSoal);
-  setTimeout(() => { tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); toggleSoalOpsiUI(); }, 50);
+  setTimeout(() => {
+    tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi(); tambahBarisOpsi();
+    toggleSoalOpsiUI();
+    initSoalRichEditor('fmSoalTanyaEditor', '');
+  }, 80);
 }
 
 function toggleSoalOpsiUI() {
@@ -4202,9 +4371,10 @@ function tambahBarisOpsi() {
 
 function submitFormSoal() {
   const jenis = $('fmSoalJenis').value;
-  const pertanyaan = $('fmSoalTanya').value.trim();
+  const pertanyaan = (getSoalRichHtml() || '').trim();
+  const plain = pertanyaan.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
   const poin = $('fmSoalPoin').value;
-  if (!pertanyaan) return showBigPopup('warning', 'Peringatan', 'Pertanyaan wajib diisi.');
+  if (!plain) return showBigPopup('warning', 'Peringatan', 'Pertanyaan wajib diisi.');
   const opsi = [];
   if (jenis === 'pg' || jenis === 'checkbox') {
     document.querySelectorAll('#fmSoalOpsiList > div').forEach(row => {
@@ -4371,10 +4541,11 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div style="margin-bottom:10px;font-size:14px;line-height:1.45;">${s.pertanyaan}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(s.pertanyaan)}</div>
       ${body}
     </div>`;
   }).join('');
+  enhanceSoalHtmlInDom(box);
 }
 
 function collectJawabanUjian() {
