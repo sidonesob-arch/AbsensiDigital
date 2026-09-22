@@ -4918,7 +4918,8 @@ Jelaskan perbedaan antara mitokondria dan kloroplas!</div>
   <li>Opsi PG/Checkbox: baris diawali <b>A.</b> <b>B.</b> <b>C.</b> … (huruf + titik)</li>
   <li>Kunci PG/Checkbox: tambahkan <b>*</b> di akhir opsi yang benar</li>
   <li>Benar/Salah: baris <b>KUNCI: BENAR</b> atau <b>KUNCI: SALAH</b></li>
-  <li>Gambar dari Word: teks tetap terimport; gambar perlu ditambahkan manual di editor jika diperlukan</li>
+  <li>Gambar, grafik (sebagai gambar), dan tabel di Word <b>ikut terimport</b> otomatis ke soal</li>
+  <li>Letakkan gambar/tabel di bagian PERTANYAAN (sebelum opsi A/B/C/D)</li>
 </ul>
 </body></html>`;
 
@@ -4939,7 +4940,8 @@ function openImportSoalModal() {
       <div style="margin-top:6px;line-height:1.5;">
         Format: <code>SOAL</code> → <code>JENIS</code> → <code>POIN</code> → <code>PERTANYAAN</code> → opsi A/B/C…<br>
         Kunci PG/Checkbox: tandai dengan <b>*</b> di akhir opsi.<br>
-        JENIS: <b>PG</b> | <b>CHECKBOX</b> | <b>BENAR_SALAH</b> | <b>ESAI</b>
+        JENIS: <b>PG</b> | <b>CHECKBOX</b> | <b>BENAR_SALAH</b> | <b>ESAI</b><br>
+        <b>Gambar, grafik &amp; tabel</b> di Word ikut terambil (taruh di bagian pertanyaan, sebelum opsi).
       </div>
       <button type="button" class="btn-sm" style="margin-top:8px;background:#0d9488;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="downloadTemplateSoal()">📄 Unduh Template</button>
     </div>
@@ -4953,26 +4955,38 @@ function openImportSoalModal() {
   openFormModal('📥 Import Soal dari Word', html, submitImportSoal);
 }
 
+
 function previewImportSoal(ev) {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
   const name = (file.name || '').toLowerCase();
   const box = $('importSoalPreview');
 
-  const done = (text) => {
-    const parsed = parseSoalFromText(text);
+  const done = (textOrHtml, isHtml) => {
+    const parsed = isHtml ? parseSoalFromHtml(textOrHtml) : parseSoalFromText(textOrHtml);
     window._importSoalParsed = parsed;
     if (!parsed.length) {
       box.innerHTML = '<p style="color:#dc2626;">Tidak ada soal yang terbaca. Pastikan format sesuai template (SOAL, JENIS, PERTANYAAN, opsi A/B/C).</p>';
       return;
     }
     const jenisLabel = { pg: 'PG', checkbox: 'Checkbox', benar_salah: 'B/S', esai: 'Esai' };
-    box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal</p>` +
+    const mediaCount = parsed.reduce((n, s) => {
+      const h = s.pertanyaan || '';
+      return n + (h.match(/<img\b/gi) || []).length + (h.match(/<table\b/gi) || []).length;
+    }, 0);
+    box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal` +
+      (mediaCount ? ` · <span style="color:#0d9488;">${mediaCount} media (gambar/tabel) ikut terbawa</span>` : '') +
+      `</p>` +
       parsed.slice(0, 12).map((s, i) => {
-        const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => o.teks.replace(/<[^>]+>/g,'').slice(0,40));
+        const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => String(o.teks || '').replace(/<[^>]+>/g,'').slice(0,40));
+        const hasImg = /<img\b/i.test(s.pertanyaan || '');
+        const hasTbl = /<table\b/i.test(s.pertanyaan || '');
+        const mediaBadge = (hasImg || hasTbl)
+          ? ` <span style="font-size:10px;color:#0d9488;">[${hasImg ? '🖼' : ''}${hasTbl ? '▦' : ''}]</span>`
+          : '';
         return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
-          <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —
-          ${(s.pertanyaan||'').replace(/<[^>]+>/g,' ').slice(0,80)}…
+          <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
+          ${(s.pertanyaan||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,80)}…
           ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.join(' | ')}</span>` : ''}
           ${s.jenis==='benar_salah' ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${s.kunci_bs}</span>` : ''}
         </div>`;
@@ -4982,27 +4996,45 @@ function previewImportSoal(ev) {
 
   if (name.endsWith('.txt') || name.endsWith('.text')) {
     const reader = new FileReader();
-    reader.onload = () => done(String(reader.result || ''));
+    reader.onload = () => done(String(reader.result || ''), false);
     reader.readAsText(file);
     return;
   }
 
-  // .docx / .doc via mammoth
   if (typeof mammoth === 'undefined') {
     box.innerHTML = '<p style="color:#dc2626;">Library mammoth belum termuat. Cek koneksi internet atau gunakan file .txt.</p>';
     return;
   }
-  box.innerHTML = '<p>⏳ Membaca file Word…</p>';
+  box.innerHTML = '<p>⏳ Membaca file Word (teks + gambar + tabel)…</p>';
   const reader = new FileReader();
   reader.onload = async () => {
     try {
-      const result = await mammoth.extractRawText({ arrayBuffer: reader.result });
-      done(result.value || '');
+      const arrayBuffer = reader.result;
+      // HTML lengkap: gambar jadi data-URL, tabel tetap HTML
+      const htmlResult = await mammoth.convertToHtml(
+        { arrayBuffer },
+        {
+          convertImage: mammoth.images.imgElement(function (image) {
+            return image.read('base64').then(function (imageBuffer) {
+              return {
+                src: 'data:' + image.contentType + ';base64,' + imageBuffer
+              };
+            });
+          })
+        }
+      );
+      const htmlVal = htmlResult.value || '';
+      if (htmlVal.trim()) {
+        done(htmlVal, true);
+        return;
+      }
+      // fallback teks
+      const textResult = await mammoth.extractRawText({ arrayBuffer });
+      done(textResult.value || '', false);
     } catch (e) {
-      // fallback: try as text
       try {
         const t = new TextDecoder().decode(reader.result);
-        done(t);
+        done(t, false);
       } catch (e2) {
         box.innerHTML = `<p style="color:#dc2626;">Gagal membaca file: ${e.message}</p>`;
       }
@@ -5010,6 +5042,147 @@ function previewImportSoal(ev) {
   };
   reader.readAsArrayBuffer(file);
 }
+
+/** Ubah HTML Word → daftar soal; pertahankan img & table di pertanyaan */
+function parseSoalFromHtml(html) {
+  if (!html) return [];
+  // Sisipkan newline di batas blok agar pola SOAL/opsi tetap terbaca
+  let work = String(html)
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/&nbsp;/gi, ' ');
+
+  // Versi teks untuk deteksi struktur
+  const tmp = document.createElement('div');
+  tmp.innerHTML = work;
+  // Jangan hapus img/table dari HTML asli — parse struktur dari textContent per blok
+
+  // Split HTML mentah berdasarkan teks "SOAL"
+  // Strategi: ekstrak plain text dengan marker posisi, atau split dengan regex pada teks lalu map media
+  const plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
+  const fromText = parseSoalFromText(plain);
+  if (!fromText.length) return [];
+
+  // Ambil potongan HTML per soal: split string HTML di kemunculan "SOAL"
+  const htmlParts = splitHtmlBySoalMarker(work);
+  fromText.forEach((s, i) => {
+    const part = htmlParts[i] || '';
+    if (!part) return;
+    // Ambil konten kaya: img, table, dan paragraf pertanyaan (buang meta & opsi murni teks)
+    const rich = extractRichPertanyaanFromHtmlPart(part, s);
+    if (rich) s.pertanyaan = rich;
+  });
+  return fromText;
+}
+
+function splitHtmlBySoalMarker(html) {
+  // Pecah di posisi teks SOAL (case insensitive) — tetap jaga tag
+  const re = /SOAL\b/gi;
+  const idxs = [];
+  let m;
+  while ((m = re.exec(html)) !== null) idxs.push(m.index);
+  if (!idxs.length) return [html];
+  const parts = [];
+  for (let i = 0; i < idxs.length; i++) {
+    const start = idxs[i];
+    const end = i + 1 < idxs.length ? idxs[i + 1] : html.length;
+    parts.push(html.slice(start, end));
+  }
+  return parts;
+}
+
+function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
+  const box = document.createElement('div');
+  box.innerHTML = partHtml;
+
+  // Hapus teks meta murni di node teks (JENIS:, POIN:, SOAL n)
+  const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  textNodes.forEach(node => {
+    let t = node.nodeValue || '';
+    t = t.replace(/^\s*SOAL\b[^\n]*/i, '');
+    t = t.replace(/\bJENIS\s*[:：]\s*\S+/gi, '');
+    t = t.replace(/\bPOIN\s*[:：]\s*[\d.,]+/gi, '');
+    t = t.replace(/\bPERTANYAAN\s*[:：]\s*/gi, '');
+    t = t.replace(/\bKUNCI\s*[:：]\s*(BENAR|SALAH|TRUE|FALSE|B|S)/gi, '');
+    node.nodeValue = t;
+  });
+
+  // Kumpulkan HTML: prioritas img & table utuh + paragraf yang bukan opsi A/B/C
+  const chunks = [];
+  const pushEl = (el) => {
+    if (!el) return;
+    const html = el.outerHTML || '';
+    if (html) chunks.push(html);
+  };
+
+  box.querySelectorAll('img').forEach(img => {
+    // bungkus agar aman di editor
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    pushEl(img);
+  });
+  box.querySelectorAll('table').forEach(tbl => {
+    tbl.classList.add('soal-table');
+    tbl.style.borderCollapse = 'collapse';
+    tbl.style.width = '100%';
+    tbl.querySelectorAll('td,th').forEach(c => {
+      c.style.border = c.style.border || '1px solid #94a3b8';
+      c.style.padding = c.style.padding || '6px 8px';
+    });
+    pushEl(tbl);
+  });
+
+  // Teks pertanyaan: dari plain yang sudah di-parse (tanpa opsi)
+  let textQ = (soalMeta && soalMeta.pertanyaan) ? String(soalMeta.pertanyaan) : '';
+  // textQ mungkin sudah berisi <br>
+  textQ = textQ.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+
+  let out = '';
+  if (textQ) out += textQ.replace(/\n/g, '<br>');
+  if (chunks.length) {
+    out += (out ? '<br>' : '') + chunks.join('<br>');
+  }
+  // Jika tidak ada teks tapi ada media, tetap pakai media
+  if (!out && soalMeta && soalMeta.pertanyaan) out = soalMeta.pertanyaan;
+  return out || (soalMeta ? soalMeta.pertanyaan : '');
+}
+
+/** Upload semua data:image/... di HTML ke Storage, ganti src jadi URL publik */
+async function uploadEmbeddedDataImages(html) {
+  if (!html || html.indexOf('data:image') === -1) return html;
+  const re = /(<img\b[^>]*\bsrc\s*=\s*)(["'])(data:image\/[^"']+)\2/gi;
+  const matches = [];
+  let m;
+  const copy = String(html);
+  while ((m = re.exec(copy)) !== null) {
+    matches.push({ full: m[0], prefix: m[1], quote: m[2], dataUrl: m[3], index: m.index });
+  }
+  if (!matches.length) return html;
+
+  let result = html;
+  // unikkan dataUrl agar tidak upload dobel
+  const map = new Map();
+  for (let i = 0; i < matches.length; i++) {
+    const dataUrl = matches[i].dataUrl;
+    if (map.has(dataUrl)) continue;
+    try {
+      const url = await uploadUjianMediaDataUrl(dataUrl, 'soal_import_' + Date.now() + '_' + i + '.png');
+      map.set(dataUrl, url);
+    } catch (e) {
+      console.warn('upload embed gagal', e);
+      // biarkan data-url jika gagal (masih tampil, tapi boros DB)
+      map.set(dataUrl, dataUrl);
+    }
+  }
+  map.forEach((url, dataUrl) => {
+    // replace all occurrences of this dataUrl as img src
+    result = result.split(dataUrl).join(url);
+  });
+  return result;
+}
+
 
 function parseSoalFromText(raw) {
   if (!raw) return [];
@@ -5171,7 +5344,7 @@ async function submitImportSoal() {
   if (!list.length) return showBigPopup('warning', 'Peringatan', 'Tidak ada soal untuk diimport. Pilih file sesuai template.');
   if (!ujianSoalUjianId) return showBigPopup('danger', 'Error', 'Ujian tidak aktif.');
 
-  showBigPopup('info', 'Import', `⏳ Menyimpan ${list.length} soal...`, 0);
+  showBigPopup('info', 'Import', `⏳ Menyimpan ${list.length} soal (upload media bila ada)...`, 0);
   let ok = 0, fail = 0;
   const errors = [];
 
@@ -5181,17 +5354,32 @@ async function submitImportSoal() {
       fail++; errors.push(`#${i+1}: tidak ada opsi`); continue;
     }
     if ((s.jenis === 'pg' || s.jenis === 'checkbox') && !s.opsi.some(o => o.is_benar)) {
-      // PG tanpa kunci → tandai opsi A sebagai kunci agar tetap tersimpan, beri peringatan
       if (s.opsi.length) s.opsi[0].is_benar = true;
       errors.push(`#${i+1}: kunci tidak ditandai *, default opsi pertama`);
     }
+
+    // Upload gambar embedded (data-url) → Storage
+    let pertanyaan = s.pertanyaan || '';
+    try {
+      pertanyaan = await uploadEmbeddedDataImages(pertanyaan);
+    } catch (e) {
+      errors.push(`#${i+1}: media ${e.message || e}`);
+    }
+    // Opsi juga bisa berisi gambar (jarang dari Word)
+    const opsi = [];
+    for (const o of (s.opsi || [])) {
+      let teks = o.teks || '';
+      try { teks = await uploadEmbeddedDataImages(teks); } catch (e) {}
+      opsi.push({ teks, is_benar: !!o.is_benar });
+    }
+
     const payload = {
       action: 'ujian_soal_save',
       ujian_id: ujianSoalUjianId,
       jenis: s.jenis,
-      pertanyaan: s.pertanyaan,
+      pertanyaan,
       poin: s.poin,
-      opsi: s.opsi || [],
+      opsi,
       kunci_bs: s.kunci_bs || 'benar',
     };
     try {
@@ -5215,6 +5403,7 @@ async function submitImportSoal() {
   showBigPopup(fail && !ok ? 'danger' : (fail ? 'warning' : 'success'), 'Import Soal', msg);
   loadUjianSoalList();
 }
+
 
 
 function openFormSoalBaru() {
