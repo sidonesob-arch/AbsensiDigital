@@ -5549,7 +5549,12 @@ function parseSoalFromHtml(html) {
     }
   });
 
-  // Fallback: dokumen punya gambar tapi tidak satu pun menempel ke soal → tempel ke soal pertama
+  
+  fromText.forEach(s => {
+    if (s.pertanyaan) s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+  });
+
+// Fallback: dokumen punya gambar tapi tidak satu pun menempel ke soal → tempel ke soal pertama
   const anyImgInSoal = fromText.some(s => /<img\b/i.test(s.pertanyaan || ''));
   if (!anyImgInSoal && allImgs.length && fromText.length) {
     const imgsHtml = allImgs.map(src =>
@@ -5662,6 +5667,89 @@ async function uploadEmbeddedDataImages(html) {
   return { html: result, uploaded, failed, errors };
 }
 
+
+
+function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
+  if (!pertanyaan) return '';
+  let p = String(pertanyaan);
+  const tmp = document.createElement('div');
+  tmp.innerHTML = p;
+  const plain = (tmp.innerText || tmp.textContent || p).replace(/\s+/g, ' ').trim();
+
+  // Cari awal daftar opsi: " A. ... B. ..."
+  let cutAt = -1;
+  const re = /\s([A-H])\s*[.、．\)]\s+\S/gi;
+  let m;
+  while ((m = re.exec(plain)) !== null) {
+    const tail = plain.slice(m.index);
+    const letters = [...tail.matchAll(/\b([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
+    const uniq = [...new Set(letters)];
+    if (uniq.length >= 2 || (opsi && opsi.length >= 2 && uniq.length >= 1)) {
+      cutAt = m.index;
+      break;
+    }
+  }
+
+  let cutPlain = plain;
+  if (cutAt > 5) {
+    cutPlain = plain.slice(0, cutAt).trim().replace(/[\s.…]+$/, '').trim();
+    if (cutPlain && !/[.?!…]$/.test(cutPlain)) cutPlain += ' ....';
+  }
+
+  // HTML: hapus node opsi + potong text node
+  if (/<[^>]+>/.test(p)) {
+    const box = document.createElement('div');
+    box.innerHTML = p;
+    box.querySelectorAll('p, span, div, li').forEach(el => {
+      if (el.querySelector('img, table, .ql-formula-embed, .katex, .math-fallback')) return;
+      if (el.classList && (el.classList.contains('ql-formula-embed') || el.classList.contains('math-fallback'))) return;
+      const t = (el.textContent || '').trim();
+      if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 120) el.remove();
+    });
+    const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    while (tw.nextNode()) nodes.push(tw.currentNode);
+    nodes.forEach(node => {
+      let t = node.nodeValue || '';
+      const idx = t.search(/\s[A-H]\s*[.、．\)]\s+/i);
+      if (idx >= 0) {
+        const tail = t.slice(idx);
+        if (/\b[B-H]\s*[.、．\)]\s+/i.test(tail) || (opsi && opsi.length >= 2)) {
+          t = t.slice(0, idx).replace(/[\s.…]+$/, '');
+          if (t && !/[.?!…]$/.test(t.trim())) t = t.trim() + ' ....';
+          node.nodeValue = t;
+        }
+      }
+    });
+    // Ambil formula/img yang masih ada
+    const formulas = [...box.querySelectorAll('.ql-formula-embed, .math-fallback, img, table')].map(el => el.outerHTML);
+    const textLeft = (box.innerText || '').replace(/\s+/g, ' ').trim();
+
+    // Jika masih ada jejak "A. B. C." di textLeft, pakai cutPlain + formula
+    if (/\b[A-H]\s*[.、．\)]\s+\S/.test(textLeft) && cutAt > 5) {
+      const head = cutPlain.replace(/\s*adalah.*$/i, '').trim() || cutPlain;
+      const hasAdalah = /adalah/i.test(cutPlain) || /adalah/i.test(plain);
+      if (formulas.length) {
+        return head + ' ' + formulas.join(' ') + (hasAdalah ? ' adalah ....' : ' ....');
+      }
+      return cutPlain;
+    }
+    // Jika formula ada dan text pendek, gabungkan
+    if (formulas.length && cutAt > 5) {
+      const head = cutPlain.replace(/\s*adalah.*$/i, '').trim();
+      const hasAdalah = /adalah/i.test(cutPlain) || /adalah/i.test(plain);
+      // Hindari dobel formula jika cutPlain sudah cukup
+      const onlyText = textLeft.replace(/\s+/g, ' ').trim();
+      if (!/\b[A-H]\s*[.、．\)]\s+/.test(onlyText)) {
+        return box.innerHTML.trim();
+      }
+      return (head || 'Soal') + ' ' + formulas.join(' ') + (hasAdalah ? ' adalah ....' : ' ....');
+    }
+    return box.innerHTML.trim() || cutPlain;
+  }
+
+  return cutPlain || p;
+}
 
 function parseSoalFromText(raw) {
   if (!raw) return [];
@@ -5807,12 +5895,33 @@ function parseSoalFromText(raw) {
       is_benar: !!o.is_benar,
     }));
 
+    if ((jenis === 'pg' || jenis === 'checkbox') && opsi.length) {
+
+
+      pertanyaan = stripOpsiTrailingFromPertanyaan(pertanyaan, opsi);
+
+
+    }
+
+
     result.push({
+
+
       jenis,
+
+
       poin,
+
+
       pertanyaan: pertanyaan.replace(/\n/g, '<br>'),
+
+
       opsi,
+
+
       kunci_bs,
+
+
     });
   }
   return result;
