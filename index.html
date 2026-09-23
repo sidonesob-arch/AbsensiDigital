@@ -4752,16 +4752,45 @@ function initSoalRichEditor(containerId, initialHtml) {
     placeholder: 'Tulis soal di sini… bisa sisipkan gambar, video YouTube, dan rumus matematika (Σ).'
   });
   if (initialHtml) {
-    // Pertahankan rumus: jika pure text rusak, rapikan dulu
+    // SELALU konversi ke teks editable bersih (unicode √ / ²).
+    // Jangan inject HTML KaTeX mentah ke Quill — Quill merusak struktur → pangkat/akar hilang.
     let boot = initialHtml;
-    if (!/<span[^>]*ql-formula-embed|<img\b/i.test(boot)) {
-      boot = formulaHtmlToEditableText(boot);
+    const hasImg = /<img\b/i.test(boot);
+    const hasTable = /<table\b/i.test(boot);
+    if (hasImg || hasTable) {
+      // Pertahankan media; rumus di-convert ke teks unicode di dalam
+      try {
+        const box = document.createElement('div');
+        box.innerHTML = boot;
+        // Convert formula embeds → unicode text nodes
+        box.querySelectorAll('.ql-formula-embed, [data-latex], .katex, .math-fallback').forEach(el => {
+          const tmp = formulaHtmlToEditableText(el.outerHTML || el.textContent || '');
+          el.replaceWith(document.createTextNode(tmp || ''));
+        });
+        // Plain text nodes residual
+        const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(n => {
+          let t = n.nodeValue || '';
+          if (/√|\^|\\sqrt|\d+\s+\d/.test(t)) {
+            t = repairCorruptedSqrtText(stripBrokenMathMlFragments(t));
+            n.nodeValue = t;
+          }
+        });
+        boot = box.innerHTML;
+      } catch (e) {
+        boot = formulaHtmlToEditableText(boot);
+      }
     } else {
-      // pastikan data-latex tetap; Quill kadang mengupas .katex → re-wrap
-      boot = initialHtml;
+      // Pure text / formula only → plain unicode bersih
+      boot = formulaHtmlToEditableText(boot);
     }
-    quill.root.innerHTML = boot;
-    setTimeout(function(){ try { enhanceSoalHtmlInDom(quill.root); } catch(e){} }, 30);
+    // Escape safety: pastikan tidak ada sisa tag MathML
+    if (typeof boot === 'string' && !hasImg && !hasTable) {
+      boot = boot.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    quill.root.innerHTML = boot ? ('<p>' + boot + '</p>') : '';
   }
   activeSoalQuill = quill;
   return quill;
@@ -6079,6 +6108,18 @@ function formulaHtmlToEditableText(html) {
   plain = stripBrokenMathMlFragments(plain);
   plain = repairCorruptedSqrtText(plain);
   plain = stripGluedOptionsFromText(plain);
+  // Tampilkan unicode agar mudah dibaca/diedit di form
+  plain = plain
+    .replace(/(\d*)\\sqrt\{([^{}]+)\}/g, (_, c, inner) => (c || '') + '√' + inner)
+    .replace(/\\sqrt\{([^{}]+)\}/g, '√$1')
+    .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
+      const sups = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+      return a + String(b).split('').map(x => sups[x] || x).join('');
+    })
+    .replace(/(\d+)\^(\d+)/g, (_, a, b) => {
+      const sups = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+      return a + String(b).split('').map(x => sups[x] || x).join('');
+    });
   return plain;
 }
 
@@ -6267,17 +6308,28 @@ function repairCorruptedSqrtText(s) {
     // 75:737^{5}7^{3}75:73 → 7^{5}:7^{3} (kasar)
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1\2\1\s*\^\s*\{(\d+)\}\s*\1\s*\^\s*\{(\d+)\}\s*\1\2\s*[:\/]\s*\1\d*/g, '$1^{$3}:$1^{$4}');
     // 75 : 73^{5} : 7^{3}75 : 73  →  7^{5} : 7^{3}
-    // Pola Word: base+exp digabung jadi "75", "73", lalu residual "7^{3}"
-    // ab : a c ^{b} : a ^{c}  →  a^{b} : a^{c}
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\s*\^\s*\{(\2)\}\s*[:\/]\s*\1\s*\^\s*\{(\3)\}(?:\s*\1\2)?(?:\s*[:\/]\s*\1\3)?/g, '$1^{$2} : $1^{$3}');
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\^\{(\2)\}\s*[:\/]\s*\1\^\{(\3)\}(?:\s*\1\2)?(?:\s*[:\/]\s*\1\3)?/g, '$1^{$2} : $1^{$3}');
-    // Sisa setelah partial repair: 75 : 73^{5} : 7^{3} → 7^{5} : 7^{3}
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\s*\^\s*\{(\2)\}\s*[:\/]\s*\1\s*\^\s*\{(\3)\}/g, '$1^{$2} : $1^{$3}');
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\^\{(\2)\}\s*[:\/]\s*\1\^\{(\3)\}/g, '$1^{$2} : $1^{$3}');
+    // Tanpa brace: 75:73^5:7^375:73  atau 75737^5:7^375:73
+    // ab : a c ^ b : a ^ c  (dengan residual)
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\s*\^\s*(\2)\s*[:\/]\s*\1\s*\^\s*(\3)(?:\s*\1\2)?(?:\s*[:\/]\s*\1\3)?/g, '$1^{$2} : $1^{$3}');
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\^(\2)\s*[:\/]\s*\1\^(\3)(?:\1\2)?(?:[:\/]\1\3)?/g, '$1^{$2}:$1^{$3}');
+    // Glued: 75737^5:7^375:73 → 7^5 : 7^3
+    t = t.replace(/(\d)(\d)\1(\d)\^(\2)\s*[:\/]\s*\1\^(\3)(?:\1\2)?(?:[:\/]\1\3)?/g, '$1^{$2}:$1^{$3}');
+    t = t.replace(/(\d)(\d)\1(\d)\s*\^\s*(\2)\s*[:\/]\s*\1\s*\^\s*(\3)/g, '$1^{$2} : $1^{$3}');
     // 7^{5} : 7^{3}75 : 73 → 7^{5} : 7^{3}
     t = t.replace(/(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})\s*\d+\s*[:\/]\s*\d+/g, '$1');
     t = t.replace(/(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})\d+(?:\s*[:\/]\s*\d+)*/g, '$1');
-    // 2^(5) / 2^ (5) sudah ditangani di repairAtom; pastikan sisa
+    // Sisa prefix "75 : 7^{5} : 7^{3}" → "7^{5} : 7^{3}"
+    t = t.replace(/\b\d{2,}\s*[:\/]\s*(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})/g, '$1');
+    t = t.replace(/\b\d{2,}[|:\s]+(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})/g, '$1');
+    // Perbaiki 7^{375} yang salah parse dari 7^3 75 → 7^{3}
+    t = t.replace(/(\d+)\^\{(\d)(\d{2,})\}/g, function(_, base, d1, rest) {
+      if (rest.indexOf(base + d1) === 0 || rest.indexOf(base) >= 0) return base + '^{' + d1 + '}';
+      return base + '^{' + d1 + rest + '}';
+    });
     t = t.replace(/(\d+)\s*\^\s*\(\s*(\d+)\s*\)/g, '$1^{$2}');
     t = t.replace(/\s{2,}/g, ' ');
     if (t === before) break;
