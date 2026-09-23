@@ -76,6 +76,7 @@
     margin: 0 !important;
     text-align: left !important;
   }
+  .uji-opsi-teks .katex, .soal-html-content .katex { font-size: 1.1em; }
   .uji-opsi-teks img {
     max-width: 100%;
     height: auto;
@@ -4678,18 +4679,85 @@ function renderSoalHtml(html) {
 }
 
 function enhanceSoalHtmlInDom(rootEl) {
-  if (!rootEl || typeof renderMathInElement !== 'function') return;
+  if (!rootEl) return;
   try {
-    renderMathInElement(rootEl, {
-      delimiters: [
-        { left: '$$', right: '$$', display: true },
-        { left: '$', right: '$', display: false },
-        { left: '\\(', right: '\\)', display: false },
-        { left: '\\[', right: '\\]', display: true }
-      ],
-      throwOnError: false
+    rootEl.querySelectorAll('.ql-formula-embed[data-latex]').forEach(el => {
+      if (el.querySelector('.katex')) return;
+      const latex = el.getAttribute('data-latex') || '';
+      if (!latex || typeof katex === 'undefined') return;
+      try {
+        el.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+      } catch (e) {}
     });
+    rootEl.querySelectorAll('code.math-latex').forEach(el => {
+      const latex = (el.textContent || '').trim();
+      if (!latex || typeof katex === 'undefined') return;
+      try {
+        const span = document.createElement('span');
+        span.className = 'ql-formula-embed';
+        span.setAttribute('data-latex', latex);
+        span.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+        el.replaceWith(span);
+      } catch (e) {}
+    });
+    rootEl.querySelectorAll('.uji-opsi-teks, .soal-html-content').forEach(el => {
+      if (el.querySelector('.katex, .ql-formula-embed, img, table')) return;
+      const plain = (el.textContent || '').trim();
+      if (!plain || plain.length > 200) return;
+      if (plain.indexOf('\\') < 0) return;
+      if (!/\\(frac|left|right|sqrt|sum|int|times)/.test(plain)) return;
+      const latex = sanitizeToSingleLatex(plain);
+      if (!latex || typeof katex === 'undefined') return;
+      try {
+        el.innerHTML = '<span class="ql-formula-embed" data-latex="' +
+          latex.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '">' +
+          katex.renderToString(latex, { throwOnError: false, displayMode: false }) +
+          '</span>';
+      } catch (e) {}
+    });
+    if (typeof renderMathInElement === 'function') {
+      renderMathInElement(rootEl, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true }
+        ],
+        throwOnError: false
+      });
+    }
   } catch (e) { console.warn('katex render', e); }
+}
+
+function sanitizeToSingleLatex(text) {
+  let s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  if (s.indexOf('\\') < 0) return s;
+  // Ambil segmen latex paling lengkap
+  let best = '';
+  const re = /\\(?:frac|left|sqrt|sum|int)[^]*$/;
+  const m = s.match(re);
+  if (m) best = m[0].trim();
+  else {
+    const idx = s.indexOf('\\');
+    best = s.slice(idx).trim();
+  }
+  // Buang duplikasi teks di ekor setelah latex selesai (pola: ...=4\right(-2)2=4)
+  best = best.replace(/\\right\s*\([^)]*\)\s*=\s*-?\d+\s*$/g, '');
+  best = best.replace(/\\right(?!\s*[\).\}])/g, '\\right)');
+  // Jika ada dua persamaan, ambil yang mengandung latex command
+  if ((best.match(/=/g) || []).length > 1) {
+    const parts = best.split(/(?<=\d)\s+(?=[\\\(-\d])/);
+    const withSlash = parts.filter(p => p.indexOf('\\') >= 0);
+    if (withSlash.length) best = withSlash[0].trim();
+  }
+  // Prefix sampah "(-2)3=4" sebelum \left
+  const li = best.search(/\\(?:left|frac|sqrt)/);
+  if (li > 0) {
+    const pre = best.slice(0, li).trim();
+    if (/^[0-9().=\s\-a-zA-Z]*$/.test(pre)) best = best.slice(li).trim();
+  }
+  return best.trim();
 }
 
 
@@ -5390,7 +5458,6 @@ function parseSoalFromHtml(html) {
     const rich = extractRichPertanyaanFromHtmlPart(part, s);
     if (rich) s.pertanyaan = rich;
 
-    // Jika soal ini belum punya gambar, tapi part-nya punya → pastikan ikut
     const partBox = document.createElement('div');
     partBox.innerHTML = part;
     const partImgs = [...partBox.querySelectorAll('img')].map(im => im.getAttribute('src')).filter(Boolean);
@@ -5400,6 +5467,27 @@ function parseSoalFromHtml(html) {
         `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
       ).join('');
       s.pertanyaan = (s.pertanyaan || '') + imgsHtml;
+    }
+
+    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
+      s.opsi = s.opsi.map((o) => {
+        let teks = o.teks || '';
+        const plain = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (plain.indexOf('\\') >= 0 && /\\(frac|left|right|sqrt|sum|int)/.test(plain)) {
+          const latex = sanitizeToSingleLatex(plain);
+          if (latex && typeof katex !== 'undefined') {
+            try {
+              teks = '<span class="ql-formula-embed" data-latex="' +
+                latex.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '">' +
+                katex.renderToString(latex, { throwOnError: false, displayMode: false }) +
+                '</span>';
+            } catch (e) { teks = latex; }
+          } else if (latex) {
+            teks = latex;
+          }
+        }
+        return { teks, is_benar: !!o.is_benar };
+      });
     }
   });
 
