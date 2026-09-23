@@ -4620,22 +4620,66 @@ function insertLatexIntoQuill(quill, latex) {
     var clean = normalizeLatexFromMathLive(latex);
     if (!clean) return showBigPopup("warning", "Rumus", "LaTeX kosong.");
     var range = quill.getSelection(true) || { index: quill.getLength() };
-    var uni = latexToUnicodeSimple(clean);
-    // Selalu pakai unicode jika konversi berhasil & pendek (akar, pecahan, pangkat)
-    var isComplex = /\\(sum|int|prod|lim|begin)/.test(clean);
-    if (uni && uni.length < 60 && !isComplex && uni.indexOf('\\') < 0) {
-      quill.insertText(range.index, uni + " ", "user");
-      quill.setSelection(range.index + uni.length + 1);
+
+    // Akar & pecahan WAJIB KaTeX agar garis akar memanjang menutupi angka
+    // (Unicode √ tidak memanjang → √50 / √(a+b) salah dibaca)
+    var needsKatex = /\\(sqrt|frac|sum|int|prod|lim|over|binom)/.test(clean)
+      || /[_^]/.test(clean)
+      || /[{}]/.test(clean);
+
+    if (!needsKatex) {
+      // Hanya simbol/pangkat sangat sederhana → unicode OK
+      var uni = latexToUnicodeSimple(clean);
+      if (uni && uni.indexOf('\\') < 0) {
+        quill.insertText(range.index, uni + " ", "user");
+        quill.setSelection(range.index + uni.length + 1);
+        return;
+      }
+    }
+
+    if (typeof katex === "undefined") {
+      var fallback = latexToUnicodeSimple(clean) || clean;
+      quill.insertText(range.index, fallback + " ", "user");
       return;
     }
-    // Rumus kompleks: KaTeX
-    var htmlFormula = katex.renderToString(clean, { throwOnError: false, displayMode: false, strict: false });
+
+    var htmlFormula = katex.renderToString(clean, {
+      throwOnError: false,
+      displayMode: false,
+      strict: false
+    });
     var safe = clean.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    // data-latex disimpan agar saat simpan/tampil ulang tetap bisa di-render dengan akar memanjang
     var block = '<span class="ql-formula-embed" data-latex="' + safe +
-      '" contenteditable="false" style="display:inline-block;margin:0 3px;vertical-align:middle;">' +
-      htmlFormula + "</span>&nbsp;";
+      '" contenteditable="false" style="display:inline-block;margin:0 3px;vertical-align:middle;user-select:all;">' +
+      htmlFormula + '</span>\u00a0';
+
     quill.clipboard.dangerouslyPasteHTML(range.index, block);
-    setTimeout(function() { try { quill.setSelection(range.index + 2); } catch (e) {} }, 30);
+
+    // Pastikan data-latex tidak hilang setelah Quill memproses
+    setTimeout(function () {
+      try {
+        var embeds = quill.root.querySelectorAll(".ql-formula-embed, .katex");
+        embeds.forEach(function (el) {
+          var host = el.classList.contains("ql-formula-embed") ? el : el.closest(".ql-formula-embed");
+          if (!host) {
+            // Bungkus ulang jika Quill mengupas span
+            if (el.classList.contains("katex") && !el.closest("[data-latex]")) {
+              var wrap = document.createElement("span");
+              wrap.className = "ql-formula-embed";
+              wrap.setAttribute("data-latex", clean);
+              wrap.setAttribute("contenteditable", "false");
+              wrap.style.cssText = "display:inline-block;margin:0 3px;vertical-align:middle;";
+              el.parentNode.insertBefore(wrap, el);
+              wrap.appendChild(el);
+            }
+            return;
+          }
+          if (!host.getAttribute("data-latex")) host.setAttribute("data-latex", clean);
+        });
+        quill.setSelection(range.index + 2);
+      } catch (e) {}
+    }, 40);
   } catch (err) {
     showBigPopup("danger", "Formula error", err.message || String(err));
   }
