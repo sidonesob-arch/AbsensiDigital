@@ -4575,72 +4575,69 @@ function openMathLiveEditor(onInsert) {
 
 function normalizeLatexFromMathLive(raw) {
   let s = cleanMathInput(raw);
-  if (!s) return '';
-  s = s.replace(/^\\displaystyle\\s*/, '').replace(/^\\textstyle\\s*/, '');
-  // \\sqrt3 → \\sqrt{3}
-  s = s.replace(/\\sqrt\\s*([0-9a-zA-Z])/g, '\\sqrt{$1}');
-  s = s.replace(/\\sqrt\\s*\\{/g, '\\sqrt{');
-  s = s.replace(/\\^(\\d{2,})/g, '^{$1}');
+  if (!s) return "";
+  s = s.replace(/^\\displaystyle\s*/, "");
+  s = s.replace(/^\\textstyle\s*/, "");
+  s = s.replace(/\\sqrt\s*([0-9a-zA-Z])/g, "\\sqrt{$1}");
+  s = s.replace(/\\sqrt\s*\{/g, "\\sqrt{");
+  s = s.replace(/\^(\d{2,})/g, "^{$1}");
   return s.trim();
 }
 
 function latexToUnicodeSimple(latex) {
   let s = normalizeLatexFromMathLive(latex);
-  if (!s) return '';
-  s = s.replace(/\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}/g, '($1/$2)');
-  s = s.replace(/(\\d*)\\sqrt\\{([^{}]+)\\}/g, function(_, coef, inner) {
-    return (coef || '') + '√' + inner;
+  if (!s) return "";
+  s = s.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1/$2)");
+  s = s.replace(/(\d*)\\sqrt\{([^{}]+)\}/g, function(_, coef, inner) {
+    return (coef || "") + "√" + inner;
   });
-  s = s.replace(/\\sqrt\\{([^{}]+)\\}/g, '√$1');
-  const supMap = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
-  s = s.replace(/\\^\\{([0-9]+)\\}/g, function(_, digits) {
-    return digits.split('').map(function(d){ return supMap[d] || d; }).join('');
+  s = s.replace(/\\sqrt\{([^{}]+)\}/g, "√$1");
+  var supMap = { "0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹" };
+  s = s.replace(/\^\{([0-9]+)\}/g, function(_, digits) {
+    return digits.split("").map(function(d){ return supMap[d] || d; }).join("");
   });
-  s = s.replace(/\\^([0-9])/g, function(_, d) { return supMap[d] || d; });
-  s = s.replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\pm/g, '±');
-  s = s.replace(/\\leq/g, '≤').replace(/\\geq/g, '≥').replace(/\\neq/g, '≠');
-  s = s.replace(/\\pi/g, 'π').replace(/\\theta/g, 'θ').replace(/\\alpha/g, 'α').replace(/\\beta/g, 'β');
-  s = s.replace(/\\cdot/g, '·').replace(/\\left/g, '').replace(/\\right/g, '');
-  s = s.replace(/[{}]/g, '');
+  s = s.replace(/\^([0-9])/g, function(_, d) { return supMap[d] || d; });
+  s = s.replace(/\\times/g, "×");
+  s = s.replace(/\\div/g, "÷");
+  s = s.replace(/\\pm/g, "±");
+  s = s.replace(/\\leq/g, "≤");
+  s = s.replace(/\\geq/g, "≥");
+  s = s.replace(/\\neq/g, "≠");
+  s = s.replace(/\\pi/g, "π");
+  s = s.replace(/\\theta/g, "θ");
+  s = s.replace(/\\alpha/g, "α");
+  s = s.replace(/\\beta/g, "β");
+  s = s.replace(/\\cdot/g, "·");
+  s = s.replace(/\\left/g, "");
+  s = s.replace(/\\right/g, "");
+  s = s.replace(/[{}]/g, "");
   return s.trim();
 }
 
 function insertLatexIntoQuill(quill, latex) {
-  if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
+  if (!quill) return showBigPopup("danger", "Error", "Editor soal tidak aktif.");
   try {
-    const clean = normalizeLatexFromMathLive(latex);
-    if (!clean) return showBigPopup('warning', 'Rumus', 'LaTeX kosong.');
-
-    // Deteksi apakah editor opsi (lebih aman pakai unicode sederhana)
-    const container = quill.root && quill.root.closest ? quill.root.closest('[id]') : null;
-    const isOpsiEditor = !!(quill.root && (
-      (quill.root.parentElement && /opsi|option/i.test(quill.root.parentElement.id || '')) ||
-      (quill.root.id && /opsi|option/i.test(quill.root.id)) ||
-      (quill.root.closest && quill.root.closest('.fm-opsi-row, .opsi-editor, [data-opsi]'))
-    ));
-
-    const range = quill.getSelection(true) || { index: quill.getLength() };
-    const uni = latexToUnicodeSimple(clean);
-
-    // Untuk opsi sederhana (2√3, √50, x²): sisipkan unicode agar tidak rusak
-    if (uni && uni.length < 40 && !/\\frac|\\sum|\\int/.test(clean)) {
-      quill.insertText(range.index, uni + ' ', 'user');
+    var clean = normalizeLatexFromMathLive(latex);
+    if (!clean) return showBigPopup("warning", "Rumus", "LaTeX kosong.");
+    var range = quill.getSelection(true) || { index: quill.getLength() };
+    var uni = latexToUnicodeSimple(clean);
+    // Selalu pakai unicode jika konversi berhasil & pendek (akar, pecahan, pangkat)
+    var isComplex = /\\(sum|int|prod|lim|begin)/.test(clean);
+    if (uni && uni.length < 60 && !isComplex && uni.indexOf('\\') < 0) {
+      quill.insertText(range.index, uni + " ", "user");
       quill.setSelection(range.index + uni.length + 1);
       return;
     }
-
-    // Soal / rumus kompleks: KaTeX embed
-    const htmlFormula = katex.renderToString(clean, { throwOnError: false, displayMode: false, strict: false });
-    const safe = clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    const block = '<span class="ql-formula-embed" data-latex="' + safe +
+    // Rumus kompleks: KaTeX
+    var htmlFormula = katex.renderToString(clean, { throwOnError: false, displayMode: false, strict: false });
+    var safe = clean.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    var block = '<span class="ql-formula-embed" data-latex="' + safe +
       '" contenteditable="false" style="display:inline-block;margin:0 3px;vertical-align:middle;">' +
-      htmlFormula + '</span>&nbsp;';
+      htmlFormula + "</span>&nbsp;";
     quill.clipboard.dangerouslyPasteHTML(range.index, block);
-    setTimeout(function() {
-      try { quill.setSelection(range.index + 2); } catch (e) {}
-    }, 30);
+    setTimeout(function() { try { quill.setSelection(range.index + 2); } catch (e) {} }, 30);
   } catch (err) {
-    showBigPopup('danger', 'Formula error', err.message || String(err));
+    showBigPopup("danger", "Formula error", err.message || String(err));
   }
 }
 
