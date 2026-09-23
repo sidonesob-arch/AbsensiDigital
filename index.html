@@ -5579,10 +5579,28 @@ function previewImportSoal(ev) {
         const mediaBadge = (hasImg || hasTbl)
           ? ` <span style="font-size:10px;color:#0d9488;">[${hasImg ? '🖼' : ''}${hasTbl ? '▦' : ''}]</span>`
           : '';
+        // Tampilkan preview: plain yang sudah diperbaiki (ganti ^{n} → superscript, \sqrt → √)
+        let prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(
+          (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+        )).trim();
+        prevPlain = prevPlain
+          .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
+            const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+            return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
+          })
+          .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+          .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
         return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
           <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
-          ${stripGluedOptionsFromText(repairCorruptedSqrtText((s.pertanyaan||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' '))).slice(0,90)}…
-          ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.map(k => repairCorruptedSqrtText(k)).join(' | ')}</span>` : ''}
+          ${prevPlain.slice(0, 100)}${prevPlain.length > 100 ? '…' : ''}
+          ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.map(k => {
+            let kk = repairCorruptedSqrtText(k);
+            kk = kk.replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
+              const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+              return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
+            }).replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+            return kk;
+          }).join(' | ')}</span>` : ''}
           ${s.jenis==='benar_salah' ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${s.kunci_bs}</span>` : ''}
         </div>`;
       }).join('') +
@@ -5718,41 +5736,49 @@ function parseSoalFromHtml(html) {
     //     Jangan overwrite dengan latex mentah dari HTML.
     // === FINAL CLEAN: selalu kerjakan di PLAIN text (HTML bisa menyisipkan tag di tengah rumus) ===
     (function finalizeSoal(s) {
-      // Pertanyaan
+      // Pertanyaan — prioritaskan HTML formula bagus (OMML→KaTeX embed)
+      const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
+      const hasGoodFormula = /ql-formula-embed|data-latex|class="katex"/i.test(s.pertanyaan || '');
       let pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       pPlain = repairCorruptedSqrtText(pPlain);
       pPlain = stripGluedOptionsFromText(pPlain);
-      const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
-      const hasGoodFormula = /ql-formula-embed|data-latex/i.test(s.pertanyaan || '');
-      // Jika tidak ada media/formula bagus, atau plain masih berisi pola rusak / opsi nempel → pakai plain bersih
-      if (!hasMedia) {
-        if (!hasGoodFormula || /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|adalah\s*\.{0,4}\s*\d/i.test(pPlain)) {
-          s.pertanyaan = pPlain;
-        } else {
-          // tetap strip opsi nempel dari HTML via plain
-          s.pertanyaan = pPlain;
-        }
-      } else {
+      const stillCorrupt = /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|\d+\\sqrt\{\d+\}\d|adalah\s*\.{0,4}\s*\d/i.test(pPlain);
+
+      if (hasGoodFormula && !stillCorrupt) {
+        // Pertahankan embed KaTeX; hanya bersihkan opsi nempel di ujung
         s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      } else if (hasMedia) {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      } else {
+        // Konversi plain yang sudah diperbaiki → KaTeX HTML agar rumus tampil rapi
+        const asKatex = (typeof plainMathToKatexHtml === 'function')
+          ? plainMathToKatexHtml(pPlain) : pPlain;
+        s.pertanyaan = asKatex || pPlain;
       }
 
-      // Opsi
+      // Opsi — perbaiki + konversi ke KaTeX bila memungkinkan
       if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
         let list = s.opsi.map(o => {
-          let teks = String(o.teks || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-          teks = teks.replace(/[*＊]\s*$/g, '').trim();
-          teks = repairCorruptedSqrtText(teks);
-          // potong di label opsi berikutnya jika masih nyangkut
-          teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
-          teks = teks.replace(/\s+[B-H]\s*$/g, '').trim();
+          let teks = String(o.teks || '');
+          const oHasFormula = /ql-formula-embed|data-latex|class="katex"/i.test(teks);
+          if (!oHasFormula) {
+            teks = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            teks = teks.replace(/[*＊]\s*$/g, '').trim();
+            teks = repairCorruptedSqrtText(teks);
+            teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+            teks = teks.replace(/\s+[B-H]\s*$/g, '').trim();
+            if (typeof plainMathToKatexHtml === 'function') {
+              const k = plainMathToKatexHtml(teks);
+              if (k && /ql-formula-embed/.test(k)) teks = k;
+            }
+          }
           return { teks, is_benar: !!o.is_benar, letter: o.letter };
         });
         list = resplitMergedOpsi(list);
-        // Pastikan A-D berurutan, teks pendek
         s.opsi = list.map(o => ({
-          teks: repairCorruptedSqrtText(String(o.teks || '').replace(/<[^>]+>/g, ' ').trim()),
+          teks: o.teks,
           is_benar: !!o.is_benar
-        })).filter(o => o.teks);
+        })).filter(o => (o.teks || '').replace(/<[^>]+>/g, '').trim());
       }
     })(s);
 
@@ -6058,6 +6084,19 @@ function repairCorruptedSqrtText(s) {
     t = t.replace(/(\d+)\s+(\d+)\s*[:\/]\s*(\d+)\s+(\d+)\s+\1\^\{(\2)\}\s*[:\/]\s*\3\^\{(\4)\}/g, '$1^{$2}:$3^{$4}');
     // 75:737^{5}7^{3}75:73 → 7^{5}:7^{3} (kasar)
     t = t.replace(/(\d)(\d)\s*[:\/]\s*\1\2\1\s*\^\s*\{(\d+)\}\s*\1\s*\^\s*\{(\d+)\}\s*\1\2\s*[:\/]\s*\1\d*/g, '$1^{$3}:$1^{$4}');
+    // 75 : 73^{5} : 7^{3}75 : 73  →  7^{5} : 7^{3}
+    // Pola Word: base+exp digabung jadi "75", "73", lalu residual "7^{3}"
+    // ab : a c ^{b} : a ^{c}  →  a^{b} : a^{c}
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\s*\^\s*\{(\2)\}\s*[:\/]\s*\1\s*\^\s*\{(\3)\}(?:\s*\1\2)?(?:\s*[:\/]\s*\1\3)?/g, '$1^{$2} : $1^{$3}');
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\^\{(\2)\}\s*[:\/]\s*\1\^\{(\3)\}(?:\s*\1\2)?(?:\s*[:\/]\s*\1\3)?/g, '$1^{$2} : $1^{$3}');
+    // Sisa setelah partial repair: 75 : 73^{5} : 7^{3} → 7^{5} : 7^{3}
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\s*\^\s*\{(\2)\}\s*[:\/]\s*\1\s*\^\s*\{(\3)\}/g, '$1^{$2} : $1^{$3}');
+    t = t.replace(/(\d)(\d)\s*[:\/]\s*\1(\d)\^\{(\2)\}\s*[:\/]\s*\1\^\{(\3)\}/g, '$1^{$2} : $1^{$3}');
+    // 7^{5} : 7^{3}75 : 73 → 7^{5} : 7^{3}
+    t = t.replace(/(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})\s*\d+\s*[:\/]\s*\d+/g, '$1');
+    t = t.replace(/(\d+\^\{\d+\}\s*[:\/]\s*\d+\^\{\d+\})\d+(?:\s*[:\/]\s*\d+)*/g, '$1');
+    // 2^(5) / 2^ (5) sudah ditangani di repairAtom; pastikan sisa
+    t = t.replace(/(\d+)\s*\^\s*\(\s*(\d+)\s*\)/g, '$1^{$2}');
     t = t.replace(/\s{2,}/g, ' ');
     if (t === before) break;
   }
@@ -6696,19 +6735,39 @@ async function submitImportSoal() {
       errors.push(`#${i+1}: kunci tidak ditandai *, default opsi pertama`);
     }
 
-    // FINAL CLEAN sebelum kirim ke backend (Supabase hanya menyimpan apa yang dikirim)
+    // FINAL CLEAN sebelum kirim ke backend — JANGAN buang embed KaTeX / rumus bagus
     if (s.pertanyaan) {
-      let p = String(s.pertanyaan).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      p = repairCorruptedSqrtText(p);
-      p = stripGluedOptionsFromText(p);
-      p = stripOpsiTrailingFromPertanyaan(p, s.opsi || []);
-      s.pertanyaan = p;
+      const hasGoodFormula = /ql-formula-embed|data-latex|class="katex"/i.test(s.pertanyaan);
+      const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan);
+      if (!hasGoodFormula && !hasMedia) {
+        let p = String(s.pertanyaan).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        p = repairCorruptedSqrtText(p);
+        p = stripGluedOptionsFromText(p);
+        p = stripOpsiTrailingFromPertanyaan(p, s.opsi || []);
+        // Konversi ke KaTeX HTML agar pangkat/akar tampil benar di ujian
+        if (typeof plainMathToKatexHtml === 'function') {
+          const k = plainMathToKatexHtml(p);
+          s.pertanyaan = (k && /ql-formula-embed/.test(k)) ? k : p;
+        } else {
+          s.pertanyaan = p;
+        }
+      } else {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      }
     }
     if (s.opsi && s.opsi.length) {
       s.opsi = s.opsi.map(o => {
-        let teks = String(o.teks || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        teks = repairCorruptedSqrtText(teks);
-        teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+        let teks = String(o.teks || '');
+        const oHasFormula = /ql-formula-embed|data-latex|class="katex"/i.test(teks);
+        if (!oHasFormula) {
+          teks = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          teks = repairCorruptedSqrtText(teks);
+          teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+          if (typeof plainMathToKatexHtml === 'function') {
+            const k = plainMathToKatexHtml(teks);
+            if (k && /ql-formula-embed/.test(k)) teks = k;
+          }
+        }
         return { teks, is_benar: !!o.is_benar };
       });
     }
