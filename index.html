@@ -4803,20 +4803,31 @@ function normalizeOpsiHtml(html) {
 
 function renderSoalHtml(html) {
   if (!html) return '';
-  // Jika plain text tanpa tag, rapikan opsi nempel + escape
+  // Jika plain text tanpa tag, rapikan opsi nempel + escape + konversi KaTeX bila memungkinkan
   if (html.indexOf('<') === -1) {
     let t = typeof stripGluedOptionsFromText === 'function' ? stripGluedOptionsFromText(html) : html;
     t = typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText(t) : t;
+    // Coba render KaTeX untuk pangkat/akar
+    if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d/.test(t)) {
+      const k = plainMathToKatexHtml(t);
+      if (k && /ql-formula-embed/.test(k)) return k;
+    }
     return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  // HTML: jika ada teks opsi nempel di akhir, coba bersihkan via plain
+  // HTML: selalu coba bersihkan plain di dalam jika tidak ada embed bagus
   try {
     const d = document.createElement('div');
     d.innerHTML = html;
     if (!d.querySelector('.katex, .ql-formula-embed, img, table')) {
       let t = (d.innerText || '').replace(/\s+/g, ' ').trim();
+      t = stripBrokenMathMlFragments(t);
       const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
-      if (cleaned.length < t.length - 3) {
+      // Selalu pakai cleaned jika berbeda ATAU masih ada pola residual
+      if (cleaned !== t || /\d+\^\{\d+\}\s+\d|\√\d+\d|adalah\.\.\./.test(cleaned)) {
+        if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d/.test(cleaned)) {
+          const k = plainMathToKatexHtml(cleaned);
+          if (k && /ql-formula-embed/.test(k)) return k;
+        }
         return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       }
     }
@@ -4846,14 +4857,25 @@ function enhanceSoalHtmlInDom(rootEl) {
         el.replaceWith(span);
       } catch (e) {}
     });
-        rootEl.querySelectorAll('.uji-opsi-teks, .soal-html-content').forEach(el => {
+    rootEl.querySelectorAll('.uji-opsi-teks, .soal-html-content').forEach(el => {
       if (el.querySelector('.katex, .ql-formula-embed, img, table')) return;
       let plain = (el.textContent || '').trim();
-      if (!plain || plain.length > 280) return;
+      if (!plain || plain.length > 400) return;
+      plain = stripBrokenMathMlFragments(plain);
       plain = repairCorruptedSqrtText(plain);
-      // Latex mentah
+      plain = stripGluedOptionsFromText(plain);
+      // Selalu update teks yang sudah diperbaiki (meski tanpa KaTeX)
+      const needsKatex = /√|\\sqrt|\^\{|\^\d|\\frac/.test(plain);
+      if (needsKatex && typeof plainMathToKatexHtml === 'function') {
+        const html = plainMathToKatexHtml(plain);
+        if (html && /ql-formula-embed/.test(html)) {
+          el.innerHTML = html;
+          return;
+        }
+      }
+      // Latex mentah penuh
       if (plain.indexOf('\\') >= 0 && /\\(frac|left|right|sqrt|sum|int|times)/.test(plain)) {
-        const latex = sanitizeToSingleLatex(plain);
+        const latex = typeof sanitizeToSingleLatex === 'function' ? sanitizeToSingleLatex(plain) : plain;
         if (latex && typeof katex !== 'undefined') {
           try {
             el.innerHTML = '<span class="ql-formula-embed" data-latex="' +
@@ -4864,12 +4886,9 @@ function enhanceSoalHtmlInDom(rootEl) {
           } catch (e) {}
         }
       }
-      // Unicode √ → KaTeX agar garis akar memanjang
-      if (plain.indexOf('√') >= 0) {
-        const html = plainMathToKatexHtml(plain);
-        if (html && /ql-formula-embed/.test(html)) {
-          el.innerHTML = html;
-        }
+      // Update plain yang sudah diperbaiki (buang residual angka)
+      if (plain !== (el.textContent || '').trim()) {
+        el.textContent = plain;
       }
     });
     if (typeof renderMathInElement === 'function') {
@@ -6247,13 +6266,40 @@ function repairCorruptedSqrtText(s) {
     if (t === before) break;
   }
 
+  // ===== Residual setelah latex bagus: "4^{2} × 4^{3} 4 2 × 4 3" → "4^{2} × 4^{3}" =====
+  // Hapus SEMUA sisa digit/operator setelah rangkaian n^{m} (×|:|/) n^{m}
+  for (let r = 0; r < 4; r++) {
+    const beforeR = t;
+    // "4^{2} × 4^{3} 4 2 × 4 3" atau "4^{2} × 4^{3} × 4 3"
+    t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)(?:\s*[×xX*·:\/]?\s*\d{1,3})+\b/g, '$1');
+    // tanpa spasi: 4^{2}×4^{3}42×43
+    t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)(?:\d{1,2}\s*[×xX*·:\/]\s*\d{1,2})+/g, '$1');
+    t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)\d{2,}(?:[×xX*·:\/]\d+)*/g, '$1');
+    // sisa operator tunggal di akhir: "4^{2} × 4^{3} ×"
+    t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)\s*[×xX*·:\/]\s*(?=adalah\b|\.{2,}|$)/gi, '$1');
+    if (t === beforeR) break;
+  }
+
+  // ===== √1625 → √16 (jika ada √25 di dekatnya: 25+16 digabung) =====
+  // √25 + √1625 → √25 + √16
+  t = t.replace(/√(\d+)\s*([+\-])\s*√(\d+)\1\b/g, '√$1 $2 √$3');
+  t = t.replace(/\\sqrt\{(\d+)\}\s*([+\-])\s*\\sqrt\{(\d+)\}\1\b/g, '\\sqrt{$1} $2 \\sqrt{$3}');
+  // √25 + √16 25 + 16 / √25 + √1625 + 16
+  t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s*(?:\d+\s*[+\-]\s*)+\d+\b/g, '$1 $2 $3');
+  t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s*[+\-]\s*\d+\b/g, '$1 $2 $3');
+  // Sisa angka setelah √n + √m di akhir sebelum "adalah"
+  t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s+\d+(?=\s*adalah|\s*\.{2,}|$)/gi, '$1 $2 $3');
+
   // Rapikan operator spacing
   t = t.replace(/\s*([+\-×÷:*/])\s*/g, ' $1 ');
   t = t.replace(/\s{2,}/g, ' ');
   // Buang deretan opsi setelah ....
   t = t.replace(/(\.{2,}|…)\s*(?:(?:\d+\s*√\s*\d+|\d+√\d+|\d+\s*\\sqrt\{[^}]+\}|\d*\\sqrt\{[^}]+\}|\d+\^\{\d+\})(?:\s+|$))+/g, '$1');
   t = t.replace(/(\.{2,}|…)\s*[\d\s√\\sqrt\{\}^\×xX*·+\-]+$/g, '$1');
-  t = t.replace(/(√\d+|\\sqrt\{[^}]+\}|\d+√\d+|\d+\^\{\d+\})(?=adalah\b)/gi, '$1 ');
+  // Spasi sebelum "adalah" jika nempel: √16adalah → √16 adalah
+  t = t.replace(/(√\d+|\\sqrt\{[^}]+\}|\d+√\d+|\d+\^\{\d+\}|\d)(?=adalah\b)/gi, '$1 ');
+  // Sisa "+ 16 adalah" setelah √n + √m sudah lengkap → buang angka residual
+  t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s*[+\-]\s*\d+\s*(?=adalah\b)/gi, '$1 $2 $3 ');
   t = t.replace(/\s{2,}/g, ' ').trim();
   return t;
 }
