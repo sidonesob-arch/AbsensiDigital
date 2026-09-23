@@ -4752,7 +4752,16 @@ function initSoalRichEditor(containerId, initialHtml) {
     placeholder: 'Tulis soal di sini… bisa sisipkan gambar, video YouTube, dan rumus matematika (Σ).'
   });
   if (initialHtml) {
-    quill.root.innerHTML = initialHtml;
+    // Pertahankan rumus: jika pure text rusak, rapikan dulu
+    let boot = initialHtml;
+    if (!/<span[^>]*ql-formula-embed|<img\b/i.test(boot)) {
+      boot = formulaHtmlToEditableText(boot);
+    } else {
+      // pastikan data-latex tetap; Quill kadang mengupas .katex → re-wrap
+      boot = initialHtml;
+    }
+    quill.root.innerHTML = boot;
+    setTimeout(function(){ try { enhanceSoalHtmlInDom(quill.root); } catch(e){} }, 30);
   }
   activeSoalQuill = quill;
   return quill;
@@ -5769,60 +5778,102 @@ function cutHtmlBeforeOptions(partHtml) {
 }
 
 /** Perbaiki pola akar rusak Word/OCR lalu pakai KaTeX agar garis akar memanjang */
+
+/** Ubah HTML formula/KaTeX jadi teks editable yang masih memuat √ / latex sederhana */
+function formulaHtmlToEditableText(html) {
+  if (!html) return '';
+  const d = document.createElement('div');
+  d.innerHTML = String(html);
+  // Ambil data-latex jika ada
+  d.querySelectorAll('[data-latex]').forEach(el => {
+    const latex = el.getAttribute('data-latex') || '';
+    let nice = latex;
+    nice = nice.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+    nice = nice.replace(/(\d+)\^\{(\d+)\}/g, function(_, a, b) {
+      const sups = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+      return a + String(b).split('').map(x => sups[x] || x).join('');
+    });
+    nice = nice.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
+    el.replaceWith(document.createTextNode(nice));
+  });
+  d.querySelectorAll('.katex, .math-fallback').forEach(el => {
+    el.replaceWith(document.createTextNode(el.textContent || ''));
+  });
+  let plain = (d.innerText || d.textContent || '').replace(/\s+/g, ' ').trim();
+  plain = repairCorruptedSqrtText(plain);
+  return plain;
+}
+
 function repairCorruptedSqrtText(s) {
-  if (!s) return s;
+  if (s == null || s === '') return s;
   let t = String(s);
+  // Non-breaking / thin spaces → biasa
+  t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
 
-  // ========== Pola LaTeX rusak ==========
-  // 12\sqrt{12}12 → \sqrt{12}
-  t = t.replace(/(\d+)\\sqrt\{(\1)\}(\1)/g, '\\sqrt{$2}');
-  t = t.replace(/(\d+)\s*\\sqrt\{(\1)\}\s*\1/g, '\\sqrt{$2}');
-  // 232\sqrt{3} → 2\sqrt{3}
-  t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}/g, '$1\\sqrt{$3}');
-  t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$3}');
-  t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\2/g, '$1\\sqrt{$3}');
-  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$2}');
-  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\(\1\)\2/g, '$1\\sqrt{$2}');
-  t = t.replace(/\\sqrt\{(\d+)\}\s*\1\b/g, '\\sqrt{$1}');
-  t = t.replace(/(\d+)\\sqrt\{(\1)\}/g, '\\sqrt{$2}');
-  // 2 \sqrt{3} 23 → 2\sqrt{3}
-  t = t.replace(/(\d+)\s*\\sqrt\{(\d+)\}\s+\1\2\b/g, '$1\\sqrt{$2}');
-  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\2\b/g, '$1\\sqrt{$2}');
+  // Jalankan berulang sampai stabil (pola bersarang)
+  for (let round = 0; round < 6; round++) {
+    const before = t;
 
-  // Pangkat rusak
-  t = t.replace(/(\d+)\s+(\d+)\s+\1\s*\^\s*\(\s*(\2)\s*\)\s*\1\s*\2/g, '$1^{$3}');
-  t = t.replace(/(\d+)\s+(\d+)\s+\1\^\((\2)\)\s*\1\s*\2/g, '$1^{$3}');
-  t = t.replace(/(\d+)(\d+)\s+\1\^\((\2)\)\s*\1\2/g, '$1^{$2}');
-  t = t.replace(/(\d+)\s*\^\s*\(\s*(\d+)\s*\)/g, '$1^{$2}');
-  t = t.replace(/(\d+)\s*\^\s*\{(\d+)\}/g, '$1^{$2}');
+    // ----- Pangkat: 2 5 2^(5) 2 5 → 2^{5}
+    t = t.replace(/(\d+)\s+(\d+)\s+\1\s*\^\s*\(\s*(\2)\s*\)\s*\1\s*\2/g, '$1^{$3}');
+    t = t.replace(/(\d+)\s+(\d+)\s+\1\^\((\2)\)\s*\1\s*\2/g, '$1^{$3}');
+    t = t.replace(/(\d+)(\d+)\s+\1\^\((\2)\)\s*\1\2/g, '$1^{$2}');
+    t = t.replace(/(\d+)\s*\^\s*\(\s*(\d+)\s*\)/g, '$1^{$2}');
+    t = t.replace(/(\d+)\s*\^\s*\{(\d+)\}/g, '$1^{$2}');
 
-  // ========== Pola Unicode √ rusak ==========
-  // √1212 → √12
-  t = t.replace(/√(\d+)\1\b/g, '√$1');
-  t = t.replace(/√(\d+)\1(?=[a-zA-Zà-üÀ-Ü.,…])/g, '√$1');
-  // 232√3 → 2√3
-  t = t.replace(/(\d+)(\d+)\1\s*√\s*\2\b/g, '$1√$2');
-  t = t.replace(/(\d+)(\d+)\1√\2/g, '$1√$2');
-  // 2√3(2)3 → 2√3
-  t = t.replace(/(\d+)√(\d+)\s*\(\1\)\s*\2/g, '$1√$2');
-  t = t.replace(/(\d+)√(\d+)\(\1\)\2/g, '$1√$2');
-  // *** POLA UTAMA DARI SCREENSHOT: 2 √3 23 → 2√3  /  3 √2 32 → 3√2 ***
-  // Format: coef + √ + rad + spasi + coef + rad
-  t = t.replace(/(\d+)\s*√\s*(\d+)\s+\1\2\b/g, '$1√$2');
-  t = t.replace(/(\d+)\s*√\s*(\d+)\s*\1\2\b/g, '$1√$2');
-  // tanpa spasi di tengah: 2√323 → 2√3 (hati-hati: hanya jika trailing = coef+rad)
-  t = t.replace(/(\d+)√(\d+)\1\2\b/g, '$1√$2');
-  // √12 12 → √12
-  t = t.replace(/√(\d+)\s+\1\b/g, '√$1');
+    // ----- LaTeX sqrt: 12\sqrt{12}12 → \sqrt{12}
+    t = t.replace(/(\d+)\\sqrt\{(\1)\}(\1)/g, '\\sqrt{$2}');
+    t = t.replace(/(\d+)\s*\\sqrt\{(\1)\}\s*\1/g, '\\sqrt{$2}');
+    t = t.replace(/\\sqrt\{(\d+)\}\1(?=\s|$|[.,;…])/g, '\\sqrt{$1}');
+    t = t.replace(/(\d+)\\sqrt\{(\1)\}/g, '\\sqrt{$2}');
 
-  // Rapikan spasi di sekitar √: 2 √ 3 → 2√3
-  t = t.replace(/(\d+)\s*√\s*(\d+)/g, '$1√$2');
-  t = t.replace(/√\s+(\d+)/g, '√$1');
+    // ----- coef form: 2 3 2\sqrt{3} 2 3 → 2\sqrt{3}
+    t = t.replace(/(\d+)\s+(\d+)\s+\1\s*\\sqrt\{(\2)\}\s+\1\s+\2/g, '$1\\sqrt{$3}');
+    t = t.replace(/(\d+)\s+(\d+)\s+\1\s*\\sqrt\{(\2)\}\s*\1\s*\2/g, '$1\\sqrt{$3}');
+    t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}/g, '$1\\sqrt{$3}');
+    t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$3}');
+    t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\2/g, '$1\\sqrt{$3}');
+    // 2\sqrt{3}(2)3 / 2 \sqrt{3} 23
+    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$2}');
+    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\(\1\)\2/g, '$1\\sqrt{$2}');
+    t = t.replace(/(\d+)\s*\\sqrt\{(\d+)\}\s+\1\2\b/g, '$1\\sqrt{$2}');
+    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\2\b/g, '$1\\sqrt{$2}');
 
-  // Rapikan latex
+    // ----- Unicode √
+    t = t.replace(/√(\d+)\1\b/g, '√$1');
+    t = t.replace(/√(\d+)\1(?=[a-zA-Zà-üÀ-Ü.,…])/g, '√$1');
+    t = t.replace(/√(\d+)\1(?=\s|$|[.,;…a-zA-Z])/g, '√$1');
+    // 2 3 2 √ 3 2 3
+    t = t.replace(/(\d+)\s+(\d+)\s+\1\s*√\s*\2\s+\1\s+\2/g, '$1√$2');
+    t = t.replace(/(\d+)(\d+)\1\s*√\s*\2\b/g, '$1√$2');
+    t = t.replace(/(\d+)(\d+)\1√\2/g, '$1√$2');
+    t = t.replace(/(\d+)√(\d+)\s*\(\1\)\s*\2/g, '$1√$2');
+    t = t.replace(/(\d+)√(\d+)\(\1\)\2/g, '$1√$2');
+    // 2 √3 23 / 2√3 23 / 2√323
+    t = t.replace(/(\d+)\s*√\s*(\d+)\s+\1\2\b/g, '$1√$2');
+    t = t.replace(/(\d+)\s*√\s*(\d+)\s*\1\2\b/g, '$1√$2');
+    t = t.replace(/(\d+)√(\d+)\1\2\b/g, '$1√$2');
+    // rapikan spasi 2 √ 3 → 2√3
+    t = t.replace(/(\d+)\s*√\s*(\d+)/g, '$1√$2');
+    t = t.replace(/√\s+(\d+)/g, '√$1');
+
+    t = t.replace(/\s{2,}/g, ' ');
+    if (t === before) break;
+  }
+
+  // Buang deretan opsi yang nempel setelah "...." / "adalah"
+  // Contoh: ".... 2\sqrt{3} 3\sqrt{2} 4\sqrt{3} 6\sqrt{2}"
+  t = t.replace(
+    /(\.{2,}|…)\s*(?:(?:\d+\s*√\s*\d+|\d+√\d+|\d+\s*\\sqrt\{[^}]+\}|\d*\\sqrt\{[^}]+\})(?:\s+|$))+/g,
+    '$1'
+  );
+  // "adalah .... 2\sqrt{3} ..." sudah tertangani; sisa angka tunggal setelah dots
+  t = t.replace(/(\.{2,}|…)\s*[\d\s√\\sqrt\{\}]+$/g, '$1');
+  // spasi sebelum "adalah" jika nempel ke rumus
+  t = t.replace(/(√\d+|\\sqrt\{[^}]+\}|\d+√\d+|\d+\^\{\d+\})(?=adalah\b)/gi, '$1 ');
   t = t.replace(/\s*(\\sqrt\{[^}]+\})\s*/g, ' $1 ');
-  t = t.replace(/\s{2,}/g, ' ');
-  return t.trim();
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t;
 }
 
 /** Konversi teks berisi √ / latex sederhana → HTML KaTeX (garis akar memanjang) */
@@ -6600,14 +6651,14 @@ function openFormSoalEdit(s) {
               if (kunci) kunci.checked = !!o.is_benar;
               if (row._quill) {
                 try {
-                  row._quill.root.innerHTML = o.teks || '';
+                  row._quill.root.innerHTML = formulaHtmlToEditableText(o.teks || '');
                 } catch (e) {
                   const ed = row.querySelector('.ql-editor');
-                  if (ed) ed.innerHTML = o.teks || '';
+                  if (ed) ed.innerHTML = formulaHtmlToEditableText(o.teks || '');
                 }
               } else {
                 const ed = row.querySelector('.ql-editor');
-                if (ed) ed.innerHTML = o.teks || '';
+                if (ed) ed.innerHTML = formulaHtmlToEditableText(o.teks || '');
               }
             }, 80 + oi * 40);
           });
