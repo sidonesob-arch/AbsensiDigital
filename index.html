@@ -6059,6 +6059,10 @@ function formulaHtmlToEditableText(html) {
   });
 
   let plain = (d.innerText || d.textContent || '').replace(/\s+/g, ' ').trim();
+  // Buang residual angka & MathML agar saat edit tidak muncul "2√3 2 3"
+  plain = stripBrokenMathMlFragments(plain);
+  plain = repairCorruptedSqrtText(plain);
+  plain = stripGluedOptionsFromText(plain);
   plain = repairCorruptedSqrtText(plain);
   // Buang opsi yang nempel di pertanyaan
   plain = stripGluedOptionsFromText(plain);
@@ -6266,16 +6270,34 @@ function repairCorruptedSqrtText(s) {
     if (t === before) break;
   }
 
+  // ===== Residual sederhana: "√12 12" → "√12" ; "2√3 2 3" → "2√3" ; "7^{2} 7 2" → "7^{2}" =====
+  for (let r = 0; r < 5; r++) {
+    const beforeR = t;
+    // √n n  /  \sqrt{n} n
+    t = t.replace(/√(\d+)\s+\1\b/g, '√$1');
+    t = t.replace(/\\sqrt\{(\d+)\}\s+\1\b/g, '\\sqrt{$1}');
+    // a√b a b
+    t = t.replace(/(\d+)\s*√\s*(\d+)\s+\1\s+\2\b/g, '$1√$2');
+    t = t.replace(/(\d+)√(\d+)\s+\1\s+\2\b/g, '$1√$2');
+    t = t.replace(/(\d+)\s*\\sqrt\{(\d+)\}\s+\1\s+\2\b/g, '$1\\sqrt{$2}');
+    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s+\1\s+\2\b/g, '$1\\sqrt{$2}');
+    // n^{m} n m
+    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\s+\2\b/g, '$1^{$2}');
+    t = t.replace(/(\d+)\^(\d+)\s+\1\s+\2\b/g, '$1^{$2}');
+    t = t.replace(/(\d+)\^\{(\d+)\}\1\s*\2\b/g, '$1^{$2}');
+    t = t.replace(/(\d+)\^(\d+)\1\s*\2\b/g, '$1^{$2}');
+    // a√b a b tanpa spasi: 2√323
+    t = t.replace(/(\d+)√(\d+)\1\2\b/g, '$1√$2');
+    t = t.replace(/√(\d+)\1\b/g, '√$1');
+    if (t === beforeR) break;
+  }
+
   // ===== Residual setelah latex bagus: "4^{2} × 4^{3} 4 2 × 4 3" → "4^{2} × 4^{3}" =====
-  // Hapus SEMUA sisa digit/operator setelah rangkaian n^{m} (×|:|/) n^{m}
   for (let r = 0; r < 4; r++) {
     const beforeR = t;
-    // "4^{2} × 4^{3} 4 2 × 4 3" atau "4^{2} × 4^{3} × 4 3"
     t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)(?:\s*[×xX*·:\/]?\s*\d{1,3})+\b/g, '$1');
-    // tanpa spasi: 4^{2}×4^{3}42×43
     t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)(?:\d{1,2}\s*[×xX*·:\/]\s*\d{1,2})+/g, '$1');
     t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)\d{2,}(?:[×xX*·:\/]\d+)*/g, '$1');
-    // sisa operator tunggal di akhir: "4^{2} × 4^{3} ×"
     t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·:\/]\s*\d+\^\{\d+\})+)\s*[×xX*·:\/]\s*(?=adalah\b|\.{2,}|$)/gi, '$1');
     if (t === beforeR) break;
   }
@@ -7283,16 +7305,44 @@ function getOpsiHtmlFromRow(row) {
   return '';
 }
 
+/** Setelah edit manual: pastikan √ / pangkat unicode / latex plain → embed KaTeX */
+function ensureMathHtmlPreserved(html) {
+  if (!html) return html;
+  // Sudah ada embed bagus → tetap, tapi perbaiki residual di plain di sekitarnya
+  if (/ql-formula-embed|data-latex|class="katex"/i.test(html)) {
+    // Jangan strip; hanya bersihkan fragmen MathML jika ada
+    return stripBrokenMathMlFragments(html);
+  }
+  // Plain / HTML tanpa embed: repair + konversi ke KaTeX
+  let plain = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  plain = stripBrokenMathMlFragments(plain);
+  plain = repairCorruptedSqrtText(plain);
+  plain = stripGluedOptionsFromText(plain);
+  // Unicode superscript ⁰-⁹ → ^{n}
+  plain = plain.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, sups) {
+    const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+    const exp = [...sups].map(c => map[c] || c).join('');
+    return base + '^{' + exp + '}';
+  });
+  if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d|\\frac/.test(plain)) {
+    const k = plainMathToKatexHtml(plain);
+    if (k && /ql-formula-embed/.test(k)) return k;
+  }
+  return plain;
+}
+
 function submitFormSoal() {
   const jenis = $('fmSoalJenis').value;
-  const pertanyaan = (getSoalRichHtml() || '').trim();
+  let pertanyaan = (getSoalRichHtml() || '').trim();
+  pertanyaan = ensureMathHtmlPreserved(pertanyaan);
   const plain = pertanyaan.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
   const poin = $('fmSoalPoin').value;
   if (!plain) return showBigPopup('warning', 'Peringatan', 'Pertanyaan wajib diisi.');
   const opsi = [];
   if (jenis === 'pg' || jenis === 'checkbox') {
     document.querySelectorAll('#fmSoalOpsiList .fm-opsi-row').forEach(row => {
-      const teks = getOpsiHtmlFromRow(row);
+      let teks = getOpsiHtmlFromRow(row);
+      teks = ensureMathHtmlPreserved(teks);
       const plainO = teks.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
       const is_benar = !!row.querySelector('.fm-opsi-benar')?.checked;
       if (plainO) opsi.push({ teks, is_benar });
