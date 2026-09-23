@@ -15,6 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive-static.css">
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.95.5/dist/mathlive.min.js"></script>
 <script>
@@ -4993,6 +4994,246 @@ function openImportSoalModal() {
 }
 
 
+
+// ========== OMML (Equation Word) → LaTeX ==========
+function ommlLocalName(el) {
+  if (!el || !el.tagName) return '';
+  const t = el.tagName;
+  const i = t.indexOf(':');
+  return (i >= 0 ? t.slice(i + 1) : t).toLowerCase();
+}
+function ommlTextContent(el) {
+  if (!el) return '';
+  let s = '';
+  el.childNodes.forEach(ch => {
+    if (ch.nodeType === 3) s += ch.nodeValue || '';
+    else if (ch.nodeType === 1) s += ommlTextContent(ch);
+  });
+  return s;
+}
+function ommlChildrenByLocal(el, name) {
+  const out = [];
+  if (!el) return out;
+  el.childNodes.forEach(ch => {
+    if (ch.nodeType === 1 && ommlLocalName(ch) === name) out.push(ch);
+  });
+  return out;
+}
+function ommlFirstChild(el, name) {
+  return ommlChildrenByLocal(el, name)[0] || null;
+}
+function ommlToLatex(node) {
+  if (!node) return '';
+  if (node.nodeType === 3) return node.nodeValue || '';
+  if (node.nodeType !== 1) return '';
+  const name = ommlLocalName(node);
+  if (name === 'omath' || name === 'omathpara') {
+    return Array.from(node.childNodes).map(ommlToLatex).join('');
+  }
+  if (name === 't') return ommlTextContent(node);
+  if (name === 'r') return Array.from(node.childNodes).map(ommlToLatex).join('');
+  if (name === 'f') {
+    const num = ommlFirstChild(node, 'num');
+    const den = ommlFirstChild(node, 'den');
+    return '\\frac{' + ommlToLatex(num) + '}{' + ommlToLatex(den) + '}';
+  }
+  if (name === 'rad') {
+    const deg = ommlFirstChild(node, 'deg');
+    const e = ommlFirstChild(node, 'e');
+    const degTex = deg ? ommlToLatex(deg).trim() : '';
+    if (degTex) return '\\sqrt[' + degTex + ']{' + ommlToLatex(e) + '}';
+    return '\\sqrt{' + ommlToLatex(e) + '}';
+  }
+  if (name === 'ssup') {
+    const e = ommlFirstChild(node, 'e');
+    const sup = ommlFirstChild(node, 'sup');
+    return '{' + ommlToLatex(e) + '}^{' + ommlToLatex(sup) + '}';
+  }
+  if (name === 'ssub') {
+    const e = ommlFirstChild(node, 'e');
+    const sub = ommlFirstChild(node, 'sub');
+    return '{' + ommlToLatex(e) + '}_{' + ommlToLatex(sub) + '}';
+  }
+  if (name === 'ssubsup') {
+    const e = ommlFirstChild(node, 'e');
+    const sub = ommlFirstChild(node, 'sub');
+    const sup = ommlFirstChild(node, 'sup');
+    return '{' + ommlToLatex(e) + '}_{' + ommlToLatex(sub) + '}^{' + ommlToLatex(sup) + '}';
+  }
+  if (name === 'nary') {
+    const naryPr = ommlFirstChild(node, 'narypr');
+    let op = '\\sum';
+    if (naryPr) {
+      const chr = ommlFirstChild(naryPr, 'chr');
+      const ch = chr ? (chr.getAttribute('m:val') || chr.getAttribute('val') || '') : '';
+      if (ch === '\u222B') op = '\\int';
+      else if (ch === '\u220F') op = '\\prod';
+      else if (ch === '\u2211') op = '\\sum';
+      else if (ch) op = ch;
+    }
+    const sub = ommlFirstChild(node, 'sub');
+    const sup = ommlFirstChild(node, 'sup');
+    const e = ommlFirstChild(node, 'e');
+    let out = op;
+    if (sub) out += '_{' + ommlToLatex(sub) + '}';
+    if (sup) out += '^{' + ommlToLatex(sup) + '}';
+    out += '{' + ommlToLatex(e) + '}';
+    return out;
+  }
+  if (name === 'd') {
+    const e = ommlFirstChild(node, 'e');
+    return '\\left(' + ommlToLatex(e) + '\\right)';
+  }
+  if (name === 'm') {
+    const rows = ommlChildrenByLocal(node, 'mr');
+    const lines = rows.map(r => {
+      const cells = ommlChildrenByLocal(r, 'e');
+      return cells.map(c => ommlToLatex(c)).join(' & ');
+    });
+    return '\\begin{pmatrix}' + lines.join(' \\\\ ') + '\\end{pmatrix}';
+  }
+  if (name === 'limlow') {
+    const e = ommlFirstChild(node, 'e');
+    const lim = ommlFirstChild(node, 'lim');
+    return '\\lim_{' + ommlToLatex(lim) + '}{' + ommlToLatex(e) + '}';
+  }
+  if (name === 'acc') {
+    return '\\hat{' + ommlToLatex(ommlFirstChild(node, 'e')) + '}';
+  }
+  if (name === 'bar') {
+    return '\\overline{' + ommlToLatex(ommlFirstChild(node, 'e')) + '}';
+  }
+  if (name === 'func') {
+    const fName = ommlToLatex(ommlFirstChild(node, 'fname')).trim().toLowerCase();
+    const e = ommlFirstChild(node, 'e');
+    const map = { sin: '\\sin', cos: '\\cos', tan: '\\tan', log: '\\log', ln: '\\ln' };
+    return (map[fName] || ('\\mathrm{' + fName + '}')) + '\\left(' + ommlToLatex(e) + '\\right)';
+  }
+  if (name === 'borderbox' || name === 'box' || name === 'groupchr' || name === 'eqarr') {
+    return Array.from(node.childNodes).map(ommlToLatex).join('');
+  }
+  return Array.from(node.childNodes).map(ommlToLatex).join('');
+}
+function latexToHtmlSnippet(latex) {
+  const clean = String(latex || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  try {
+    if (typeof katex !== 'undefined') {
+      return '<span class="ql-formula-embed" data-latex="' +
+        clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">' +
+        katex.renderToString(clean, { throwOnError: false, displayMode: false }) +
+        '</span>';
+    }
+  } catch (e) {}
+  return '<code class="math-latex">' + clean.replace(/</g, '&lt;') + '</code>';
+}
+async function extractDocxHtmlWithEquations(arrayBuffer) {
+  if (typeof JSZip === 'undefined') return null;
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const docFile = zip.file('word/document.xml');
+    if (!docFile) return null;
+    let xml = await docFile.async('string');
+    const parser = new DOMParser();
+    let doc = parser.parseFromString(xml, 'text/xml');
+    if (doc.querySelector('parsererror')) {
+      xml = xml.replace(/xmlns="[^"]*"/g, '');
+      doc = parser.parseFromString(xml, 'text/xml');
+    }
+    return walkDocxBodyToHtml(doc);
+  } catch (e) {
+    console.warn('extractDocxHtmlWithEquations', e);
+    return null;
+  }
+}
+function walkDocxBodyToHtml(doc) {
+  let body = null;
+  const all = doc.getElementsByTagName('*');
+  for (let i = 0; i < all.length; i++) {
+    if (ommlLocalName(all[i]) === 'body') { body = all[i]; break; }
+  }
+  if (!body) return null;
+  let eqCount = 0;
+  const parts = [];
+  function walk(node) {
+    if (!node) return;
+    if (node.nodeType === 3) { parts.push(node.nodeValue || ''); return; }
+    if (node.nodeType !== 1) return;
+    const name = ommlLocalName(node);
+    if (name === 'omath' || name === 'omathpara') {
+      const latex = ommlToLatex(node).trim();
+      if (latex) { eqCount++; parts.push(latexToHtmlSnippet(latex)); }
+      return;
+    }
+    if (name === 'tab') { parts.push(' '); return; }
+    if (name === 'br' || name === 'cr') { parts.push('\n'); return; }
+    if (name === 'p') {
+      Array.from(node.childNodes).forEach(walk);
+      parts.push('\n');
+      return;
+    }
+    if (name === 'tbl') { parts.push(docxTableToHtml(node)); return; }
+    if (name === 'drawing' || name === 'pict' || name === 'object') return;
+    Array.from(node.childNodes).forEach(walk);
+  }
+  Array.from(body.childNodes).forEach(walk);
+  return { html: parts.join('').replace(/\n{3,}/g, '\n\n'), eqCount };
+}
+function docxTableToHtml(tbl) {
+  const rows = [];
+  function findRows(n, acc) {
+    if (!n || n.nodeType !== 1) return;
+    if (ommlLocalName(n) === 'tr') acc.push(n);
+    else Array.from(n.childNodes).forEach(c => findRows(c, acc));
+  }
+  findRows(tbl, rows);
+  if (!rows.length) return '';
+  let h = '<table class="soal-table" style="border-collapse:collapse;width:100%;margin:8px 0;">';
+  rows.forEach((tr, ri) => {
+    h += '<tr>';
+    const cells = [];
+    function findCells(n) {
+      if (!n || n.nodeType !== 1) return;
+      if (ommlLocalName(n) === 'tc') cells.push(n);
+      else Array.from(n.childNodes).forEach(findCells);
+    }
+    findCells(tr);
+    cells.forEach(tc => {
+      let txt = '';
+      function twalk(n) {
+        if (!n) return;
+        if (n.nodeType === 3) txt += n.nodeValue || '';
+        else if (n.nodeType === 1) {
+          const nm = ommlLocalName(n);
+          if (nm === 'omath' || nm === 'omathpara') txt += ' ' + ommlToLatex(n) + ' ';
+          else Array.from(n.childNodes).forEach(twalk);
+        }
+      }
+      twalk(tc);
+      const tag = ri === 0 ? 'th' : 'td';
+      h += '<' + tag + ' style="border:1px solid #94a3b8;padding:6px 8px;">' + txt.replace(/</g, '&lt;').trim() + '</' + tag + '>';
+    });
+    h += '</tr>';
+  });
+  return h + '</table>';
+}
+function mergeMammothAndEquationHtml(mammothHtml, eqHtml) {
+  if (!eqHtml) return mammothHtml || '';
+  if (!mammothHtml) return eqHtml;
+  const box = document.createElement('div');
+  box.innerHTML = mammothHtml;
+  const imgs = [...box.querySelectorAll('img')].map(im => im.outerHTML);
+  if (!imgs.length) return eqHtml;
+  let out = eqHtml;
+  imgs.forEach(imgHtml => {
+    const srcMatch = imgHtml.match(/src="([^"]+)"/);
+    if (srcMatch && out.indexOf(srcMatch[1].slice(0, 80)) === -1) {
+      out = imgHtml + '\n' + out;
+    }
+  });
+  return out;
+}
+
 function previewImportSoal(ev) {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
@@ -5014,12 +5255,15 @@ function previewImportSoal(ev) {
     const dataInParsed = parsed.reduce((n, s) => n + ((s.pertanyaan || '').match(/data:image\//gi) || []).length, 0);
     const stats = window._importSoalMediaStats || {};
     let mediaInfo = '';
+    if (stats.eqCount > 0) {
+      mediaInfo += ` · <span style="color:#7c3aed;">${stats.eqCount} rumus (equation) terbaca</span>`;
+    }
     if (mediaCount) {
-      mediaInfo = ` · <span style="color:#0d9488;">${mediaCount} media di soal (siap di-upload saat Simpan)</span>`;
+      mediaInfo += ` · <span style="color:#0d9488;">${mediaCount} media di soal (siap di-upload saat Simpan)</span>`;
     } else if (stats.imgCount > 0) {
-      mediaInfo = ` · <span style="color:#b45309;">Word punya ${stats.imgCount} gambar, tapi belum menempel ke blok soal — pastikan gambar di bawah PERTANYAAN sebelum opsi A/B/C</span>`;
-    } else if (isHtml) {
-      mediaInfo = ` · <span style="color:#64748b;">Tidak ada gambar terdeteksi di file (tabel tetap ikut jika ada)</span>`;
+      mediaInfo += ` · <span style="color:#b45309;">Word punya ${stats.imgCount} gambar, tapi belum menempel ke blok soal</span>`;
+    } else if (isHtml && !(stats.eqCount > 0)) {
+      mediaInfo += ` · <span style="color:#64748b;">Tidak ada gambar terdeteksi</span>`;
     }
     box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal` + mediaInfo + `</p>` +
       parsed.slice(0, 12).map((s, i) => {
@@ -5050,45 +5294,60 @@ function previewImportSoal(ev) {
     box.innerHTML = '<p style="color:#dc2626;">Library mammoth belum termuat. Cek koneksi internet atau gunakan file .txt.</p>';
     return;
   }
-  box.innerHTML = '<p>⏳ Membaca file Word (teks + gambar + tabel)…</p>';
+  box.innerHTML = '<p>⏳ Membaca file Word (teks + rumus + gambar + tabel)…</p>';
   const reader = new FileReader();
   reader.onload = async () => {
     try {
       const arrayBuffer = reader.result;
-      // HTML lengkap: gambar jadi data-URL, tabel tetap HTML
       let htmlVal = '';
+      let eqCount = 0;
+
+      try {
+        const eq = await extractDocxHtmlWithEquations(arrayBuffer);
+        if (eq && eq.html) {
+          htmlVal = eq.html;
+          eqCount = eq.eqCount || 0;
+          console.log('OMML equations found:', eqCount);
+        }
+      } catch (eEq) {
+        console.warn('OMML extract', eEq);
+      }
+
+      let mammothHtml = '';
       try {
         const htmlResult = await mammoth.convertToHtml(
           { arrayBuffer },
           { convertImage: mammoth.images.dataUri }
         );
-        htmlVal = htmlResult.value || '';
-        if (htmlResult.messages && htmlResult.messages.length) {
-          console.log('mammoth messages', htmlResult.messages);
-        }
+        mammothHtml = htmlResult.value || '';
       } catch (e1) {
-        console.warn('mammoth dataUri gagal, coba imgElement', e1);
-        const htmlResult2 = await mammoth.convertToHtml(
-          { arrayBuffer },
-          {
-            convertImage: mammoth.images.imgElement(function (image) {
-              return image.read('base64').then(function (imageBuffer) {
-                return { src: 'data:' + image.contentType + ';base64,' + imageBuffer };
-              });
-            })
-          }
-        );
-        htmlVal = htmlResult2.value || '';
+        try {
+          const htmlResult2 = await mammoth.convertToHtml(
+            { arrayBuffer },
+            {
+              convertImage: mammoth.images.imgElement(function (image) {
+                return image.read('base64').then(function (imageBuffer) {
+                  return { src: 'data:' + image.contentType + ';base64,' + imageBuffer };
+                });
+              })
+            }
+          );
+          mammothHtml = htmlResult2.value || '';
+        } catch (e2) { console.warn(e2); }
       }
+
+      if (htmlVal && mammothHtml) htmlVal = mergeMammothAndEquationHtml(mammothHtml, htmlVal);
+      else if (!htmlVal && mammothHtml) htmlVal = mammothHtml;
+
       const imgCount = (htmlVal.match(/<img\b/gi) || []).length;
       const dataImgCount = (htmlVal.match(/data:image\//gi) || []).length;
-      console.log('Word HTML imgs=', imgCount, 'dataURI=', dataImgCount, 'len=', htmlVal.length);
-      if (htmlVal.trim()) {
-        window._importSoalMediaStats = { imgCount, dataImgCount };
+      window._importSoalMediaStats = { imgCount, dataImgCount, eqCount };
+      console.log('Word import imgs=', imgCount, 'eq=', eqCount);
+
+      if (htmlVal && htmlVal.trim()) {
         done(htmlVal, true);
         return;
       }
-      // fallback teks
       const textResult = await mammoth.extractRawText({ arrayBuffer });
       done(textResult.value || '', false);
     } catch (e) {
@@ -5096,7 +5355,7 @@ function previewImportSoal(ev) {
         const t = new TextDecoder().decode(reader.result);
         done(t, false);
       } catch (e2) {
-        box.innerHTML = `<p style="color:#dc2626;">Gagal membaca file: ${e.message}</p>`;
+        box.innerHTML = '<p style="color:#dc2626;">Gagal membaca file: ' + e.message + '</p>';
       }
     }
   };
@@ -5192,7 +5451,8 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
 
   // Hapus node yang hanya berisi opsi A. B. C. D. (teks murni opsi)
   box.querySelectorAll('p, li, div, span').forEach(el => {
-    if (el.querySelector('img, table')) return;
+    if (el.querySelector('img, table, .ql-formula-embed, .katex, code.math-latex')) return;
+    if (el.classList && el.classList.contains('ql-formula-embed')) return;
     const t = (el.textContent || '').trim();
     if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 200) {
       el.remove();
