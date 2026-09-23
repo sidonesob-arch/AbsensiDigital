@@ -4644,7 +4644,8 @@ function getSoalRichHtml() {
 
 function normalizeOpsiHtml(html) {
   if (html == null || html === '') return '';
-  let s = String(html);
+  let s = cleanupOpsiMathText(String(html));
+  s = String(s);
   // Ambil teks dari HTML Quill yang sering berisi <p><br></p> kosong
   const tmp = document.createElement('div');
   tmp.innerHTML = s;
@@ -4929,7 +4930,7 @@ function loadUjianSoalList() {
       const opsiHtml = (s.opsi || []).map((o, oi) =>
         `<div style="font-size:12px;padding:4px 0;display:flex;gap:8px;align-items:flex-start;">
           <span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:50%;background:${o.is_benar?'#16a34a':'#94a3b8'};color:#fff;font-weight:800;font-size:11px;">${letterLabel(oi)}</span>
-          <span class="soal-html-content" style="flex:1;">${o.is_benar ? '✅ ' : ''}${renderSoalHtml(o.teks)}</span>
+          <span class="soal-html-content" style="flex:1;">${o.is_benar ? '✅ ' : ''}${renderSoalHtml(cleanupOpsiMathText(o.teks || ''))}</span>
         </div>`
       ).join('');
       return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">
@@ -5544,7 +5545,7 @@ function parseSoalFromHtml(html) {
             teks = latex;
           }
         }
-        return { teks, is_benar: !!o.is_benar };
+        return { teks: cleanupOpsiMathText(teks), is_benar: !!o.is_benar };
       });
     }
   });
@@ -5673,27 +5674,10 @@ function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
   if (!pertanyaan) return '';
   let p = String(pertanyaan);
 
-  function findOpsiCutPlain(plain) {
-    plain = String(plain || '').replace(/\s+/g, ' ').trim();
-    const re = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
-    let m;
-    while ((m = re.exec(plain)) !== null) {
-      if (m.index > 0 && /[A-Za-z0-9]/.test(plain[m.index - 1])) continue;
-      const tail = plain.slice(m.index);
-      const letters = [...tail.matchAll(/(?:^|\s)([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
-      const uniq = [...new Set(letters)];
-      if (uniq.length >= 2 || (opsi && opsi.length >= 2 && uniq.length >= 1)) {
-        return m.index;
-      }
-    }
-    return -1;
-  }
-
-  // Selalu kerja di DOM agar formula/img tetap utuh
   const box = document.createElement('div');
   box.innerHTML = p;
 
-  // Hapus elemen yang isinya murni opsi (A. 25 dst)
+  // 1) Hapus elemen murni opsi berlabel A. B. C.
   box.querySelectorAll('p, div, span, li').forEach(el => {
     if (el.querySelector('img, table, .ql-formula-embed, .katex, .math-fallback')) return;
     if (el.classList && (el.classList.contains('ql-formula-embed') || el.classList.contains('math-fallback'))) return;
@@ -5701,16 +5685,14 @@ function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
     if (/^[A-H]\s*[.、．\)]\s+\S/.test(t) && t.length < 150) el.remove();
   });
 
-  // Potong text node dari "A." / "B." dst
+  // 2) Potong text node dari label A. B. C. D.
   const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
   const nodes = [];
   while (tw.nextNode()) nodes.push(tw.currentNode);
   nodes.forEach(node => {
     let t = node.nodeValue || '';
-    // Cari opsi di dalam text node ini
     const re = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
-    let m;
-    let cut = -1;
+    let m, cut = -1;
     while ((m = re.exec(t)) !== null) {
       if (m.index > 0 && /[A-Za-z0-9]/.test(t[m.index - 1])) continue;
       const tail = t.slice(m.index);
@@ -5722,30 +5704,131 @@ function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
       }
     }
     if (cut >= 0) {
-      let left = t.slice(0, cut).replace(/[\s.…]+$/g, '').trim();
+      let left = t.slice(0, cut).replace(/[\s.…*＊]+$/g, '').trim();
       if (left && !/[.?!…]$/.test(left)) left += ' ....';
-      node.nodeValue = left ? (cut > 0 && /^\s/.test(t) ? ' ' + left : left) : '';
+      node.nodeValue = left;
     }
   });
 
-  // Jika plain masih mengandung "A. .. B. .." (satu text node panjang)
-  let plain = (box.innerText || box.textContent || '').replace(/\s+/g, ' ').trim();
-  let cutAt = findOpsiCutPlain(plain);
-  if (cutAt >= 0) {
-    // Fallback: bangun dari potongan plain + formula yang ada
-    const keep = [...box.querySelectorAll('.ql-formula-embed, .math-fallback, img, table')];
-    let head = plain.slice(0, cutAt).trim().replace(/[\s.…]+$/g, '').trim();
-    if (head && !/[.?!…]$/.test(head)) head += ' ....';
-    if (keep.length) {
-      // head sudah berisi bacaan formula (innerText katex) → JANGAN sisip formula lagi
-      // tapi hilangkan opsi: cukup head sebagai teks, formula biar di posisi asli jika head tidak dobel
-      // Ambil HTML tanpa text opsi: pakai head saja jika sudah cukup jelas
-      return head;
+  // 3) Jika opsi terparse: hapus teks opsi yang nempel di ekor (tanpa label A/B/C)
+  //    Contoh: "adalah .... 2√5 5√2 10√5 5√2 *"
+  if (opsi && opsi.length >= 2) {
+    const plainOpts = opsi.map(o => {
+      const d = document.createElement('div');
+      d.innerHTML = o.teks || '';
+      return (d.innerText || d.textContent || '').replace(/\s+/g, ' ').replace(/[*＊]/g, '').trim();
+    }).filter(t => t.length > 0);
+
+    let plain = (box.innerText || box.textContent || '').replace(/\s+/g, ' ').trim();
+    // Coba potong dari opsi pertama yang muncul berurutan di ekor
+    let cutPos = -1;
+    for (let i = 0; i < plainOpts.length; i++) {
+      const token = plainOpts[i];
+      if (token.length < 1) continue;
+      // escape regex
+      const esc = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('\\s+' + esc + '(?=\\s|$)');
+      const m = re.exec(plain);
+      if (m) {
+        // Cek apakah setelahnya banyak opsi lain / sisa opsi
+        const after = plain.slice(m.index);
+        let hit = 0;
+        plainOpts.forEach(po => {
+          if (po && after.indexOf(po) >= 0) hit++;
+        });
+        if (hit >= 2 || (hit >= 1 && plainOpts.length >= 2 && m.index > 10)) {
+          cutPos = m.index;
+          break;
+        }
+      }
     }
-    return head || plain.slice(0, cutAt).trim();
+    // Alternatif: dari karakter pertama opsi di sepertiga akhir string
+    if (cutPos < 0 && plainOpts[0]) {
+      const esc = plainOpts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(esc);
+      let idx = plain.search(re);
+      // cari kemunculan di bagian belakang
+      let last = -1;
+      let startSearch = 0;
+      while (true) {
+        const sub = plain.slice(startSearch);
+        const j = sub.search(re);
+        if (j < 0) break;
+        last = startSearch + j;
+        startSearch = last + 1;
+      }
+      if (last > plain.length * 0.3) {
+        const after = plain.slice(last);
+        let hit = 0;
+        plainOpts.forEach(po => { if (po && after.indexOf(po) >= 0) hit++; });
+        if (hit >= 2) cutPos = last;
+      }
+    }
+
+    if (cutPos > 8) {
+      let head = plain.slice(0, cutPos).replace(/[\s.…*＊]+$/g, '').trim();
+      if (head && !/[.?!…]$/.test(head)) head += ' ....';
+      // Pertahankan formula di head jika HTML punya formula dan head tidak dobel buruk
+      const keep = [...box.querySelectorAll('.ql-formula-embed, .math-fallback, img, table')];
+      if (keep.length === 1 && head) {
+        // Cek apakah formula sudah "terwakili" di head (innerText)
+        const fPlain = (keep[0].innerText || keep[0].textContent || '').trim();
+        if (fPlain && head.indexOf(fPlain) >= 0) {
+          return head; // head sudah cukup (mengandung bacaan formula)
+        }
+        // sisip formula
+        const am = head.match(/^(.*?)(\s*adalah\b.*)?$/i);
+        const before = ((am && am[1]) || head).trim();
+        const after = ((am && am[2]) || ' adalah ....').trim();
+        return (before + ' ' + keep[0].outerHTML + ' ' + after).replace(/\s+/g, ' ').trim();
+      }
+      return head || plain.slice(0, cutPos).trim();
+    }
+  }
+
+  // 4) Plain masih ada pola A. B. ?
+  let plain2 = (box.innerText || '').replace(/\s+/g, ' ').trim();
+  const re2 = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
+  let m2, cut2 = -1;
+  while ((m2 = re2.exec(plain2)) !== null) {
+    if (m2.index > 0 && /[A-Za-z0-9]/.test(plain2[m2.index - 1])) continue;
+    const tail = plain2.slice(m2.index);
+    const letters = [...tail.matchAll(/(?:^|\s)([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
+    if ([...new Set(letters)].length >= 2) { cut2 = m2.index; break; }
+  }
+  if (cut2 > 5) {
+    let head = plain2.slice(0, cut2).replace(/[\s.…*＊]+$/g, '').trim();
+    if (head && !/[.?!…]$/.test(head)) head += ' ....';
+    return head;
   }
 
   return box.innerHTML.trim() || p;
+}
+
+/** Rapikan teks opsi yang akar/pangkatnya rusak (√525 → coba 5√2 jika cocok pola) */
+function cleanupOpsiMathText(teks) {
+  if (!teks) return teks;
+  const d = document.createElement('div');
+  d.innerHTML = teks;
+  // Jika sudah ada katex bagus, biarkan
+  if (d.querySelector('.katex, .ql-formula-embed')) return teks;
+  let plain = (d.innerText || d.textContent || teks).replace(/\s+/g, ' ').trim();
+  plain = plain.replace(/[*＊]\s*$/g, '').trim();
+
+  // Jika mengandung latex mentah, render
+  if (/\\sqrt|\\frac|\^\{/.test(plain)) {
+    try {
+      if (typeof katex !== 'undefined') {
+        const latex = sanitizeToSingleLatex(plain);
+        return '<span class="ql-formula-embed" data-latex="' +
+          latex.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '">' +
+          katex.renderToString(latex, { throwOnError: false, displayMode: false }) +
+          '</span>';
+      }
+    } catch (e) {}
+  }
+  // Unicode √ sudah OK (5√2, 2√5) — jangan diutak-atik
+  return plain;
 }
 
 function parseSoalFromText(raw) {
