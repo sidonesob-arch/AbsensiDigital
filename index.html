@@ -4940,7 +4940,7 @@ function loadUjianSoalList() {
             <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(s.pertanyaan)}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
@@ -5672,83 +5672,80 @@ async function uploadEmbeddedDataImages(html) {
 function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
   if (!pertanyaan) return '';
   let p = String(pertanyaan);
-  const tmp = document.createElement('div');
-  tmp.innerHTML = p;
-  const plain = (tmp.innerText || tmp.textContent || p).replace(/\s+/g, ' ').trim();
 
-  // Cari awal daftar opsi: " A. ... B. ..."
-  let cutAt = -1;
-  const re = /\s([A-H])\s*[.、．\)]\s+\S/gi;
-  let m;
-  while ((m = re.exec(plain)) !== null) {
-    const tail = plain.slice(m.index);
-    const letters = [...tail.matchAll(/\b([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
-    const uniq = [...new Set(letters)];
-    if (uniq.length >= 2 || (opsi && opsi.length >= 2 && uniq.length >= 1)) {
-      cutAt = m.index;
-      break;
+  function findOpsiCutPlain(plain) {
+    plain = String(plain || '').replace(/\s+/g, ' ').trim();
+    const re = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
+    let m;
+    while ((m = re.exec(plain)) !== null) {
+      if (m.index > 0 && /[A-Za-z0-9]/.test(plain[m.index - 1])) continue;
+      const tail = plain.slice(m.index);
+      const letters = [...tail.matchAll(/(?:^|\s)([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
+      const uniq = [...new Set(letters)];
+      if (uniq.length >= 2 || (opsi && opsi.length >= 2 && uniq.length >= 1)) {
+        return m.index;
+      }
     }
+    return -1;
   }
 
-  let cutPlain = plain;
-  if (cutAt > 5) {
-    cutPlain = plain.slice(0, cutAt).trim().replace(/[\s.…]+$/, '').trim();
-    if (cutPlain && !/[.?!…]$/.test(cutPlain)) cutPlain += ' ....';
+  // Selalu kerja di DOM agar formula/img tetap utuh
+  const box = document.createElement('div');
+  box.innerHTML = p;
+
+  // Hapus elemen yang isinya murni opsi (A. 25 dst)
+  box.querySelectorAll('p, div, span, li').forEach(el => {
+    if (el.querySelector('img, table, .ql-formula-embed, .katex, .math-fallback')) return;
+    if (el.classList && (el.classList.contains('ql-formula-embed') || el.classList.contains('math-fallback'))) return;
+    const t = (el.textContent || '').trim();
+    if (/^[A-H]\s*[.、．\)]\s+\S/.test(t) && t.length < 150) el.remove();
+  });
+
+  // Potong text node dari "A." / "B." dst
+  const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while (tw.nextNode()) nodes.push(tw.currentNode);
+  nodes.forEach(node => {
+    let t = node.nodeValue || '';
+    // Cari opsi di dalam text node ini
+    const re = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
+    let m;
+    let cut = -1;
+    while ((m = re.exec(t)) !== null) {
+      if (m.index > 0 && /[A-Za-z0-9]/.test(t[m.index - 1])) continue;
+      const tail = t.slice(m.index);
+      const letters = [...tail.matchAll(/(?:^|\s)([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
+      const uniq = [...new Set(letters)];
+      if (uniq.length >= 2 || (opsi && opsi.length >= 2 && uniq.length >= 1)) {
+        cut = m.index;
+        break;
+      }
+    }
+    if (cut >= 0) {
+      let left = t.slice(0, cut).replace(/[\s.…]+$/g, '').trim();
+      if (left && !/[.?!…]$/.test(left)) left += ' ....';
+      node.nodeValue = left ? (cut > 0 && /^\s/.test(t) ? ' ' + left : left) : '';
+    }
+  });
+
+  // Jika plain masih mengandung "A. .. B. .." (satu text node panjang)
+  let plain = (box.innerText || box.textContent || '').replace(/\s+/g, ' ').trim();
+  let cutAt = findOpsiCutPlain(plain);
+  if (cutAt >= 0) {
+    // Fallback: bangun dari potongan plain + formula yang ada
+    const keep = [...box.querySelectorAll('.ql-formula-embed, .math-fallback, img, table')];
+    let head = plain.slice(0, cutAt).trim().replace(/[\s.…]+$/g, '').trim();
+    if (head && !/[.?!…]$/.test(head)) head += ' ....';
+    if (keep.length) {
+      // head sudah berisi bacaan formula (innerText katex) → JANGAN sisip formula lagi
+      // tapi hilangkan opsi: cukup head sebagai teks, formula biar di posisi asli jika head tidak dobel
+      // Ambil HTML tanpa text opsi: pakai head saja jika sudah cukup jelas
+      return head;
+    }
+    return head || plain.slice(0, cutAt).trim();
   }
 
-  // HTML: hapus node opsi + potong text node
-  if (/<[^>]+>/.test(p)) {
-    const box = document.createElement('div');
-    box.innerHTML = p;
-    box.querySelectorAll('p, span, div, li').forEach(el => {
-      if (el.querySelector('img, table, .ql-formula-embed, .katex, .math-fallback')) return;
-      if (el.classList && (el.classList.contains('ql-formula-embed') || el.classList.contains('math-fallback'))) return;
-      const t = (el.textContent || '').trim();
-      if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 120) el.remove();
-    });
-    const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
-    const nodes = [];
-    while (tw.nextNode()) nodes.push(tw.currentNode);
-    nodes.forEach(node => {
-      let t = node.nodeValue || '';
-      const idx = t.search(/\s[A-H]\s*[.、．\)]\s+/i);
-      if (idx >= 0) {
-        const tail = t.slice(idx);
-        if (/\b[B-H]\s*[.、．\)]\s+/i.test(tail) || (opsi && opsi.length >= 2)) {
-          t = t.slice(0, idx).replace(/[\s.…]+$/, '');
-          if (t && !/[.?!…]$/.test(t.trim())) t = t.trim() + ' ....';
-          node.nodeValue = t;
-        }
-      }
-    });
-    // Ambil formula/img yang masih ada
-    const formulas = [...box.querySelectorAll('.ql-formula-embed, .math-fallback, img, table')].map(el => el.outerHTML);
-    const textLeft = (box.innerText || '').replace(/\s+/g, ' ').trim();
-
-    // Jika masih ada jejak "A. B. C." di textLeft, pakai cutPlain + formula
-    if (/\b[A-H]\s*[.、．\)]\s+\S/.test(textLeft) && cutAt > 5) {
-      const head = cutPlain.replace(/\s*adalah.*$/i, '').trim() || cutPlain;
-      const hasAdalah = /adalah/i.test(cutPlain) || /adalah/i.test(plain);
-      if (formulas.length) {
-        return head + ' ' + formulas.join(' ') + (hasAdalah ? ' adalah ....' : ' ....');
-      }
-      return cutPlain;
-    }
-    // Jika formula ada dan text pendek, gabungkan
-    if (formulas.length && cutAt > 5) {
-      const head = cutPlain.replace(/\s*adalah.*$/i, '').trim();
-      const hasAdalah = /adalah/i.test(cutPlain) || /adalah/i.test(plain);
-      // Hindari dobel formula jika cutPlain sudah cukup
-      const onlyText = textLeft.replace(/\s+/g, ' ').trim();
-      if (!/\b[A-H]\s*[.、．\)]\s+/.test(onlyText)) {
-        return box.innerHTML.trim();
-      }
-      return (head || 'Soal') + ' ' + formulas.join(' ') + (hasAdalah ? ' adalah ....' : ' ....');
-    }
-    return box.innerHTML.trim() || cutPlain;
-  }
-
-  return cutPlain || p;
+  return box.innerHTML.trim() || p;
 }
 
 function parseSoalFromText(raw) {
@@ -5946,6 +5943,10 @@ async function submitImportSoal() {
       errors.push(`#${i+1}: kunci tidak ditandai *, default opsi pertama`);
     }
 
+    // Pastikan opsi tidak nempel di pertanyaan
+    if (s.pertanyaan) {
+      s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+    }
     // Upload gambar embedded (data-url) → Storage
     let pertanyaan = s.pertanyaan || '';
     let mediaUploaded = 0, mediaFailed = 0;
@@ -6472,7 +6473,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(s.pertanyaan)}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
       ${body}
     </div>`;
   }).join('');
