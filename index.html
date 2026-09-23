@@ -4427,12 +4427,12 @@ function openMathLiveEditor(onInsert) {
       <h4>Σ Editor Rumus Matematika</h4>
       <div class="mathlive-modal-body">
         <div id="mathliveFieldHost" style="min-height:64px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;background:#fff;"></div>
+        <button type="button" id="mathliveShowKb" style="margin-top:8px;width:100%;padding:10px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">⌨️ Tampilkan Keyboard Rumus</button>
         <div class="mathlive-modal-hint">
-          Ketik di kotak putih, atau tekan <b>Tampilkan Keyboard Rumus</b>.<br>
-          Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.<br>
-          Selesai → tekan tombol hijau <b>✓ OK · Sisipkan Rumus</b> di bawah (selalu terlihat).
+          Ketik di kotak putih, atau tekan tombol keyboard di atas.<br>
+          Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.
         </div>
-        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;" id="mathliveSnippets">
+        <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="mathliveSnippets">
           <button type="button" data-ml-snippet="\\frac{#@}{#0}">a/b</button>
           <button type="button" data-ml-snippet="\\sqrt{#0}">√</button>
           <button type="button" data-ml-snippet="#@^{#0}">x²</button>
@@ -4456,51 +4456,51 @@ function openMathLiveEditor(onInsert) {
       </div>
       <div class="mathlive-modal-actions">
         <button type="button" class="mathlive-btn-cancel" id="mathliveCancel">Batal</button>
-        <button type="button" class="mathlive-btn-ok" id="mathliveOk">Sisipkan ke Soal</button>
+        <button type="button" class="mathlive-btn-ok" id="mathliveOk">✓ OK · Sisipkan Rumus</button>
       </div>
     </div>
   `;
-  // style snippet buttons
   root.querySelectorAll('#mathliveSnippets button').forEach(b => {
-    b.style.cssText = 'background:#e8f0fe;border:1px solid #93c5fd;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;';
+    b.style.cssText = 'background:#e8f0fe;border:1px solid #93c5fd;border-radius:4px;padding:6px 4px;cursor:pointer;font-size:12px;width:100%;';
   });
   document.body.appendChild(root);
 
-  const host = root.querySelector('#mathliveFieldHost');
   let mf = null;
-  let mode = 'none';
-
-  function tryInit() {
+  let mode = null;
+  const host = root.querySelector('#mathliveFieldHost');
+  try {
+    if (typeof MathfieldElement !== 'undefined') {
+      const el = document.createElement('math-field');
+      el.style.width = '100%';
+      el.style.minHeight = '56px';
+      el.style.fontSize = '22px';
+      el.setAttribute('virtual-keyboard-mode', 'manual');
+      host.innerHTML = '';
+      host.appendChild(el);
+      mf = el;
+      mode = 'element';
+      setTimeout(() => { try { el.focus(); } catch(e){} }, 100);
+    }
+  } catch (e) { console.warn('MathfieldElement', e); }
+  if (!mf) {
     try {
       if (window.MathLive && typeof MathLive.makeMathField === 'function') {
         mf = MathLive.makeMathField(host, {
           virtualKeyboardMode: 'manual',
           smartMode: true,
         });
+        mode = 'makeMathField';
         try {
           if (window.mathVirtualKeyboard) {
             mathVirtualKeyboard.container = document.body;
           }
         } catch (eK) {}
-        mode = 'makeMathField';
-        return true;
       }
     } catch (e) { console.warn('makeMathField', e); }
-    try {
-      host.innerHTML = '';
-      const el = document.createElement('math-field');
-      el.setAttribute('virtual-keyboard-mode', 'onfocus');
-      el.style.cssText = 'width:100%;font-size:22px;border:none;min-height:48px;';
-      host.appendChild(el);
-      mf = el;
-      mode = 'math-field';
-      return true;
-    } catch (e) { console.warn('math-field', e); }
-    host.innerHTML = '<p style="color:#b45309;font-size:12px;margin:0 0 6px;">MathLive tidak termuat — gunakan input LaTeX di bawah atau tombol pintasan.</p>';
-    mode = 'fallback';
-    return false;
   }
-  tryInit();
+  if (!mf) {
+    host.innerHTML = '<p style="color:#b45309;font-size:12px;margin:0 0 6px;">MathLive tidak termuat — gunakan input LaTeX di bawah atau tombol pintasan.</p>';
+  }
 
   setTimeout(() => {
     try {
@@ -4519,30 +4519,6 @@ function openMathLiveEditor(onInsert) {
       }
     } catch (e) {}
   }, 250);
-
-  // Tombol keyboard
-  (function() {
-    const hostEl = root.querySelector('#mathliveFieldHost');
-    if (!hostEl || root.querySelector('#mathliveShowKb')) return;
-    const kbBtn = document.createElement('button');
-    kbBtn.type = 'button';
-    kbBtn.id = 'mathliveShowKb';
-    kbBtn.textContent = '⌨️ Tampilkan Keyboard Rumus';
-    kbBtn.style.cssText = 'margin-top:8px;width:100%;padding:10px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;';
-    kbBtn.onclick = function(ev) {
-      ev.preventDefault();
-      try {
-        if (mf && typeof mf.focus === 'function') mf.focus();
-        else if (mf && mf.focus) mf.focus();
-        if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('showVirtualKeyboard');
-        if (window.mathVirtualKeyboard) mathVirtualKeyboard.show();
-        document.querySelectorAll('.ML__keyboard, .ML__keyboard-container').forEach(function(kb) {
-          kb.style.zIndex = '10100';
-        });
-      } catch (e) {}
-    };
-    hostEl.parentNode.insertBefore(kbBtn, hostEl.nextSibling);
-  })();
 
   root.querySelectorAll('[data-ml-snippet]').forEach(btn => {
     btn.onclick = (ev) => {
@@ -4567,6 +4543,7 @@ function openMathLiveEditor(onInsert) {
 
   const close = () => {
     try { if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('hideVirtualKeyboard'); } catch (e) {}
+    try { if (window.mathVirtualKeyboard) mathVirtualKeyboard.hide(); } catch (e) {}
     root.remove();
   };
   root.addEventListener('click', (e) => { if (e.target === root) close(); });
@@ -4578,8 +4555,8 @@ function openMathLiveEditor(onInsert) {
       else if (mf && mf.value != null) latex = String(mf.value);
     } catch (e) {}
     const manual = ($('mathliveLatexManual')?.value || '').trim();
-    if (manual) latex = manual; // prioritaskan manual jika diisi
-    latex = String(latex || '').trim();
+    if (manual) latex = manual;
+    latex = cleanMathInput(latex);
     if (!latex) {
       showBigPopup('warning', 'Rumus', 'Rumus masih kosong. Ketik di kotak atau isi LaTeX manual.');
       return;
@@ -4588,6 +4565,7 @@ function openMathLiveEditor(onInsert) {
     if (typeof onInsert === 'function') onInsert(latex);
   };
 }
+
 
 function insertLatexIntoQuill(quill, latex) {
   if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
