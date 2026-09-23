@@ -4803,10 +4803,24 @@ function normalizeOpsiHtml(html) {
 
 function renderSoalHtml(html) {
   if (!html) return '';
-  // Jika plain text tanpa tag, escape
+  // Jika plain text tanpa tag, rapikan opsi nempel + escape
   if (html.indexOf('<') === -1) {
-    return html.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    let t = typeof stripGluedOptionsFromText === 'function' ? stripGluedOptionsFromText(html) : html;
+    t = typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText(t) : t;
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
+  // HTML: jika ada teks opsi nempel di akhir, coba bersihkan via plain
+  try {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    if (!d.querySelector('.katex, .ql-formula-embed, img, table')) {
+      let t = (d.innerText || '').replace(/\s+/g, ' ').trim();
+      const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
+      if (cleaned.length < t.length - 3) {
+        return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+    }
+  } catch (e) {}
   return html;
 }
 
@@ -5709,12 +5723,17 @@ function parseSoalFromHtml(html) {
       }
     }
     if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
-      s.opsi = s.opsi.map(o => {
+      s.opsi = resplitMergedOpsi(s.opsi.map(o => {
         let teks = (o.teks || '').trim();
         teks = teks.replace(/[*＊]\s*$/g, '').trim();
         teks = preferUnicodeMath(teks);
-        return { teks, is_benar: !!o.is_benar };
-      });
+        // preferUnicodeMath bisa return HTML — untuk resplit, ambil plain dulu
+        const plain = String(teks).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return { teks: plain, is_benar: !!o.is_benar, letter: o.letter };
+      })).map(o => ({
+        teks: preferUnicodeMath(o.teks),
+        is_benar: !!o.is_benar
+      }));
     }
   });
 
@@ -5784,24 +5803,128 @@ function formulaHtmlToEditableText(html) {
   if (!html) return '';
   const d = document.createElement('div');
   d.innerHTML = String(html);
-  // Ambil data-latex jika ada
+
+  // 1) Prioritas: data-latex (sumber kebenaran)
   d.querySelectorAll('[data-latex]').forEach(el => {
-    const latex = el.getAttribute('data-latex') || '';
+    let latex = (el.getAttribute('data-latex') || '').trim();
+    latex = repairCorruptedSqrtText(latex);
     let nice = latex;
-    nice = nice.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+    // \sqrt{12} → √12 ; 2\sqrt{3} → 2√3
+    nice = nice.replace(/(\d*)\\sqrt\{([^{}]+)\}/g, function(_, coef, inner) {
+      return (coef || '') + '√' + inner;
+    });
+    nice = nice.replace(/\\sqrt\{([^{}]+)\}/g, '√$1');
     nice = nice.replace(/(\d+)\^\{(\d+)\}/g, function(_, a, b) {
       const sups = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
       return a + String(b).split('').map(x => sups[x] || x).join('');
     });
     nice = nice.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
+    nice = nice.replace(/\\left|\\right|\\cdot|\\times/g, function(x) {
+      if (x === '\\times' || x === '\\cdot') return '×';
+      return '';
+    });
     el.replaceWith(document.createTextNode(nice));
   });
-  d.querySelectorAll('.katex, .math-fallback').forEach(el => {
+
+  // 2) KaTeX tanpa wrapper: coba annotation latex, JANGAN pakai textContent (hilang √)
+  d.querySelectorAll('.katex').forEach(el => {
+    if (el.closest('[data-latex]')) return;
+    let latex = '';
+    const ann = el.querySelector('annotation[encoding="application/x-tex"], annotation');
+    if (ann) latex = (ann.textContent || '').trim();
+    if (!latex) {
+      // fallback: susun dari struktur (kurang ideal)
+      latex = (el.textContent || '').replace(/\s+/g, '');
+    } else {
+      latex = repairCorruptedSqrtText(latex);
+      latex = latex.replace(/(\d*)\\sqrt\{([^{}]+)\}/g, function(_, c, inner) {
+        return (c || '') + '√' + inner;
+      });
+    }
+    el.replaceWith(document.createTextNode(latex || ''));
+  });
+
+  d.querySelectorAll('.math-fallback').forEach(el => {
     el.replaceWith(document.createTextNode(el.textContent || ''));
   });
+
   let plain = (d.innerText || d.textContent || '').replace(/\s+/g, ' ').trim();
   plain = repairCorruptedSqrtText(plain);
+  // Buang opsi yang nempel di pertanyaan
+  plain = stripGluedOptionsFromText(plain);
   return plain;
+}
+
+/** Buang deretan opsi (2√3 3√2 … / A. B. C.) yang menempel di belakang soal */
+function stripGluedOptionsFromText(s) {
+  if (!s) return s;
+  let t = String(s);
+  // Setelah "...." / "…": buang semua sisa
+  t = t.replace(/(\.{2,}|…)\s*.*$/u, '$1');
+  // "adalah" + opsi tanpa titik
+  t = t.replace(/(\badalah\b)\s+(?=\d+\s*√|\d+√|\\sqrt).*$/i, '$1 ....');
+  // Label A. B. C. di tengah/akhir
+  const m = t.search(/\s+[A-H]\s*[.、．\)]\s+\S/);
+  if (m > 10) t = t.slice(0, m).replace(/[\s.]+$/g, '').trim() + ' ....';
+  // Deretan murni n√m di akhir (min 2)
+  t = t.replace(/\s+(?:\d+\s*√\s*\d+|\d+√\d+)(?:\s+(?:\d+\s*√\s*\d+|\d+√\d+))+\s*$/g, '');
+  return t.replace(/\s{2,}/g, ' ').trim();
+}
+
+
+/** Jika satu opsi memuat "C. … D. …", pecah lagi jadi opsi terpisah */
+function resplitMergedOpsi(opsiList) {
+  if (!opsiList || !opsiList.length) return opsiList || [];
+  const out = [];
+  opsiList.forEach(o => {
+    let teks = String(o.teks || '');
+    // pola inline: 3√2 C. 4√3 D. 6√2
+    const re = /(?:^|\s)([A-H])\s*[.、．\)]\s*/gi;
+    const marks = [];
+    let m;
+    while ((m = re.exec(teks)) !== null) {
+      marks.push({ letter: m[1].toUpperCase(), start: m.index, contentStart: m.index + m[0].length });
+    }
+    if (marks.length >= 1 && marks[0].start > 0) {
+      // ada teks sebelum label pertama → itu sisa opsi saat ini
+      let first = teks.slice(0, marks[0].start).trim();
+      first = repairCorruptedSqrtText(first.replace(/\s*\*\s*$/, '').trim());
+      if (first) out.push({ teks: first, is_benar: !!o.is_benar, letter: o.letter });
+      for (let i = 0; i < marks.length; i++) {
+        const endPos = i + 1 < marks.length ? marks[i + 1].start : teks.length;
+        let part = teks.slice(marks[i].contentStart, endPos).trim();
+        let benar = /\*/.test(part) || (i === 0 && o.is_benar && marks[0].start === 0);
+        part = part.replace(/\s*\*\s*/g, ' ').trim();
+        part = repairCorruptedSqrtText(part);
+        if (part) out.push({ teks: part, is_benar: !!benar, letter: marks[i].letter });
+      }
+    } else if (marks.length >= 2 && marks[0].start === 0) {
+      for (let i = 0; i < marks.length; i++) {
+        const endPos = i + 1 < marks.length ? marks[i + 1].start : teks.length;
+        let part = teks.slice(marks[i].contentStart, endPos).trim();
+        let benar = /\*/.test(part);
+        part = part.replace(/\s*\*\s*/g, ' ').trim();
+        part = repairCorruptedSqrtText(part);
+        if (part) out.push({ teks: part, is_benar: !!benar, letter: marks[i].letter });
+      }
+    } else {
+      out.push({
+        teks: repairCorruptedSqrtText(teks.replace(/\s*\*\s*$/, '').trim()),
+        is_benar: !!o.is_benar,
+        letter: o.letter
+      });
+    }
+  });
+  // dedupe by letter keep first
+  const seen = new Set();
+  const final = [];
+  out.forEach(o => {
+    const L = o.letter || '';
+    if (L && seen.has(L)) return;
+    if (L) seen.add(L);
+    final.push(o);
+  });
+  return final.length ? final : opsiList;
 }
 
 function repairCorruptedSqrtText(s) {
@@ -6217,6 +6340,11 @@ function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
   // Rapikan √ di plain jika tidak ada embed
   if (!box.querySelector('.katex, .ql-formula-embed')) {
     htmlOut = repairCorruptedSqrtText(plainOut || htmlOut);
+    htmlOut = stripGluedOptionsFromText(htmlOut);
+  } else {
+    // ada embed: tetap buang teks opsi nempel di akhir plain
+    const cleaned = stripGluedOptionsFromText(plainOut);
+    if (cleaned.length < plainOut.length - 5) return cleaned;
   }
   return htmlOut;
 }
@@ -6434,20 +6562,14 @@ for (const block of useParts) {
 
     if (!pertanyaan) continue;
     pertanyaan = repairCorruptedSqrtText(pertanyaan);
-    // Buang opsi yang nempel di belakang pertanyaan: ".... 2√3 3√2 4√3 6√2"
-    pertanyaan = pertanyaan.replace(/\s*\.{2,}.*$/, function(m) {
-      // pertahankan "...." tapi buang angka/akar setelahnya
-      var dots = (m.match(/\.{2,}/) || ['....'])[0];
-      return ' ' + dots;
-    });
-    pertanyaan = pertanyaan.replace(/\s+(?:\d+√\d+|\d+\s*√\s*\d+|\\sqrt\{[^}]+\})(?:\s+(?:\d+√\d+|\d+\s*√\s*\d+|\\sqrt\{[^}]+\}))+\s*$/g, '');
-    pertanyaan = pertanyaan.replace(/\s{2,}/g, ' ').trim();
+    pertanyaan = stripGluedOptionsFromText(pertanyaan);
 
     // Normalisasi is_benar: pastikan boolean murni
-    opsi = opsi.map(o => ({
+    opsi = resplitMergedOpsi(opsi.map(o => ({
       teks: repairCorruptedSqrtText(o.teks || ''),
       is_benar: !!o.is_benar,
-    }));
+      letter: o.letter
+    })));
 
     if ((jenis === 'pg' || jenis === 'checkbox') && opsi.length) {
 
