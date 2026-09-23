@@ -5643,22 +5643,15 @@ function previewImportSoal(ev) {
 function parseSoalFromHtml(html) {
   if (!html) return [];
   let work = String(html)
-    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '
-')
-    .replace(/<br\s*\/?>/gi, '
-')
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
     .replace(/&nbsp;/gi, ' ');
   // Sisipkan newline di sekitar marker template (Word sering menempel di satu paragraf)
-  work = work.replace(/(SOAL\s*\d*\b)/gi, '
-$1');
-  work = work.replace(/(JENIS\s*[:：])/gi, '
-$1');
-  work = work.replace(/(POIN\s*[:：])/gi, '
-$1');
-  work = work.replace(/(PERTANYAAN\s*[:：])/gi, '
-$1');
-  work = work.replace(/(?:^|[\s>])([A-H])\s*[.、．\)]\s+/gim, '
-$1. ');
+  work = work.replace(/(SOAL\s*\d*\b)/gi, '\n$1');
+  work = work.replace(/(JENIS\s*[:：])/gi, '\n$1');
+  work = work.replace(/(POIN\s*[:：])/gi, '\n$1');
+  work = work.replace(/(PERTANYAAN\s*[:：])/gi, '\n$1');
+  work = work.replace(/(?:^|[\s>])([A-H])\s*[.、．\)]\s+/gim, '\n$1. ');
 
   const tmp = document.createElement('div');
   tmp.innerHTML = work;
@@ -6175,25 +6168,17 @@ function cleanupOpsiMathText(teks) {
 
 function parseSoalFromText(raw) {
   if (!raw) return [];
-  let text = String(raw).replace(/\r\n/g, '
-').replace(/\r/g, '
-');
+  let text = String(raw).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // --- Normalisasi struktur template Word (sering hilang newline) ---
   // Sisipkan newline sebelum marker penting agar split SOAL & opsi A/B/C/D andal
-  text = text.replace(/\s*(SOAL\s*\d*\b)/gi, '
-$1');
-  text = text.replace(/\s*(JENIS\s*[:：])/gi, '
-$1');
-  text = text.replace(/\s*(POIN\s*[:：])/gi, '
-$1');
-  text = text.replace(/\s*(PERTANYAAN\s*[:：])/gi, '
-$1');
-  text = text.replace(/\s*(KUNCI\s*[:：])/gi, '
-$1');
+  text = text.replace(/\s*(SOAL\s*\d*\b)/gi, '\n$1');
+  text = text.replace(/\s*(JENIS\s*[:：])/gi, '\n$1');
+  text = text.replace(/\s*(POIN\s*[:：])/gi, '\n$1');
+  text = text.replace(/\s*(PERTANYAAN\s*[:：])/gi, '\n$1');
+  text = text.replace(/\s*(KUNCI\s*[:：])/gi, '\n$1');
   // Opsi A. B. C. D. ... di baris sendiri (huruf + titik/kurung)
-  text = text.replace(/(?:^|[\s,;])([A-H])\s*[.、．\)]\s+/gim, '
-$1. ');
+  text = text.replace(/(?:^|[\s,;])([A-H])\s*[.、．\)]\s+/gim, '\n$1. ');
   // Spasi sebelum "adalah" jika nempel ke akar/angka: √12adalah → √12 adalah
   text = text.replace(/(√[\d.]+|(?:\\sqrt\{[^}]+\})|(?:\d+√\d+)|(?:\d+\^\{\d+\}))(?=[A-Za-zÀ-ü])/g, '$1 ');
   text = text.replace(/([0-9}])(?=adalah\b)/gi, '$1 ');
@@ -6202,10 +6187,7 @@ $1. ');
   text = repairCorruptedSqrtText(text);
 
   // Rapikan spasi berlebih tapi jaga baris
-  text = text.replace(/[ \t]+\n/g, '
-').replace(/\n{3,}/g, '
-
-');
+  text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
 
   // Pecah per SOAL — tidak wajib di awal baris (Word sering menempel)
   // Hanya marker "SOAL" yang diikuti nomor opsional / akhir kata (bukan "soal" dalam kalimat biasa di tengah)
