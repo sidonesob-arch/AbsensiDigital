@@ -5773,29 +5773,26 @@ function repairCorruptedSqrtText(s) {
   if (!s) return s;
   let t = String(s);
 
-  // ========== Pola LaTeX rusak (dari OMML/innerText/Word linear) ==========
-  // 12\sqrt{12}12  →  \sqrt{12}
+  // ========== Pola LaTeX rusak ==========
+  // 12\sqrt{12}12 → \sqrt{12}
   t = t.replace(/(\d+)\\sqrt\{(\1)\}(\1)/g, '\\sqrt{$2}');
-  // n\sqrt{n} tanpa trailing n sudah tertangani di atas; variasi spasi
   t = t.replace(/(\d+)\s*\\sqrt\{(\1)\}\s*\1/g, '\\sqrt{$2}');
-  // 232\sqrt{3} → 2\sqrt{3}   (coef+rad+coef)\sqrt{rad}
+  // 232\sqrt{3} → 2\sqrt{3}
   t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}/g, '$1\\sqrt{$3}');
-  // 232\sqrt{3}(2)3 → 2\sqrt{3}   sisa (coef)rad di belakang
   t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$3}');
   t = t.replace(/(\d+)(\d+)\1\s*\\sqrt\{(\2)\}\s*\(\1\)\2/g, '$1\\sqrt{$3}');
-  // 2\sqrt{3}(2)3 → 2\sqrt{3}
   t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\(\1\)\s*\2/g, '$1\\sqrt{$2}');
   t = t.replace(/(\d+)\\sqrt\{(\d+)\}\(\1\)\2/g, '$1\\sqrt{$2}');
-  // \sqrt{12}12 → \sqrt{12}
   t = t.replace(/\\sqrt\{(\d+)\}\s*\1\b/g, '\\sqrt{$1}');
-  // 12\sqrt{12} → \sqrt{12}
   t = t.replace(/(\d+)\\sqrt\{(\1)\}/g, '\\sqrt{$2}');
+  // 2 \sqrt{3} 23 → 2\sqrt{3}
+  t = t.replace(/(\d+)\s*\\sqrt\{(\d+)\}\s+\1\2\b/g, '$1\\sqrt{$2}');
+  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\2\b/g, '$1\\sqrt{$2}');
 
-  // Pangkat rusak: 2 5 2^(5) 2 5  atau  25 2^(5) 25  →  2^{5}
+  // Pangkat rusak
   t = t.replace(/(\d+)\s+(\d+)\s+\1\s*\^\s*\(\s*(\2)\s*\)\s*\1\s*\2/g, '$1^{$3}');
   t = t.replace(/(\d+)\s+(\d+)\s+\1\^\((\2)\)\s*\1\s*\2/g, '$1^{$3}');
   t = t.replace(/(\d+)(\d+)\s+\1\^\((\2)\)\s*\1\2/g, '$1^{$2}');
-  // 2^(5) sudah OK; rapikan 2^ (5) → 2^{5}
   t = t.replace(/(\d+)\s*\^\s*\(\s*(\d+)\s*\)/g, '$1^{$2}');
   t = t.replace(/(\d+)\s*\^\s*\{(\d+)\}/g, '$1^{$2}');
 
@@ -5809,8 +5806,20 @@ function repairCorruptedSqrtText(s) {
   // 2√3(2)3 → 2√3
   t = t.replace(/(\d+)√(\d+)\s*\(\1\)\s*\2/g, '$1√$2');
   t = t.replace(/(\d+)√(\d+)\(\1\)\2/g, '$1√$2');
+  // *** POLA UTAMA DARI SCREENSHOT: 2 √3 23 → 2√3  /  3 √2 32 → 3√2 ***
+  // Format: coef + √ + rad + spasi + coef + rad
+  t = t.replace(/(\d+)\s*√\s*(\d+)\s+\1\2\b/g, '$1√$2');
+  t = t.replace(/(\d+)\s*√\s*(\d+)\s*\1\2\b/g, '$1√$2');
+  // tanpa spasi di tengah: 2√323 → 2√3 (hati-hati: hanya jika trailing = coef+rad)
+  t = t.replace(/(\d+)√(\d+)\1\2\b/g, '$1√$2');
+  // √12 12 → √12
+  t = t.replace(/√(\d+)\s+\1\b/g, '√$1');
 
-  // Rapikan spasi aneh di sekitar latex
+  // Rapikan spasi di sekitar √: 2 √ 3 → 2√3
+  t = t.replace(/(\d+)\s*√\s*(\d+)/g, '$1√$2');
+  t = t.replace(/√\s+(\d+)/g, '√$1');
+
+  // Rapikan latex
   t = t.replace(/\s*(\\sqrt\{[^}]+\})\s*/g, ' $1 ');
   t = t.replace(/\s{2,}/g, ' ');
   return t.trim();
@@ -6143,7 +6152,22 @@ function stripOpsiTrailingFromPertanyaan(pertanyaan, opsi) {
     return head;
   }
 
-  return box.innerHTML.trim() || p;
+  // Buang deretan opsi akar yang nempel tanpa label A/B/C:
+  // ".... 2√3 3√2 4√3 6√2" → "...."
+  let htmlOut = box.innerHTML.trim() || p;
+  let plainOut = (box.innerText || plain2 || '').replace(/\s+/g, ' ').trim();
+  const glued = plainOut.match(/\s+((?:\d+\s*√\s*\d+|\d+√\d+)(?:\s+(?:\d+\s*√\s*\d+|\d+√\d+)){1,})\s*$/);
+  if (glued && glued.index > 8) {
+    // potong HTML/plain di posisi glued
+    plainOut = plainOut.slice(0, glued.index).replace(/[\s.…]+$/g, '').trim();
+    if (plainOut && !/[.?!…]$/.test(plainOut)) plainOut += ' ....';
+    return plainOut;
+  }
+  // Rapikan √ di plain jika tidak ada embed
+  if (!box.querySelector('.katex, .ql-formula-embed')) {
+    htmlOut = repairCorruptedSqrtText(plainOut || htmlOut);
+  }
+  return htmlOut;
 }
 
 /** Rapikan teks opsi: perbaiki √ rusak + render KaTeX agar garis akar memanjang */
@@ -6359,6 +6383,14 @@ for (const block of useParts) {
 
     if (!pertanyaan) continue;
     pertanyaan = repairCorruptedSqrtText(pertanyaan);
+    // Buang opsi yang nempel di belakang pertanyaan: ".... 2√3 3√2 4√3 6√2"
+    pertanyaan = pertanyaan.replace(/\s*\.{2,}.*$/, function(m) {
+      // pertahankan "...." tapi buang angka/akar setelahnya
+      var dots = (m.match(/\.{2,}/) || ['....'])[0];
+      return ' ' + dots;
+    });
+    pertanyaan = pertanyaan.replace(/\s+(?:\d+√\d+|\d+\s*√\s*\d+|\\sqrt\{[^}]+\})(?:\s+(?:\d+√\d+|\d+\s*√\s*\d+|\\sqrt\{[^}]+\}))+\s*$/g, '');
+    pertanyaan = pertanyaan.replace(/\s{2,}/g, ' ').trim();
 
     // Normalisasi is_benar: pastikan boolean murni
     opsi = opsi.map(o => ({
