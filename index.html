@@ -5567,7 +5567,13 @@ function previewImportSoal(ev) {
     }
     box.innerHTML = `<p style="color:var(--success);font-weight:700;">✅ Terbaca <b>${parsed.length}</b> soal` + mediaInfo + `</p>` +
       parsed.slice(0, 12).map((s, i) => {
-        const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => String(o.teks || '').replace(/<[^>]+>/g,'').slice(0,40));
+        const kunci = (s.opsi || []).filter(o => o.is_benar).map(o => {
+          let k = String(o.teks || '').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+          k = repairCorruptedSqrtText(k);
+          // jangan tampilkan opsi lain yang nyangkut: "2√3 B. 3√2"
+          k = k.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+          return k.slice(0, 40);
+        });
         const hasImg = /<img\b/i.test(s.pertanyaan || '');
         const hasTbl = /<table\b/i.test(s.pertanyaan || '');
         const mediaBadge = (hasImg || hasTbl)
@@ -5575,7 +5581,7 @@ function previewImportSoal(ev) {
           : '';
         return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
           <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
-          ${repairCorruptedSqrtText((s.pertanyaan||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')).slice(0,90)}…
+          ${stripGluedOptionsFromText(repairCorruptedSqrtText((s.pertanyaan||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' '))).slice(0,90)}…
           ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.map(k => repairCorruptedSqrtText(k)).join(' | ')}</span>` : ''}
           ${s.jenis==='benar_salah' ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${s.kunci_bs}</span>` : ''}
         </div>`;
@@ -5710,31 +5716,46 @@ function parseSoalFromHtml(html) {
 
     // --- OPSI: biarkan teks dari parseSoalFromText (unicode bersih).
     //     Jangan overwrite dengan latex mentah dari HTML.
-    // Rapikan pertanyaan (akar/pangkat rusak → KaTeX)
-    if (s.pertanyaan) {
-      s.pertanyaan = repairCorruptedSqrtText(s.pertanyaan);
-      // Jika pertanyaan plain (tanpa embed/img), konversi √/latex → KaTeX
-      if (!/<span[^>]*ql-formula-embed|<img\b/i.test(s.pertanyaan)) {
-        const converted = plainMathToKatexHtml(s.pertanyaan.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-        if (converted && /ql-formula-embed/.test(converted)) {
-          // Pertahankan teks non-math di sekitar: pakai hasil convert penuh jika mirip
-          s.pertanyaan = converted;
+    // === FINAL CLEAN: selalu kerjakan di PLAIN text (HTML bisa menyisipkan tag di tengah rumus) ===
+    (function finalizeSoal(s) {
+      // Pertanyaan
+      let pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      pPlain = repairCorruptedSqrtText(pPlain);
+      pPlain = stripGluedOptionsFromText(pPlain);
+      const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
+      const hasGoodFormula = /ql-formula-embed|data-latex/i.test(s.pertanyaan || '');
+      // Jika tidak ada media/formula bagus, atau plain masih berisi pola rusak / opsi nempel → pakai plain bersih
+      if (!hasMedia) {
+        if (!hasGoodFormula || /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|adalah\s*\.{0,4}\s*\d/i.test(pPlain)) {
+          s.pertanyaan = pPlain;
+        } else {
+          // tetap strip opsi nempel dari HTML via plain
+          s.pertanyaan = pPlain;
         }
+      } else {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
       }
-    }
-    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
-      s.opsi = resplitMergedOpsi(s.opsi.map(o => {
-        let teks = (o.teks || '').trim();
-        teks = teks.replace(/[*＊]\s*$/g, '').trim();
-        teks = preferUnicodeMath(teks);
-        // preferUnicodeMath bisa return HTML — untuk resplit, ambil plain dulu
-        const plain = String(teks).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        return { teks: plain, is_benar: !!o.is_benar, letter: o.letter };
-      })).map(o => ({
-        teks: preferUnicodeMath(o.teks),
-        is_benar: !!o.is_benar
-      }));
-    }
+
+      // Opsi
+      if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
+        let list = s.opsi.map(o => {
+          let teks = String(o.teks || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          teks = teks.replace(/[*＊]\s*$/g, '').trim();
+          teks = repairCorruptedSqrtText(teks);
+          // potong di label opsi berikutnya jika masih nyangkut
+          teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+          teks = teks.replace(/\s+[B-H]\s*$/g, '').trim();
+          return { teks, is_benar: !!o.is_benar, letter: o.letter };
+        });
+        list = resplitMergedOpsi(list);
+        // Pastikan A-D berurutan, teks pendek
+        s.opsi = list.map(o => ({
+          teks: repairCorruptedSqrtText(String(o.teks || '').replace(/<[^>]+>/g, ' ').trim()),
+          is_benar: !!o.is_benar
+        })).filter(o => o.teks);
+      }
+    })(s);
+
   });
 
   // Fallback gambar ke soal pertama
@@ -5864,8 +5885,10 @@ function stripGluedOptionsFromText(s) {
   // "adalah" + opsi tanpa titik
   t = t.replace(/(\badalah\b)\s+(?=\d+\s*√|\d+√|\\sqrt).*$/i, '$1 ....');
   // Label A. B. C. di tengah/akhir
-  const m = t.search(/\s+[A-H]\s*[.、．\)]\s+\S/);
+  const m = t.search(/\s+[A-H]\s*[.、．\)]\s*\S/);
   if (m > 10) t = t.slice(0, m).replace(/[\s.]+$/g, '').trim() + ' ....';
+  // "2√3 B.3√2" atau "2\sqrt{3} B. 3\sqrt{2}"
+  t = t.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
   // Deretan murni n√m di akhir (min 2)
   t = t.replace(/\s+(?:\d+\s*√\s*\d+|\d+√\d+)(?:\s+(?:\d+\s*√\s*\d+|\d+√\d+))+\s*$/g, '');
   return t.replace(/\s{2,}/g, ' ').trim();
