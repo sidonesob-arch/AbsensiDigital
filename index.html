@@ -6036,22 +6036,38 @@ function formulaHtmlToEditableText(html) {
     el.replaceWith(document.createTextNode(nice));
   });
 
-  // 2) KaTeX tanpa wrapper: coba annotation latex, JANGAN pakai textContent (hilang √)
+  // 2) KaTeX tanpa data-latex: ambil annotation TeX (JANGAN textContent — √ jadi hilang)
   d.querySelectorAll('.katex').forEach(el => {
     if (el.closest('[data-latex]')) return;
     let latex = '';
     const ann = el.querySelector('annotation[encoding="application/x-tex"], annotation');
     if (ann) latex = (ann.textContent || '').trim();
     if (!latex) {
-      // fallback: susun dari struktur (kurang ideal)
-      latex = (el.textContent || '').replace(/\s+/g, '');
-    } else {
-      latex = repairCorruptedSqrtText(latex);
-      latex = latex.replace(/(\d*)\\sqrt\{([^{}]+)\}/g, function(_, c, inner) {
-        return (c || '') + '√' + inner;
-      });
+      // Rekonstruksi kasar dari struktur KaTeX (sqrt / sup)
+      const sqrtEl = el.querySelector('.sqrt, .mord.sqrt, [class*="sqrt"]');
+      const nums = (el.textContent || '').replace(/\s+/g, '').trim();
+      if (sqrtEl && nums) {
+        latex = '\\sqrt{' + nums + '}';
+      } else if (el.querySelector('.msupsub, .vlist-t, .sizing.reset-size6.size3')) {
+        // pangkat: coba ambil base + sup dari text dengan heuristik
+        const allText = (el.textContent || '').replace(/\s+/g, '');
+        const m = allText.match(/^(\d+)(\d+)$/);
+        if (m && m[2].length <= 2) latex = m[1] + '^{' + m[2] + '}';
+        else latex = allText;
+      } else {
+        latex = nums;
+      }
     }
-    el.replaceWith(document.createTextNode(latex || ''));
+    latex = repairCorruptedSqrtText(latex);
+    // Tampilkan unicode agar mudah diedit manual
+    let nice = latex
+      .replace(/(\d*)\\sqrt\{([^{}]+)\}/g, (_, c, inner) => (c || '') + '√' + inner)
+      .replace(/\\sqrt\{([^{}]+)\}/g, '√$1')
+      .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
+        const sups = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+        return a + String(b).split('').map(x => sups[x] || x).join('');
+      });
+    el.replaceWith(document.createTextNode(nice || latex || ''));
   });
 
   d.querySelectorAll('.math-fallback').forEach(el => {
@@ -6062,9 +6078,6 @@ function formulaHtmlToEditableText(html) {
   // Buang residual angka & MathML agar saat edit tidak muncul "2√3 2 3"
   plain = stripBrokenMathMlFragments(plain);
   plain = repairCorruptedSqrtText(plain);
-  plain = stripGluedOptionsFromText(plain);
-  plain = repairCorruptedSqrtText(plain);
-  // Buang opsi yang nempel di pertanyaan
   plain = stripGluedOptionsFromText(plain);
   return plain;
 }
@@ -6302,14 +6315,19 @@ function repairCorruptedSqrtText(s) {
     if (t === beforeR) break;
   }
 
-  // ===== √1625 → √16 (jika ada √25 di dekatnya: 25+16 digabung) =====
+  // ===== Fallback Word: "25 + 16√25 + √16" → "√25 + √16" =====
+  // (angka plain dari OMML Fallback menempel di depan equation)
+  t = t.replace(/(\d+)\s*([+\-])\s*(\d+)\s*√\s*\1\s*\2\s*√\s*(\3)\b/g, '√$1 $2 √$3');
+  t = t.replace(/(\d+)\s*([+\-])\s*(\d+)√\1\s*\2\s*√(\3)\b/g, '√$1 $2 √$3');
+  t = t.replace(/(\d+)\s*([+\-])\s*(\d+)\s+√\s*(\1)\s*\2\s*√\s*(\3)\b/g, '√$1 $2 √$3');
+  t = t.replace(/(\d+)\s*([+\-])\s*(\d+)\s*\\sqrt\{\1\}\s*\2\s*\\sqrt\{(\3)\}/g, '\\sqrt{$1} $2 \\sqrt{$3}');
+  t = t.replace(/(\d+)\s*([+\-])\s*(\d+)\\sqrt\{\1\}\s*\2\s*\\sqrt\{(\3)\}/g, '\\sqrt{$1} $2 \\sqrt{$3}');
   // √25 + √1625 → √25 + √16
   t = t.replace(/√(\d+)\s*([+\-])\s*√(\d+)\1\b/g, '√$1 $2 √$3');
   t = t.replace(/\\sqrt\{(\d+)\}\s*([+\-])\s*\\sqrt\{(\d+)\}\1\b/g, '\\sqrt{$1} $2 \\sqrt{$3}');
-  // √25 + √16 25 + 16 / √25 + √1625 + 16
+  // residual trailing: √25 + √16 25 + 16
   t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s*(?:\d+\s*[+\-]\s*)+\d+\b/g, '$1 $2 $3');
   t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s*[+\-]\s*\d+\b/g, '$1 $2 $3');
-  // Sisa angka setelah √n + √m di akhir sebelum "adalah"
   t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})\s+\d+(?=\s*adalah|\s*\.{2,}|$)/gi, '$1 $2 $3');
 
   // Rapikan operator spacing
