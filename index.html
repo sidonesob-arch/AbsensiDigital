@@ -4552,7 +4552,7 @@ function openMathLiveEditor(onInsert) {
 function insertLatexIntoQuill(quill, latex) {
   if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
   try {
-    const htmlFormula = katex.renderToString(latex, { throwOnError: false, displayMode: true });
+    const htmlFormula = katex.renderToString(cleanMathInput(latex), { throwOnError: false, displayMode: true, strict: false });
     const range = quill.getSelection(true) || { index: quill.getLength() };
     const safe = String(latex).replace(/&/g,'&amp;').replace(/"/g, '&quot;');
     const block = '<span class="ql-formula-embed" data-latex="' + safe + '">&nbsp;' + htmlFormula + '&nbsp;</span>';
@@ -4687,7 +4687,7 @@ function enhanceSoalHtmlInDom(rootEl) {
       const latex = el.getAttribute('data-latex') || '';
       if (!latex || typeof katex === 'undefined') return;
       try {
-        el.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+        el.innerHTML = katex.renderToString(cleanMathInput(latex), { throwOnError: false, displayMode: false, strict: false });
       } catch (e) {}
     });
     rootEl.querySelectorAll('code.math-latex').forEach(el => {
@@ -4731,7 +4731,7 @@ function enhanceSoalHtmlInDom(rootEl) {
 }
 
 function sanitizeToSingleLatex(text) {
-  let s = String(text || '').replace(/\s+/g, ' ').trim();
+  let s = cleanMathInput(String(text || ''));
   if (!s) return '';
   if (s.indexOf('\\') < 0) return s;
   // Ambil segmen latex paling lengkap
@@ -5078,7 +5078,7 @@ function ommlTextContent(el) {
     if (ch.nodeType === 3) s += ch.nodeValue || '';
     else if (ch.nodeType === 1) s += ommlTextContent(ch);
   });
-  return s;
+  return cleanMathInput(s);
 }
 function ommlChildrenByLocal(el, name) {
   const out = [];
@@ -5093,7 +5093,7 @@ function ommlFirstChild(el, name) {
 }
 function ommlToLatex(node) {
   if (!node) return '';
-  if (node.nodeType === 3) return node.nodeValue || '';
+  if (node.nodeType === 3) return cleanMathInput(node.nodeValue || '');
   if (node.nodeType !== 1) return '';
   const name = ommlLocalName(node);
   if (name === 'omath' || name === 'omathpara') {
@@ -5190,14 +5190,32 @@ function ommlToLatex(node) {
   }
   return Array.from(node.childNodes).map(ommlToLatex).join('');
 }
+function cleanMathInput(s) {
+  return String(s || '')
+    // Zero-width & invisible (Word sering sisipkan U+200B dll.)
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u180E]/g, '')
+    // Soft hyphen, LTR/RTL marks
+    .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+    // Non-breaking space → biasa
+    .replace(/\u00A0/g, ' ')
+    // Weird spaces
+    .replace(/[\u2028\u2029]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function latexToHtmlSnippet(latex) {
-  let clean = String(latex || '').replace(/\s+/g, ' ').trim();
+  let clean = cleanMathInput(latex);
   if (!clean) return '';
-  // Buang sisa duplikasi aneh
+  // Rapikan brace pangkat sederhana
   clean = clean.replace(/^\{([^{}]+)\}\^\{([^{}]+)\}$/, '$1^{$2}');
   try {
     if (typeof katex !== 'undefined') {
-      const rendered = katex.renderToString(clean, { throwOnError: false, displayMode: false });
+      const rendered = katex.renderToString(clean, {
+        throwOnError: false,
+        displayMode: false,
+        strict: false
+      });
       return '<span class="ql-formula-embed" data-latex="' +
         clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;') +
         '" style="display:inline-block;margin:0 2px;vertical-align:middle;">' +
@@ -5206,11 +5224,10 @@ function latexToHtmlSnippet(latex) {
   } catch (e) {
     console.warn('katex snippet', e, clean);
   }
-  // Fallback: tampilkan unicode sederhana untuk pangkat/pecahan umum
   let nice = clean;
   nice = nice.replace(/(\d+)\^\{(\d+)\}/g, function(_, a, b) {
     const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-    return a + String(b).split('').map(d => sup[parseInt(d,10)] || d).join('');
+    return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
   });
   nice = nice.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
   nice = nice.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
@@ -5603,7 +5620,7 @@ function cutHtmlBeforeOptions(partHtml) {
 /** Ubah latex jelek jadi unicode yang terbaca siswa */
 function preferUnicodeMath(teks) {
   if (!teks) return '';
-  let s = String(teks).trim();
+  let s = cleanMathInput(String(teks));
   // Sudah HTML formula bagus
   if (/ql-formula-embed|class="katex"/.test(s)) return s;
 
