@@ -5360,6 +5360,137 @@ function cleanMathInput(s) {
     .trim();
 }
 
+/** Hapus sisa tag MathML/OMML yang bocor jadi teks (mis. "< / mn>", "</msup>") */
+function stripBrokenMathMlFragments(s) {
+  if (s == null || s === '') return s;
+  let t = String(s);
+  // 1) Pulihkan msup utuh SEBELUM buang tag:
+  //    7</mn>5</mn></msup>  atau  7< / mn>5< / mn>< / msup>  →  7^{5}
+  t = t.replace(
+    /(\d+)\s*<\s*\/?\s*(?:m:)?mn\s*\/?\s*>\s*(\d+)\s*<\s*\/?\s*(?:m:)?mn\s*\/?\s*>\s*<\s*\/?\s*(?:m:)?msup\s*\/?\s*>/gi,
+    '$1^{$2}'
+  );
+  // 2) Buang semua tag MathML / HTML sisa (termasuk spasi di dalam < >)
+  t = t.replace(
+    /<\s*\/?\s*(?:m:)?(?:math|semantics|annotation|mrow|mi|mn|mo|msup|msub|msubsup|mfrac|msqrt|mroot|mtext|mspace|mphantom|mstyle|menclose|mfenced|mover|munder|munderover|mmultiscripts|mtable|mtr|mtd|maligngroup|malignmark|mlabeledtr|none|span|div|p)\b[^>]*>/gi,
+    ' '
+  );
+  // 3) Sisa atribut / encoding / karakter aneh tag
+  t = t.replace(/encoding\s*=\s*["'][^"']*["']/gi, ' ');
+  t = t.replace(/application\/x-tex/gi, ' ');
+  t = t.replace(/<\s*\/?\s*[^>]*>/g, ' '); // sisa tag apapun
+  // 4) Rapikan residual Word: 737^(5) → 7^{5} ; duplikat 7^{5} 7^{5}
+  t = t.replace(/(\d)\d+\^\((\d+)\)/g, '$1^{$2}');
+  t = t.replace(/(\d)\d+\^(\d+)/g, '$1^{$2}');
+  t = t.replace(/(\d+\^\{\d+\})\s+\1/g, '$1');
+  // 5) "75: 73 7^{5}" → "7^{5}" (prefix angka korupsi sebelum pangkat yang benar)
+  t = t.replace(/\b\d{2,}\s*[:\/]\s*\d{2,}\s+(\d+\^\{\d+\})/g, '$1');
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t;
+}
+
+/**
+ * Konversi elemen <math> (MathML dari Mammoth/Word) di HTML → embed KaTeX / latex.
+ * Juga bersihkan tag MathML yang tersisa.
+ */
+function convertMathMlInHtml(html) {
+  if (!html || (html.indexOf('<math') < 0 && html.indexOf('<m:') < 0 && !/<\/?\s*mn[\s>]/i.test(html))) {
+    // Tetap bersihkan fragmen bocor di plain
+    if (/<\/?\s*\/?\s*m(?:n|i|o|sup|row|ath)/i.test(html || '')) {
+      return stripBrokenMathMlFragments(html);
+    }
+    return html;
+  }
+  try {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    // Cari semua <math>
+    const maths = box.querySelectorAll('math, [class*="math"]');
+    maths.forEach(mathEl => {
+      // Prioritas: annotation TeX
+      let latex = '';
+      const ann = mathEl.querySelector('annotation[encoding="application/x-tex"], annotation[encoding*="tex"], annotation');
+      if (ann) latex = (ann.textContent || '').trim();
+      if (!latex) {
+        latex = mathmlElementToLatex(mathEl);
+      }
+      latex = cleanMathInput(latex);
+      if (latex) {
+        const snippet = (typeof latexToHtmlSnippet === 'function')
+          ? latexToHtmlSnippet(latex)
+          : ('<span class="math-fallback">' + latex.replace(/</g, '&lt;') + '</span>');
+        const wrap = document.createElement('span');
+        wrap.innerHTML = snippet;
+        mathEl.replaceWith(wrap.firstChild || document.createTextNode(latex));
+      } else {
+        mathEl.remove();
+      }
+    });
+    // Hapus sisa tag MathML yang tidak ter-cover
+    box.querySelectorAll('semantics, annotation, mrow, mi, mn, mo, msup, msub, mfrac, msqrt').forEach(el => {
+      if (!el.closest('.ql-formula-embed, .katex, .math-fallback')) {
+        const txt = el.textContent || '';
+        el.replaceWith(document.createTextNode(txt));
+      }
+    });
+    let out = box.innerHTML;
+    out = stripBrokenMathMlFragments(out);
+    return out;
+  } catch (e) {
+    console.warn('convertMathMlInHtml', e);
+    return stripBrokenMathMlFragments(html);
+  }
+}
+
+/** MathML DOM → LaTeX sederhana (pangkat, akar, pecahan, teks) */
+function mathmlElementToLatex(node) {
+  if (!node) return '';
+  if (node.nodeType === 3) return cleanMathInput(node.nodeValue || '');
+  if (node.nodeType !== 1) return '';
+  const tag = (node.tagName || '').toLowerCase().replace(/^m:/, '');
+  const kids = () => Array.from(node.childNodes).map(mathmlElementToLatex).join('');
+  if (tag === 'math' || tag === 'semantics' || tag === 'mrow' || tag === 'mstyle') return kids();
+  if (tag === 'annotation') return ''; // sudah diambil di parent
+  if (tag === 'mi' || tag === 'mn' || tag === 'mtext') return cleanMathInput(node.textContent || '');
+  if (tag === 'mo') {
+    const op = cleanMathInput(node.textContent || '');
+    if (op === '×' || op === '⋅' || op === '·') return '\\times';
+    if (op === '÷') return '\\div';
+    if (op === '−' || op === '–') return '-';
+    return op;
+  }
+  if (tag === 'msup') {
+    const ch = Array.from(node.children || node.childNodes).filter(c => c.nodeType === 1);
+    const base = mathmlElementToLatex(ch[0] || null).trim();
+    const exp = mathmlElementToLatex(ch[1] || null).trim();
+    if (/^[a-zA-Z0-9]+$/.test(base)) return base + '^{' + exp + '}';
+    return '\\left(' + base + '\\right)^{' + exp + '}';
+  }
+  if (tag === 'msub') {
+    const ch = Array.from(node.children || node.childNodes).filter(c => c.nodeType === 1);
+    return mathmlElementToLatex(ch[0]).trim() + '_{' + mathmlElementToLatex(ch[1]).trim() + '}';
+  }
+  if (tag === 'msubsup') {
+    const ch = Array.from(node.children || node.childNodes).filter(c => c.nodeType === 1);
+    return '{' + mathmlElementToLatex(ch[0]) + '}_{' + mathmlElementToLatex(ch[1]) + '}^{' + mathmlElementToLatex(ch[2]) + '}';
+  }
+  if (tag === 'mfrac') {
+    const ch = Array.from(node.children || node.childNodes).filter(c => c.nodeType === 1);
+    return '\\frac{' + mathmlElementToLatex(ch[0]) + '}{' + mathmlElementToLatex(ch[1]) + '}';
+  }
+  if (tag === 'msqrt') return '\\sqrt{' + kids() + '}';
+  if (tag === 'mroot') {
+    const ch = Array.from(node.children || node.childNodes).filter(c => c.nodeType === 1);
+    return '\\sqrt[' + mathmlElementToLatex(ch[1]) + ']{' + mathmlElementToLatex(ch[0]) + '}';
+  }
+  if (tag === 'mfenced') {
+    const open = node.getAttribute('open') || '(';
+    const close = node.getAttribute('close') || ')';
+    return '\\left' + open + kids() + '\\right' + close;
+  }
+  return kids();
+}
+
 function latexToHtmlSnippet(latex) {
   let clean = cleanMathInput(latex);
   if (!clean) return '';
@@ -5663,6 +5794,12 @@ function previewImportSoal(ev) {
       if (htmlVal && mammothHtml) htmlVal = mergeMammothAndEquationHtml(mammothHtml, htmlVal);
       else if (!htmlVal && mammothHtml) htmlVal = mammothHtml;
 
+      // MathML dari Mammoth/Word → KaTeX; bersihkan tag bocor
+      if (htmlVal) {
+        htmlVal = convertMathMlInHtml(htmlVal);
+        htmlVal = stripBrokenMathMlFragments(htmlVal);
+      }
+
       const imgCount = (htmlVal.match(/<img\b/gi) || []).length;
       const dataImgCount = (htmlVal.match(/data:image\//gi) || []).length;
       window._importSoalMediaStats = { imgCount, dataImgCount, eqCount };
@@ -5705,7 +5842,14 @@ function parseSoalFromHtml(html) {
 
   // Plain text untuk struktur SOAL / opsi (tanpa mengandalkan HTML formula)
   // Formula di plain: pakai innerText (sudah ter-render KaTeX → unicode) agar opsi bersih
+  // Hapus MathML yang mungkin masih di DOM sebelum ambil text
+  tmp.querySelectorAll('math, semantics, annotation').forEach(el => {
+    const ann = el.querySelector && el.querySelector('annotation[encoding*="tex"], annotation');
+    const latex = ann ? (ann.textContent || '').trim() : (el.textContent || '');
+    el.replaceWith(document.createTextNode(latex ? ' ' + latex + ' ' : ''));
+  });
   let plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
+  plain = stripBrokenMathMlFragments(plain);
   // innerText KaTeX kadang menyisakan latex + angka dobel → perbaiki dulu
   plain = repairCorruptedSqrtText(plain);
   const fromText = parseSoalFromText(plain);
@@ -5979,6 +6123,8 @@ function resplitMergedOpsi(opsiList) {
 function repairCorruptedSqrtText(s) {
   if (s == null || s === '') return s;
   let t = String(s);
+  // Buang sisa MathML yang bocor ke plain text (utama penyebab "7< / mn>5")
+  t = stripBrokenMathMlFragments(t);
   t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
 
   // --- Perbaiki per-suku di antara operator, lalu rapikan lintas-suku ---
