@@ -5097,7 +5097,7 @@ function loadUjianSoalList() {
             <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
@@ -6696,9 +6696,21 @@ async function submitImportSoal() {
       errors.push(`#${i+1}: kunci tidak ditandai *, default opsi pertama`);
     }
 
-    // Pastikan opsi tidak nempel di pertanyaan
+    // FINAL CLEAN sebelum kirim ke backend (Supabase hanya menyimpan apa yang dikirim)
     if (s.pertanyaan) {
-      s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      let p = String(s.pertanyaan).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      p = repairCorruptedSqrtText(p);
+      p = stripGluedOptionsFromText(p);
+      p = stripOpsiTrailingFromPertanyaan(p, s.opsi || []);
+      s.pertanyaan = p;
+    }
+    if (s.opsi && s.opsi.length) {
+      s.opsi = s.opsi.map(o => {
+        let teks = String(o.teks || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        teks = repairCorruptedSqrtText(teks);
+        teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+        return { teks, is_benar: !!o.is_benar };
+      });
     }
     // Upload gambar embedded (data-url) → Storage
     let pertanyaan = s.pertanyaan || '';
@@ -7226,7 +7238,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
       ${body}
     </div>`;
   }).join('');
