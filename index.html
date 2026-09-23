@@ -4551,14 +4551,20 @@ function openMathLiveEditor(onInsert) {
   root.querySelector('#mathliveOk').onclick = () => {
     let latex = '';
     try {
-      if (mf && typeof mf.getValue === 'function') latex = mf.getValue('latex');
-      else if (mf && mf.value != null) latex = String(mf.value);
-    } catch (e) {}
+      if (mf) {
+        if (typeof mf.getValue === 'function') {
+          latex = mf.getValue('latex') || mf.getValue() || '';
+        } else if (mf.value != null) {
+          latex = String(mf.value);
+        }
+      }
+    } catch (e) { console.warn('getValue', e); }
     const manual = ($('mathliveLatexManual')?.value || '').trim();
-    if (manual) latex = manual;
-    latex = cleanMathInput(latex);
+    // Manual hanya jika MathLive kosong
+    if ((!latex || !String(latex).trim()) && manual) latex = manual;
+    latex = normalizeLatexFromMathLive(latex);
     if (!latex) {
-      showBigPopup('warning', 'Rumus', 'Rumus masih kosong. Ketik di kotak atau isi LaTeX manual.');
+      showBigPopup('warning', 'Rumus', 'Rumus masih kosong. Ketik di kotak putih atau isi LaTeX manual.');
       return;
     }
     close();
@@ -4566,16 +4572,36 @@ function openMathLiveEditor(onInsert) {
   };
 }
 
+function normalizeLatexFromMathLive(raw) {
+  let s = cleanMathInput(raw);
+  if (!s) return '';
+  s = s.replace(/^\\displaystyle\s*/, '').replace(/^\\textstyle\s*/, '');
+  // \sqrt3 → \sqrt{3}
+  s = s.replace(/\\sqrt\s*([0-9a-zA-Z])/g, '\\sqrt{$1}');
+  s = s.replace(/\\sqrt\s*\{/g, '\\sqrt{');
+  // a^10 → a^{10}
+  s = s.replace(/\^(\d{2,})/g, '^{$1}');
+  return s.trim();
+}
+
+
 
 function insertLatexIntoQuill(quill, latex) {
   if (!quill) return showBigPopup('danger', 'Error', 'Editor soal tidak aktif.');
   try {
-    const htmlFormula = katex.renderToString(cleanMathInput(latex), { throwOnError: false, displayMode: true, strict: false });
+    const clean = normalizeLatexFromMathLive(latex);
+    if (!clean) return showBigPopup('warning', 'Rumus', 'LaTeX kosong.');
+    const htmlFormula = katex.renderToString(clean, { throwOnError: false, displayMode: false, strict: false });
     const range = quill.getSelection(true) || { index: quill.getLength() };
-    const safe = String(latex).replace(/&/g,'&amp;').replace(/"/g, '&quot;');
-    const block = '<span class="ql-formula-embed" data-latex="' + safe + '">&nbsp;' + htmlFormula + '&nbsp;</span>';
+    const safe = clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    // Simpan latex di data-latex; tampilan visual lewat KaTeX
+    const block = '<span class="ql-formula-embed" data-latex="' + safe +
+      '" contenteditable="false" style="display:inline-block;margin:0 3px;vertical-align:middle;user-select:all;">' +
+      htmlFormula + '</span>&nbsp;';
     quill.clipboard.dangerouslyPasteHTML(range.index, block);
-    quill.setSelection(range.index + 1);
+    setTimeout(() => {
+      try { quill.setSelection(range.index + 2); } catch (e) {}
+    }, 30);
   } catch (err) {
     showBigPopup('danger', 'Formula error', err.message || String(err));
   }
