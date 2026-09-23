@@ -5115,12 +5115,19 @@ function ommlToLatex(node) {
   if (name === 'ssup') {
     const e = ommlFirstChild(node, 'e');
     const sup = ommlFirstChild(node, 'sup');
-    return '{' + ommlToLatex(e) + '}^{' + ommlToLatex(sup) + '}';
+    const base = ommlToLatex(e).trim();
+    const exp = ommlToLatex(sup).trim();
+    // 2^5 → 2^{5} (bukan {2}^{5} berlebih)
+    if (/^[a-zA-Z0-9]+$/.test(base)) return base + '^{' + exp + '}';
+    return '\\left(' + base + '\\right)^{' + exp + '}';
   }
   if (name === 'ssub') {
     const e = ommlFirstChild(node, 'e');
     const sub = ommlFirstChild(node, 'sub');
-    return '{' + ommlToLatex(e) + '}_{' + ommlToLatex(sub) + '}';
+    const base = ommlToLatex(e).trim();
+    const sb = ommlToLatex(sub).trim();
+    if (/^[a-zA-Z0-9]+$/.test(base)) return base + '_{' + sb + '}';
+    return '\\left(' + base + '\\right)_{' + sb + '}';
   }
   if (name === 'ssubsup') {
     const e = ommlFirstChild(node, 'e');
@@ -5183,18 +5190,34 @@ function ommlToLatex(node) {
   return Array.from(node.childNodes).map(ommlToLatex).join('');
 }
 function latexToHtmlSnippet(latex) {
-  const clean = String(latex || '').replace(/\s+/g, ' ').trim();
+  let clean = String(latex || '').replace(/\s+/g, ' ').trim();
   if (!clean) return '';
+  // Buang sisa duplikasi aneh
+  clean = clean.replace(/^\{([^{}]+)\}\^\{([^{}]+)\}$/, '$1^{$2}');
   try {
     if (typeof katex !== 'undefined') {
+      const rendered = katex.renderToString(clean, { throwOnError: false, displayMode: false });
       return '<span class="ql-formula-embed" data-latex="' +
-        clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">' +
-        katex.renderToString(clean, { throwOnError: false, displayMode: false }) +
-        '</span>';
+        clean.replace(/&/g, '&amp;').replace(/"/g, '&quot;') +
+        '" style="display:inline-block;margin:0 2px;vertical-align:middle;">' +
+        rendered + '</span>';
     }
-  } catch (e) {}
-  return '<code class="math-latex">' + clean.replace(/</g, '&lt;') + '</code>';
+  } catch (e) {
+    console.warn('katex snippet', e, clean);
+  }
+  // Fallback: tampilkan unicode sederhana untuk pangkat/pecahan umum
+  let nice = clean;
+  nice = nice.replace(/(\d+)\^\{(\d+)\}/g, function(_, a, b) {
+    const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+    return a + String(b).split('').map(d => sup[parseInt(d,10)] || d).join('');
+  });
+  nice = nice.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
+  nice = nice.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+  nice = nice.replace(/\\left\(|\\right\)/g, '');
+  return '<span class="math-fallback" style="font-weight:600;color:#05285e;">' +
+    nice.replace(/</g, '&lt;') + '</span>';
 }
+
 async function extractDocxHtmlWithEquations(arrayBuffer) {
   if (typeof JSZip === 'undefined') return null;
   try {
@@ -5223,16 +5246,48 @@ function walkDocxBodyToHtml(doc) {
   if (!body) return null;
   let eqCount = 0;
   const parts = [];
+
   function walk(node) {
     if (!node) return;
-    if (node.nodeType === 3) { parts.push(node.nodeValue || ''); return; }
-    if (node.nodeType !== 1) return;
-    const name = ommlLocalName(node);
-    if (name === 'omath' || name === 'omathpara') {
-      const latex = ommlToLatex(node).trim();
-      if (latex) { eqCount++; parts.push(latexToHtmlSnippet(latex)); }
+    if (node.nodeType === 3) {
+      parts.push(node.nodeValue || '');
       return;
     }
+    if (node.nodeType !== 1) return;
+    const name = ommlLocalName(node);
+
+    // Word sering simpan equation 2x: Choice (OMML) + Fallback (teks jelek "25")
+    // Ambil HANYA Choice / OMML, abaikan Fallback
+    if (name === 'alternatecontent') {
+      let choice = null;
+      Array.from(node.childNodes).forEach(ch => {
+        if (ch.nodeType !== 1) return;
+        const n = ommlLocalName(ch);
+        if (n === 'choice' && !choice) choice = ch;
+      });
+      if (choice) {
+        Array.from(choice.childNodes).forEach(walk);
+      } else {
+        // tidak ada Choice — coba anak yang berisi oMath
+        Array.from(node.childNodes).forEach(ch => {
+          if (ch.nodeType === 1 && ommlLocalName(ch) !== 'fallback') walk(ch);
+        });
+      }
+      return;
+    }
+    if (name === 'fallback') return; // jangan ambil teks cadangan
+
+    if (name === 'omath' || name === 'omathpara') {
+      const latex = ommlToLatex(node).trim();
+      if (latex) {
+        eqCount++;
+        parts.push(' ');
+        parts.push(latexToHtmlSnippet(latex));
+        parts.push(' ');
+      }
+      return;
+    }
+
     if (name === 'tab') { parts.push(' '); return; }
     if (name === 'br' || name === 'cr') { parts.push('\n'); return; }
     if (name === 'p') {
@@ -5242,11 +5297,14 @@ function walkDocxBodyToHtml(doc) {
     }
     if (name === 'tbl') { parts.push(docxTableToHtml(node)); return; }
     if (name === 'drawing' || name === 'pict' || name === 'object') return;
+
     Array.from(node.childNodes).forEach(walk);
   }
+
   Array.from(body.childNodes).forEach(walk);
   return { html: parts.join('').replace(/\n{3,}/g, '\n\n'), eqCount };
 }
+
 function docxTableToHtml(tbl) {
   const rows = [];
   function findRows(n, acc) {
@@ -5523,7 +5581,6 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
   const box = document.createElement('div');
   box.innerHTML = partHtml;
 
-  // Hapus teks meta
   const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
   const textNodes = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode);
@@ -5537,14 +5594,11 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
     node.nodeValue = t;
   });
 
-  // Hapus node yang hanya berisi opsi A. B. C. D. (teks murni opsi)
   box.querySelectorAll('p, li, div, span').forEach(el => {
-    if (el.querySelector('img, table, .ql-formula-embed, .katex, code.math-latex')) return;
-    if (el.classList && el.classList.contains('ql-formula-embed')) return;
+    if (el.querySelector('img, table, .ql-formula-embed, .katex, code.math-latex, .math-fallback')) return;
+    if (el.classList && (el.classList.contains('ql-formula-embed') || el.classList.contains('math-fallback'))) return;
     const t = (el.textContent || '').trim();
-    if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 200) {
-      el.remove();
-    }
+    if (/^[A-H]\s*[.、．\)]\s+/.test(t) && t.length < 200) el.remove();
   });
 
   box.querySelectorAll('img').forEach(img => {
@@ -5564,16 +5618,16 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
     });
   });
 
-  let out = box.innerHTML.trim();
-  // Jika HTML kosong dari media, fallback teks parse
+  // Pastikan formula embeds tetap
+  const out = box.innerHTML.trim();
   const hasMedia = /<img\b/i.test(out) || /<table\b/i.test(out);
-  const textOnly = out.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!hasMedia && soalMeta && soalMeta.pertanyaan) {
-    return soalMeta.pertanyaan;
-  }
-  if (!textOnly && !hasMedia && soalMeta) return soalMeta.pertanyaan;
-  return out || (soalMeta ? soalMeta.pertanyaan : '');
+  const hasFormula = /ql-formula-embed|math-fallback|class="katex"/.test(out);
+  if (hasFormula || hasMedia) return out;
+
+  if (soalMeta && soalMeta.pertanyaan) return soalMeta.pertanyaan;
+  return out;
 }
+
 
 async function uploadEmbeddedDataImages(html) {
   if (!html || html.indexOf('data:image') === -1) return { html, uploaded: 0, failed: 0, errors: [] };
