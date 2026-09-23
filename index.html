@@ -4428,8 +4428,9 @@ function openMathLiveEditor(onInsert) {
       <div class="mathlive-modal-body">
         <div id="mathliveFieldHost" style="min-height:64px;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;background:#fff;"></div>
         <div class="mathlive-modal-hint">
-          Klik di dalam kotak putih lalu ketik. Keyboard virtual MathLive bisa muncul di bawah layar.<br>
-          Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.
+          Ketik di kotak putih, atau tekan <b>Tampilkan Keyboard Rumus</b>.<br>
+          Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.<br>
+          Selesai → tekan tombol hijau <b>✓ OK · Sisipkan Rumus</b> di bawah (selalu terlihat).
         </div>
         <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;" id="mathliveSnippets">
           <button type="button" data-ml-snippet="\\frac{#@}{#0}">a/b</button>
@@ -4473,9 +4474,14 @@ function openMathLiveEditor(onInsert) {
     try {
       if (window.MathLive && typeof MathLive.makeMathField === 'function') {
         mf = MathLive.makeMathField(host, {
-          virtualKeyboardMode: 'onfocus',
+          virtualKeyboardMode: 'manual',
           smartMode: true,
         });
+        try {
+          if (window.mathVirtualKeyboard) {
+            mathVirtualKeyboard.container = document.body;
+          }
+        } catch (eK) {}
         mode = 'makeMathField';
         return true;
       }
@@ -4501,8 +4507,42 @@ function openMathLiveEditor(onInsert) {
       if (mf && typeof mf.focus === 'function') mf.focus();
       else if (mf && mf.focus) mf.focus();
       if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('showVirtualKeyboard');
+      document.querySelectorAll('.ML__keyboard, .ML__keyboard-container, [class*="ML__keyboard"]').forEach(kb => {
+        kb.style.zIndex = '10100';
+        kb.style.position = 'fixed';
+      });
+      if (window.mathVirtualKeyboard) {
+        try {
+          mathVirtualKeyboard.show();
+          if (mathVirtualKeyboard.element) mathVirtualKeyboard.element.style.zIndex = '10100';
+        } catch (e2) {}
+      }
     } catch (e) {}
-  }, 200);
+  }, 250);
+
+  // Tombol keyboard
+  (function() {
+    const hostEl = root.querySelector('#mathliveFieldHost');
+    if (!hostEl || root.querySelector('#mathliveShowKb')) return;
+    const kbBtn = document.createElement('button');
+    kbBtn.type = 'button';
+    kbBtn.id = 'mathliveShowKb';
+    kbBtn.textContent = '⌨️ Tampilkan Keyboard Rumus';
+    kbBtn.style.cssText = 'margin-top:8px;width:100%;padding:10px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;';
+    kbBtn.onclick = function(ev) {
+      ev.preventDefault();
+      try {
+        if (mf && typeof mf.focus === 'function') mf.focus();
+        else if (mf && mf.focus) mf.focus();
+        if (mf && typeof mf.executeCommand === 'function') mf.executeCommand('showVirtualKeyboard');
+        if (window.mathVirtualKeyboard) mathVirtualKeyboard.show();
+        document.querySelectorAll('.ML__keyboard, .ML__keyboard-container').forEach(function(kb) {
+          kb.style.zIndex = '10100';
+        });
+      } catch (e) {}
+    };
+    hostEl.parentNode.insertBefore(kbBtn, hostEl.nextSibling);
+  })();
 
   root.querySelectorAll('[data-ml-snippet]').forEach(btn => {
     btn.onclick = (ev) => {
