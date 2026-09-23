@@ -4830,6 +4830,69 @@ function normalizeOpsiHtml(html) {
   return out;
 }
 
+function safeRenderPertanyaan(html, opsi) {
+  if (!html) return '';
+  const s = String(html);
+  // Jika sudah HTML formula/media, JANGAN jalankan repair plain (merusak tag)
+  if (/ql-formula-embed|class="katex"|data-latex|<img\b|<table\b/i.test(s)) {
+    let cleaned = typeof stripOpsiTrailingFromPertanyaan === 'function'
+      ? stripOpsiTrailingFromPertanyaan(s, opsi || []) : s;
+    // Bersihkan atribut yang bocor sebagai teks (bukan di dalam tag)
+    cleaned = cleaned.replace(/(?:^|>)([^<]*?)(\bcontenteditable\s*=\s*["']?false["']?[^<]*)/gi, function(m, pre, leak) {
+      return (pre || '') + (m.startsWith('>') ? '>' : '');
+    });
+    // Jika HTML cacat (atribut terlihat di plain), bangun ulang dari data-latex
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cleaned;
+    const plainCheck = (tmp.innerText || '').replace(/\s+/g, ' ');
+    if (/contenteditable\s*=|style\s*=\s*["']?display/i.test(plainCheck)) {
+      // Ekstrak semua data-latex, buang sampah, susun ulang
+      const latexs = [];
+      tmp.querySelectorAll('[data-latex]').forEach(el => {
+        const lx = (el.getAttribute('data-latex') || '').trim();
+        if (lx) latexs.push(lx);
+      });
+      let words = plainCheck
+        .replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ')
+        .replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ')
+        .replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ')
+        .replace(/\bclass\s*=\s*["'][^"']*["']/gi, ' ')
+        .replace(/display\s*:\s*inline-block[^;]*/gi, ' ')
+        .replace(/vertical-align\s*:[^;]*/gi, ' ')
+        .replace(/margin\s*:\s*0\s*2px[^;]*/gi, ' ')
+        .replace(/user-select\s*:[^;]*/gi, ' ')
+        .replace(/["']{1,}/g, ' ')
+        .replace(/\s{2,}/g, ' ').trim();
+      words = repairCorruptedSqrtText(words);
+      if (latexs.length) {
+        // Pakai latex bersih sebagai rumus utama
+        const unique = [...new Set(latexs.map(l => repairCorruptedSqrtText(l)))];
+        const main = unique[0];
+        // Ganti fragmen math di words dengan placeholder, lalu embed
+        let out = words
+          .replace(/\(\d+\^\{\d+\}\)\^\{\d+\}/g, '%%MATH%%')
+          .replace(/\d+\^\{\d+\}/g, '%%MATH%%')
+          .replace(/\(5²\)²|\(5\^2\)\^2/g, '%%MATH%%');
+        // Hanya satu placeholder
+        out = out.replace(/(?:%%MATH%%\s*)+/g, '%%MATH%%');
+        if (out.indexOf('%%MATH%%') >= 0 && typeof plainMathToKatexHtml === 'function') {
+          const emb = plainMathToKatexHtml(main);
+          out = out.replace('%%MATH%%', emb || main);
+          return out;
+        }
+        return (typeof plainMathToKatexHtml === 'function' ? plainMathToKatexHtml(main) : main) + ' ' + out.replace(/%%MATH%%/g, '').trim();
+      }
+      return (typeof plainMathToKatexHtml === 'function')
+        ? plainMathToKatexHtml(words) : words;
+    }
+    return cleaned;
+  }
+  // Plain text: repair + optional KaTeX
+  let t = stripOpsiTrailingFromPertanyaan(s, opsi || []);
+  t = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
+  return t;
+}
+
 function renderSoalHtml(html) {
   if (!html) return '';
   // Jika plain text tanpa tag, rapikan opsi nempel + escape + konversi KaTeX bila memungkinkan
@@ -5172,7 +5235,7 @@ function loadUjianSoalList() {
             <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(safeRenderPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
@@ -6380,6 +6443,11 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/(\d+)\s*\^\s*\{\s*(\d+)\s*\}\s*\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
   // Normalisasi semua 4^2 → 4^{2}
   t = t.replace(/(\d+)\s*\^\s*(\d+)(?!\{)/g, '$1^{$2}');
+  // Opsi √ korup: "2³ √3 ^{2}" → "2√3"
+  t = t.replace(/(\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
+  t = t.replace(/(\d+)\s*\^\s*\{?\d+\}?\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
+  t = t.replace(/(\d+)\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1√$2');
+  t = t.replace(/(√\d+)\s*\^\s*\{?\d+\}?/g, '$1');
   // Pola Word dobel: "2 5^{5} 2^{5}" atau "2 5 2^{5}" → "2^{5}"
   t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}(?:\s+\1\s*\^\s*\{\s*\2\s*\})+/g, '$1^{$2}');
   t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
@@ -7014,7 +7082,20 @@ function cleanupOpsiMathText(teks) {
   if (d.querySelector('.katex, .ql-formula-embed')) return teks;
   let plain = (d.innerText || d.textContent || teks).replace(/\s+/g, ' ').trim();
   plain = plain.replace(/[*＊]\s*$/g, '').trim();
+  // Buang atribut HTML yang bocor
+  plain = plain.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
+  plain = plain.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
+  plain = plain.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
+  // Pola korupsi opsi √: "2³ √3 ^{2}" atau "2^3 √3 ^2" → "2√3"
+  // (angka + superscript + √ + angka + superscript residual)
+  plain = plain.replace(/(\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
+  plain = plain.replace(/(\d+)\s*\^\s*\{?\d+\}?\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
+  plain = plain.replace(/(\d+)\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1√$2');
+  // Residual ^{n} menggantung setelah √n
+  plain = plain.replace(/(√\d+)\s*\^\s*\{?\d+\}?/g, '$1');
+  plain = plain.replace(/(√\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, '$1');
   plain = repairCorruptedSqrtText(plain);
+  plain = plain.replace(/\s{2,}/g, ' ').trim();
 
   // Latex mentah atau unicode √ → KaTeX
   if (/\\sqrt|\\frac|\^\{|√/.test(plain)) {
@@ -7868,7 +7949,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(safeRenderPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
       ${body}
     </div>`;
   }).join('');
