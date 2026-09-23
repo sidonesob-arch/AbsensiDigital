@@ -5785,10 +5785,34 @@ function previewImportSoal(ev) {
         const mediaBadge = (hasImg || hasTbl)
           ? ` <span style="font-size:10px;color:#0d9488;">[${hasImg ? '🖼' : ''}${hasTbl ? '▦' : ''}]</span>`
           : '';
-        // Tampilkan preview: plain yang sudah diperbaiki (ganti ^{n} → superscript, \sqrt → √)
-        let prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(
-          (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
-        )).trim();
+        // Preview: ambil teks bersih dari data-latex embed, jangan strip HTML mentah
+        let prevPlain = '';
+        try {
+          const tmpP = document.createElement('div');
+          tmpP.innerHTML = s.pertanyaan || '';
+          tmpP.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
+            let lx = (el.getAttribute('data-latex') || '').trim();
+            lx = repairCorruptedSqrtText(lx);
+            let nice = lx
+              .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
+                const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+                return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
+              })
+              .replace(/\((\d+)\^\{(\d+)\}\)\^\{(\d+)\}/g, (_, a, b, c) => {
+                const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+                const s1 = String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
+                const s2 = String(c).split('').map(d => sup[parseInt(d, 10)] || d).join('');
+                return '(' + a + s1 + ')' + s2;
+              })
+              .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+              .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
+            el.replaceWith(document.createTextNode(nice || lx));
+          });
+          prevPlain = (tmpP.innerText || tmpP.textContent || '').replace(/\s+/g, ' ').trim();
+        } catch (e) {
+          prevPlain = (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+        prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(prevPlain)).trim();
         prevPlain = prevPlain
           .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
             const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
@@ -5796,7 +5820,7 @@ function previewImportSoal(ev) {
           })
           .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
           .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
-        return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
+                return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
           <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
           ${prevPlain.slice(0, 100)}${prevPlain.length > 100 ? '…' : ''}
           ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.map(k => {
@@ -5923,8 +5947,16 @@ function parseSoalFromHtml(html) {
     const latex = ann ? (ann.textContent || '').trim() : (el.textContent || '');
     el.replaceWith(document.createTextNode(latex ? ' ' + latex + ' ' : ''));
   });
+  // Prefer data-latex dari embed KaTeX (sumber kebenaran), ganti node embed
+  tmp.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
+    let lx = (el.getAttribute('data-latex') || '').trim();
+    if (lx) el.replaceWith(document.createTextNode(' ' + lx + ' '));
+  });
   let plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
   plain = stripBrokenMathMlFragments(plain);
+  // Buang atribut HTML yang mungkin nyangkut
+  plain = plain.replace(/\bcontenteditable\b[=\w"'-]*/gi, ' ');
+  plain = plain.replace(/\bdata-latex\b[=\w"'-]*/gi, ' ');
   // innerText KaTeX kadang menyisakan latex + angka dobel → perbaiki dulu
   plain = repairCorruptedSqrtText(plain);
   const fromText = parseSoalFromText(plain);
@@ -6289,6 +6321,19 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/(\d+)\s*\^\s*\{\s*(\d+)\s*\}\s*\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
   // Normalisasi semua 4^2 → 4^{2}
   t = t.replace(/(\d+)\s*\^\s*(\d+)(?!\{)/g, '$1^{$2}');
+  // Pola Word dobel: "2 5^{5} 2^{5}" atau "2 5 2^{5}" → "2^{5}"
+  t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}(?:\s+\1\s*\^\s*\{\s*\2\s*\})+/g, '$1^{$2}');
+  t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
+  t = t.replace(/\b(\d+)\s+(\d+)(?=\s|$|[×xX*·+\-),;….])/g, function(m, a, b) {
+    // Hanya jika eksponen 1 digit (superscript Word klasik)
+    if (String(b).length === 1) return a + '^{' + b + '}';
+    return m;
+  });
+  // Residual "^{5}" menggantung setelah "2^{5} ^{5}"
+  t = t.replace(/(\d+\^\{\d+\})(?:\s*\^\s*\{\d+\})+/g, '$1');
+  // "2^{5} ^{5}" 
+  t = t.replace(/(\d+)\^\{(\d+)\}\s*\^\s*\{\2\}/g, '$1^{$2}');
+
   // "4^{2} 4^{2}" berulang → satu
   t = t.replace(/(\d+\^\{\d+\})(?:\s+\1)+/g, '$1');
   // "4^{2} 4^2" (campuran) → "4^{2}"
@@ -6675,6 +6720,30 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
       c.style.padding = c.style.padding || '6px 8px';
     });
   });
+
+  // Bersihkan text node sampah di sekitar formula embed
+  // (Word sering sisipkan fallback "2 5" di samping equation 2^{5})
+  const hasAnyEmbed = !!box.querySelector('.ql-formula-embed, .katex, .math-fallback');
+  if (hasAnyEmbed) {
+    const walker2 = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+    const tnodes = [];
+    while (walker2.nextNode()) tnodes.push(walker2.currentNode);
+    tnodes.forEach(node => {
+      if (node.parentElement && node.parentElement.closest('.ql-formula-embed, .katex, .math-fallback')) return;
+      let t = node.nodeValue || '';
+      const before = t;
+      // Hanya buang token yang murni angka/spasi/latex bocor (bukan kalimat)
+      if (/^[\s\d×xX*·+\-^=()\\left\right{}√.]+$/.test(t) && t.trim().length < 40) {
+        t = ' ';
+      } else {
+        t = t.replace(/\bcontenteditable\b[^\s]*/gi, ' ');
+        t = t.replace(/\bdata-latex\b[^\s]*/gi, ' ');
+        t = t.replace(/\\left|\\right/g, ' ');
+        t = t.replace(/\s{2,}/g, ' ');
+      }
+      if (t !== before) node.nodeValue = t;
+    });
+  }
 
   // Pastikan formula embeds tetap
   const out = box.innerHTML.trim();
