@@ -5499,72 +5499,143 @@ function parseSoalFromHtml(html) {
 
   const tmp = document.createElement('div');
   tmp.innerHTML = work;
+
+  // Plain text untuk struktur SOAL / opsi (tanpa mengandalkan HTML formula)
+  // Formula di plain: pakai innerText (sudah ter-render KaTeX → unicode) agar opsi bersih
   const plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
   const fromText = parseSoalFromText(plain);
   if (!fromText.length) return [];
 
   const htmlParts = splitHtmlBySoalMarker(work);
 
-  // Semua gambar di dokumen (fallback jika tidak ketempel di part)
+  fromText.forEach((s, i) => {
+    const part = htmlParts[i] || '';
+
+    // --- PERTANYAAN: ambil HTML HANYA sampai sebelum opsi A. ---
+    const partCut = cutHtmlBeforeOptions(part);
+    const rich = extractRichPertanyaanFromHtmlPart(partCut, s);
+    if (rich) s.pertanyaan = rich;
+    s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []);
+
+    // Gambar di part (sebelum opsi)
+    const partBox = document.createElement('div');
+    partBox.innerHTML = partCut;
+    const partImgs = [...partBox.querySelectorAll('img')].map(im => im.getAttribute('src')).filter(Boolean);
+    if (partImgs.length && !/<img\b/i.test(s.pertanyaan || '')) {
+      s.pertanyaan = (s.pertanyaan || '') + partImgs.map(src =>
+        `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
+      ).join('');
+    }
+
+    // --- OPSI: biarkan teks dari parseSoalFromText (unicode bersih).
+    //     Jangan overwrite dengan latex mentah dari HTML.
+    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
+      s.opsi = s.opsi.map(o => {
+        let teks = (o.teks || '').trim();
+        // Buang sisa *
+        teks = teks.replace(/[*＊]\s*$/g, '').trim();
+        // Jika masih latex mentah yang jelek, coba rapikan ke unicode sederhana
+        teks = preferUnicodeMath(teks);
+        return { teks, is_benar: !!o.is_benar };
+      });
+    }
+  });
+
+  // Fallback gambar ke soal pertama
   const allImgs = [];
   tmp.querySelectorAll('img').forEach(img => {
     const src = img.getAttribute('src') || '';
     if (src) allImgs.push(src);
   });
+  const anyImgInSoal = fromText.some(s => /<img\b/i.test(s.pertanyaan || ''));
+  if (!anyImgInSoal && allImgs.length && fromText.length) {
+    fromText[0].pertanyaan = (fromText[0].pertanyaan || '') + allImgs.map(src =>
+      `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
+    ).join('');
+  }
 
-  fromText.forEach((s, i) => {
-    const part = htmlParts[i] || '';
-    const rich = extractRichPertanyaanFromHtmlPart(part, s);
-    if (rich) s.pertanyaan = rich;
-
-    const partBox = document.createElement('div');
-    partBox.innerHTML = part;
-    const partImgs = [...partBox.querySelectorAll('img')].map(im => im.getAttribute('src')).filter(Boolean);
-    const hasImg = /<img\b/i.test(s.pertanyaan || '');
-    if (!hasImg && partImgs.length) {
-      const imgsHtml = partImgs.map(src =>
-        `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
-      ).join('');
-      s.pertanyaan = (s.pertanyaan || '') + imgsHtml;
-    }
-
-    if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
-      s.opsi = s.opsi.map((o) => {
-        let teks = o.teks || '';
-        const plain = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        if (plain.indexOf('\\') >= 0 && /\\(frac|left|right|sqrt|sum|int)/.test(plain)) {
-          const latex = sanitizeToSingleLatex(plain);
-          if (latex && typeof katex !== 'undefined') {
-            try {
-              teks = '<span class="ql-formula-embed" data-latex="' +
-                latex.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '">' +
-                katex.renderToString(latex, { throwOnError: false, displayMode: false }) +
-                '</span>';
-            } catch (e) { teks = latex; }
-          } else if (latex) {
-            teks = latex;
-          }
-        }
-        return { teks: cleanupOpsiMathText(teks), is_benar: !!o.is_benar };
-      });
-    }
-  });
-
-  
   fromText.forEach(s => {
     if (s.pertanyaan) s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
   });
 
-// Fallback: dokumen punya gambar tapi tidak satu pun menempel ke soal → tempel ke soal pertama
-  const anyImgInSoal = fromText.some(s => /<img\b/i.test(s.pertanyaan || ''));
-  if (!anyImgInSoal && allImgs.length && fromText.length) {
-    const imgsHtml = allImgs.map(src =>
-      `<img src="${src}" style="max-width:100%;height:auto;display:block;margin:8px 0;">`
-    ).join('');
-    fromText[0].pertanyaan = (fromText[0].pertanyaan || '') + imgsHtml;
+  return fromText;
+}
+
+/** Potong HTML blok soal tepat sebelum opsi A/B/C */
+function cutHtmlBeforeOptions(partHtml) {
+  if (!partHtml) return '';
+  const box = document.createElement('div');
+  box.innerHTML = partHtml;
+
+  // Hapus elemen yang jelas baris opsi
+  box.querySelectorAll('p, div, li, span').forEach(el => {
+    if (el.querySelector('img, table, .ql-formula-embed, .katex, .math-fallback')) return;
+    const t = (el.textContent || '').trim();
+    if (/^[A-H]\s*[.、．\)]\s+\S/.test(t) && t.length < 200) el.remove();
+  });
+
+  // Potong text node dari label opsi
+  const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while (tw.nextNode()) nodes.push(tw.currentNode);
+  nodes.forEach(node => {
+    let t = node.nodeValue || '';
+    const re = /(?:^|\s)([A-H])\s*[.、．\)]\s+/gi;
+    let m, cut = -1;
+    while ((m = re.exec(t)) !== null) {
+      if (m.index > 0 && /[A-Za-z0-9]/.test(t[m.index - 1])) continue;
+      const tail = t.slice(m.index);
+      const letters = [...tail.matchAll(/(?:^|\s)([A-H])\s*[.、．\)]\s+/gi)].map(x => x[1].toUpperCase());
+      if ([...new Set(letters)].length >= 2) { cut = m.index; break; }
+      // Satu label A. saja di akhir juga potong jika tampak opsi
+      if (/^[A-H]$/i.test(m[1]) && /\d|√|\\sqrt|\\frac/.test(tail)) { cut = m.index; break; }
+    }
+    if (cut >= 0) {
+      let left = t.slice(0, cut).replace(/[\s.…*＊]+$/g, '').trim();
+      if (left && !/[.?!…]$/.test(left)) left += ' ....';
+      node.nodeValue = left;
+    }
+  });
+
+  return box.innerHTML.trim();
+}
+
+/** Ubah latex jelek jadi unicode yang terbaca siswa */
+function preferUnicodeMath(teks) {
+  if (!teks) return '';
+  let s = String(teks).trim();
+  // Sudah HTML formula bagus
+  if (/ql-formula-embed|class="katex"/.test(s)) return s;
+
+  const plain = s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Jika sudah unicode bagus (5√2, 2√3, ½) biarkan
+  if (/[√²³¹⁰⁴⁵⁶⁷⁸⁹]/.test(plain) && plain.indexOf('\\') < 0) {
+    return plain.replace(/[*＊]\s*$/g, '').trim();
   }
 
-  return fromText;
+  // Latex → unicode sederhana
+  let u = plain;
+  u = u.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+  u = u.replace(/\\sqrt\s*([0-9a-zA-Z]+)/g, '√$1');
+  u = u.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
+  u = u.replace(/(\d+)\^\{(\d+)\}/g, function(_, a, b) {
+    const sups = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
+    return a + String(b).split('').map(d => sups[d] || d).join('');
+  });
+  u = u.replace(/(\d+)\^(\d+)/g, function(_, a, b) {
+    const sups = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
+    return a + String(b).split('').map(d => sups[d] || d).join('');
+  });
+  u = u.replace(/\\left\(|\\right\)|\\cdot|\\times/g, function(x) {
+    if (x === '\\times' || x === '\\cdot') return '×';
+    return '';
+  });
+  u = u.replace(/[{}]/g, '');
+  u = u.replace(/[*＊]\s*$/g, '').trim();
+
+  // Pola rusak √323 dari 2√3 / √232 dari 3√2 — tidak bisa diluruskan andal; biarkan unicode jika ada
+  return u || plain;
 }
 
 function splitHtmlBySoalMarker(html) {
