@@ -6271,26 +6271,85 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
 
   // ===== Nested power dari Word superscript (font style, bukan unicode/OMML) =====
-  // Contoh rusak: "( ( 5 2 ) ) 2"  atau  "(5 2) 2"  →  "(5^{2})^{2}"
-  // Word sering ubah 5² jadi "5 2" (spasi) saat export/mammoth.
-  for (let round = 0; round < 4; round++) {
+  // Contoh rusak: "( ( 5 2 ) ) 2" / "(52)2" / "(5²)²" → "(5^{2})^{2}"
+  for (let round = 0; round < 6; round++) {
     const beforeNest = t;
     // (((a b)) c) d
     t = t.replace(/\(\s*\(\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\)\s*(\d+)\s*\)\s*(\d+)/g, '(($1^{$2})^{$3})^{$4}');
     // ((a b)) c
     t = t.replace(/\(\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\)\s*(\d+)/g, '($1^{$2})^{$3}');
-    // (a b) c
+    // (a b) c  dengan spasi
     t = t.replace(/\(\s*(\d+)\s+(\d+)\s*\)\s*(\d+)/g, '($1^{$2})^{$3}');
-    // ( a b )c  (tanpa spasi sebelum eksponen luar)
     t = t.replace(/\(\s*(\d+)\s+(\d+)\s*\)(\d+)/g, '($1^{$2})^{$3}');
-    // Latex setengah bocor: \left( 5^2 \right)^{2}  /  (\left( 5^2 \right)^\{2\}
+    // (52)2  tanpa spasi di dalam kurung (mammoth sering gabung digit)
+    t = t.replace(/\(\s*(\d)(\d)\s*\)\s*(\d)/g, '($1^{$2})^{$3}');
+    t = t.replace(/\(\s*(\d)(\d)\s*\)(\d)/g, '($1^{$2})^{$3}');
+    // Unicode: (5²)²  /  (5²)^{2}  /  (5^{2})²
+    t = t.replace(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, s1, s2) {
+      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+      const e1 = [...s1].map(c => map[c] || c).join('');
+      const e2 = [...s2].map(c => map[c] || c).join('');
+      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
+    });
+    t = t.replace(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^\s*\{?\s*(\d+)\s*\}?/g, function(_, base, s1, e2) {
+      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+      const e1 = [...s1].map(c => map[c] || c).join('');
+      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
+    });
+    t = t.replace(/\(\s*(\d+)\s*\^\s*\{?\s*(\d+)\s*\}?\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, e1, s2) {
+      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+      const e2 = [...s2].map(c => map[c] || c).join('');
+      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
+    });
+    // (5^{2})^{2} sudah benar — biarkan
+    // Latex: \left(5^2\right)^{2} / \left(5²\right)^{2} / (\left(5^2\right)^{2}
     t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)\s*\^\s*\{?\s*(\d+)\s*\}?\s*\\right\s*\)\s*\^\s*\\?\{?\s*(\d+)\s*\\?\}?/g, '($1^{$2})^{$3}');
     t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)\s*\^\s*(\d+)\s*\\right\s*\)\s*\^\s*\{?(\d+)\}?/g, '($1^{$2})^{$3}');
-    // Escape brace residual: ^\{2\} → ^{2}
+    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\\right\s*\)\s*\^\s*\{?\s*(\d+)\s*\}?/g, function(_, base, s1, e2) {
+      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+      const e1 = [...s1].map(c => map[c] || c).join('');
+      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
+    });
+    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\\right\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, s1, s2) {
+      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+      const e1 = [...s1].map(c => map[c] || c).join('');
+      const e2 = [...s2].map(c => map[c] || c).join('');
+      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
+    });
+    // Escape brace residual
     t = t.replace(/\^\\\{(\d+)\\\}/g, '^{$1}');
     t = t.replace(/\^\{\s*(\d+)\s*\}/g, '^{$1}');
+    // (5^{2})^{2}(5^{2})^{2} → sekali
+    t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
+    // (52)2 menempel ke bentuk benar: (52)2(5^{2})^{2}(52)2
+    t = t.replace(/(?:\(\s*\d\d\s*\)\s*\d)+(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\(\s*\d\d\s*\)\s*\d)*/g, '$1');
+    t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\(\s*\d\d\s*\)\s*\d)+/g, '$1');
+    t = t.replace(/(?:\(\s*\d\d\s*\)\s*\d)+/g, function(m) {
+      // Jika masih ada sisa (52)2 saja, konversi satu
+      const mm = m.match(/\(\s*(\d)(\d)\s*\)\s*(\d)/);
+      return mm ? ('(' + mm[1] + '^{' + mm[2] + '})^{' + mm[3] + '}') : m;
+    });
     if (t === beforeNest) break;
   }
+  // Rapikan sisa kurung & duplikat setelah konversi nested
+  // "( (5^{2})^{2} ( (5^{2})^{2" → "(5^{2})^{2}"
+  t = t.replace(/\(\s*(\(\d+\^\{\d+\}\)\^\{\d+\})/g, '$1');
+  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})\s*\(\s*/g, '$1 ');
+  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
+  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s+\1)+/g, '$1');
+  // Fragmen yatim: "5^{2})^{2}" atau "^{2})^{2}" tanpa kurung buka
+  t = t.replace(/(?:^|[\s(])(\d+)\^\{\d+\}\)\^\{\d+\}/g, function(m, _base) {
+    // Jika sudah ada bentuk lengkap di depan, buang fragmen ini
+    return m.charAt(0) === '(' ? m : m.charAt(0);
+  });
+  t = t.replace(/\s+\d+\^\{\d+\}\)\^\{\d+\}/g, '');
+  t = t.replace(/\s+\^\{\d+\}\)\^\{\d+\}/g, '');
+  // Kurung buka/tutup yatim di sekitar bentuk benar
+  t = t.replace(/\(\s*(\(\d+\^\{\d+\}\)\^\{\d+\})\s*\)/g, '$1');
+  t = t.replace(/\s+\(\s*(?=adalah\b)/gi, ' ');
+  // Duplikat akhir: "(5^{2})^{2} (5^{2})^{2}" 
+  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
+  t = t.replace(/\s{2,}/g, ' ').trim();
   // Buang duplikat fragmen rusak setelah bentuk yang sudah benar
   // "(5^{2})^{2} ( ( 5 2 ) ) 2 ( ( 5 2 ) ) 2" → "(5^{2})^{2}"
   t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\s*\(\s*\d+\s+\d+\s*\)\s*\)\s*\d+)+/g, '$1');
