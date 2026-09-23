@@ -4843,25 +4843,49 @@ function renderSoalHtml(html) {
     }
     return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  // HTML: bersihkan plain di dalam jika tidak ada embed bagus,
-  // ATAU jika teks masih terlihat korup (Word superscript → spasi / latex bocor)
+  // HTML: hanya konversi ulang ke KaTeX jika TIDAK ada embed/media.
+  // Jangan pernah "strip" embed yang valid — itu penyebab atribut HTML bocor ke teks.
   try {
     const d = document.createElement('div');
     d.innerHTML = html;
+    const hasEmbed = !!d.querySelector('.katex, .ql-formula-embed');
     const hasMedia = !!d.querySelector('img, table');
+    if (hasEmbed || hasMedia) {
+      // Bersihkan text node sampah (atribut HTML yang bocor) di sekitar embed
+      const walker = document.createTreeWalker(d, NodeFilter.SHOW_TEXT, null);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(node => {
+        let t = node.nodeValue || '';
+        const cleaned = t
+          .replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ')
+          .replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ')
+          .replace(/\bclass\s*=\s*["'][^"']*ql-formula[^"']*["']/gi, ' ')
+          .replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ')
+          .replace(/\buser-select\s*=\s*["'][^"']*["']/gi, ' ')
+          .replace(/display\s*:\s*inline-block[^;"']*;?/gi, ' ')
+          .replace(/vertical-align\s*:[^;"']*;?/gi, ' ')
+          .replace(/margin\s*:\s*0\s*2px[^;"']*;?/gi, ' ')
+          .replace(/\s{2,}/g, ' ');
+        if (cleaned !== t) node.nodeValue = cleaned;
+      });
+      return d.innerHTML;
+    }
+    // Plain / HTML tanpa formula: perbaiki + KaTeX
     let t = (d.innerText || '').replace(/\s+/g, ' ').trim();
-    const looksCorrupt = /\(\s*\(\s*\d+\s+\d+|\(\s*\d+\s+\d+\s*\)\s*\d|\\left\s*\(|\^\\\{|\(\s+\d|\d\s+\)\s*\d/.test(t);
-    if ((!d.querySelector('.katex, .ql-formula-embed') || looksCorrupt) && !hasMedia) {
-      t = stripBrokenMathMlFragments(t);
-      const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
-      // Selalu pakai cleaned jika berbeda ATAU masih ada pola residual
-      if (cleaned !== t || /\d+\^\{\d+\}\s+\d|√\d+\d|adalah\.\.\./.test(cleaned) || looksCorrupt) {
-        if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d|[⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(cleaned)) {
-          const k = plainMathToKatexHtml(cleaned);
-          if (k && /ql-formula-embed/.test(k)) return k;
-        }
-        return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      }
+    t = stripBrokenMathMlFragments(t);
+    // Buang sisa atribut HTML yang nyangkut di plain
+    t = t.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
+    t = t.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
+    t = t.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
+    t = t.replace(/\s{2,}/g, ' ').trim();
+    const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
+    if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d|[⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(cleaned)) {
+      const k = plainMathToKatexHtml(cleaned);
+      if (k && /ql-formula-embed/.test(k)) return k;
+    }
+    if (cleaned !== t) {
+      return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
   } catch (e) {}
   return html;
@@ -5934,25 +5958,29 @@ function parseSoalFromHtml(html) {
       // Pertanyaan — prioritaskan HTML formula bagus (OMML→KaTeX embed)
       const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
       const hasGoodFormula = /ql-formula-embed|data-latex|class="katex"/i.test(s.pertanyaan || '');
+      // Jika sudah ada embed KaTeX valid, JANGAN strip ke plain (penyebab atribut bocor)
+      if (hasGoodFormula) {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+        return;
+      }
+      if (hasMedia) {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+        return;
+      }
       let pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      // Buang sisa atribut HTML yang nyangkut di plain text
+      pPlain = pPlain.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
+      pPlain = pPlain.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
+      pPlain = pPlain.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
+      pPlain = pPlain.replace(/\bclass\s*=\s*["'][^"']*["']/gi, ' ');
+      pPlain = pPlain.replace(/display\s*:\s*inline-block[^;\s]*/gi, ' ');
+      pPlain = pPlain.replace(/vertical-align\s*:[^;\s]*/gi, ' ');
+      pPlain = pPlain.replace(/\s{2,}/g, ' ').trim();
       pPlain = repairCorruptedSqrtText(pPlain);
       pPlain = stripGluedOptionsFromText(pPlain);
-      // Deteksi korupsi: spasi di pangkat Word, latex bocor, angka residual setelah "adalah"
-      const stillCorrupt = /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|\d+\\sqrt\{\d+\}\d|adalah\s*\.{0,4}\s*\d|\(\s*\(\s*\d+\s+\d+|\(\s*\d+\s+\d+\s*\)\s*\d|\\left\s*\(|\^\\\{|\(\s+\d|\d\s+\)/i.test(pPlain)
-        || (/\(\s*\d+\s+\d+/.test(pPlain)); // masih ada "(5 2" setelah repair
-
-      if (hasGoodFormula && !stillCorrupt) {
-        // Pertahankan embed KaTeX; hanya bersihkan opsi nempel di ujung
-        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
-      } else if (hasMedia && !stillCorrupt) {
-        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
-      } else {
-        // Konversi plain yang sudah diperbaiki → KaTeX HTML agar rumus tampil rapi
-        // (juga dipakai saat formula embed tercampur garbage Word superscript)
-        const asKatex = (typeof plainMathToKatexHtml === 'function')
-          ? plainMathToKatexHtml(pPlain) : pPlain;
-        s.pertanyaan = asKatex || pPlain;
-      }
+      const asKatex = (typeof plainMathToKatexHtml === 'function')
+        ? plainMathToKatexHtml(pPlain) : pPlain;
+      s.pertanyaan = asKatex || pPlain;
 
       // Opsi — perbaiki + konversi ke KaTeX bila memungkinkan
       if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
@@ -6246,6 +6274,39 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/\(\s+(\d+)/g, '($1').replace(/(\d+)\s+\)/g, '$1)');
   t = t.replace(/\s{2,}/g, ' ').trim();
 
+  // Buang atribut HTML yang bocor ke plain (contenteditable, style, data-latex, dll.)
+  t = t.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
+  t = t.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
+  t = t.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
+  t = t.replace(/\bclass\s*=\s*["'][^"']*ql-formula[^"']*["']/gi, ' ');
+  t = t.replace(/\buser-select\s*=\s*["'][^"']*["']/gi, ' ');
+  t = t.replace(/display\s*:\s*inline\s*-?\s*block[^;"']*/gi, ' ');
+  t = t.replace(/vertical\s*-\s*align\s*:[^;"']*/gi, ' ');
+  t = t.replace(/margin\s*:\s*0\s*2px[^;"']*/gi, ' ');
+  // Rapikan duplikat pangkat: "4^2 ^{4}^{2} 4^2" → "4^{2}"
+  t = t.replace(/(\d+)\s*\^\s*(\d+)\s+\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
+  t = t.replace(/(\d+)\s*\^\s*(\d+)\s+\^\{\1\}\^\{\2\}/g, '$1^{$2}');
+  t = t.replace(/(\d+)\s*\^\s*\{\s*(\d+)\s*\}\s*\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
+  // Normalisasi semua 4^2 → 4^{2}
+  t = t.replace(/(\d+)\s*\^\s*(\d+)(?!\{)/g, '$1^{$2}');
+  // "4^{2} 4^{2}" berulang → satu
+  t = t.replace(/(\d+\^\{\d+\})(?:\s+\1)+/g, '$1');
+  // "4^{2} 4^2" (campuran) → "4^{2}"
+  t = t.replace(/(\d+)\^\{(\d+)\}(?:\s+\1\s*\^\s*\{?\2\}?)+/g, '$1^{$2}');
+  // Rantai perkalian: ambil token n^{m} unik berurutan, buang angka polos residual
+  // "4^{2} 4^{2} × 4^{3} 4^{3}" → "4^{2} × 4^{3}"
+  t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·]\s*\d+\^\{\d+\})*)(?:\s+\d+(?:\s*\^\s*\{?\d+\}?)?)+/g, '$1');
+  t = t.replace(/(\d+\^\{\d+\})(?:\s+\d+\^\{\d+\})+(\s*[×xX*·])/g, '$1$2');
+  // Nested sudah benar + duplikat: "(5^{2})^{2} (5^{2})^{2}" → satu
+  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s+\1)+/g, '$1');
+  // "(5^2)^2 (5^{2})^{2}" → "(5^{2})^{2}"
+  t = t.replace(/\(\s*(\d+)\s*\^\s*(\d+)\s*\)\s*\^\s*(\d+)\s+\(\1\^\{\2\}\)\^\{\3\}/g, '($1^{$2})^{$3}');
+  t = t.replace(/\(\s*(\d+)\^\{\s*(\d+)\s*\}\s*\)\s*\^\{\s*(\d+)\s*\}\s+\(\1\^\{\2\}\)\^\{\3\}/g, '($1^{$2})^{$3}');
+  // Residual cuplikan: )^{2}"  atau  )^2"
+  t = t.replace(/\)\s*\^\s*\{?\d+\}?\s*["']+/g, ' ');
+  t = t.replace(/["']{2,}/g, ' ');
+  t = t.replace(/\s{2,}/g, ' ').trim();
+
   // --- Perbaiki per-suku di antara operator, lalu rapikan lintas-suku ---
   function repairAtom(atom) {
     let a = String(atom || '').trim();
@@ -6468,6 +6529,14 @@ function plainMathToKatexHtml(teks) {
 
   // 1) Ganti fragment latex di dalam kalimat: coef?\sqrt{...}, n^{m}, \frac{a}{b}
   //    Urutan: yang lebih spesifik dulu (nested power SEBELUM pangkat tunggal)
+  // Normalisasi 4^2 → 4^{2} agar matcher konsisten
+  s = s.replace(/(\d+)\^(\d+)(?!\{)/g, '$1^{$2}');
+  // Buang sisa atribut HTML di plain
+  s = s.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
+  s = s.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
+  s = s.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
+  s = s.replace(/\s{2,}/g, ' ').trim();
+
   // Nested: (5^{2})^{2}  →  satu embed utuh
   s = s.replace(/\((\d+)\^\{(\d+)\}\)\^\{(\d+)\}/g, function(_, a, b, c) {
     return toEmbed('(' + a + '^{' + b + '})^{' + c + '}');
