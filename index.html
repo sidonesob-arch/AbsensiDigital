@@ -6613,23 +6613,34 @@ function parseSoalFromHtml(html) {
 
       // Opsi — perbaiki + konversi ke KaTeX bila memungkinkan
       if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
-        let list = s.opsi.map(o => {
+                let list = s.opsi.map(o => {
           let teks = String(o.teks || '');
-          const oHasFormula = /ql-formula-embed|data-latex|class="katex"/i.test(teks);
-          if (!oHasFormula) {
-            teks = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            teks = teks.replace(/[*＊]\s*$/g, '').trim();
-            teks = repairCorruptedSqrtText(teks);
-            teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
-            teks = teks.replace(/\s+[B-H]\s*$/g, '').trim();
-            if (typeof plainMathToKatexHtml === 'function') {
-              const k = plainMathToKatexHtml(teks);
-              if (k && /ql-formula-embed/.test(k)) teks = k;
+          const oHasFormula = /ql-formula-embed|data-latex/i.test(teks);
+          if (oHasFormula) {
+            // Ambil latex bersih dari embed
+            const box = document.createElement('div');
+            box.innerHTML = teks;
+            const el = box.querySelector('[data-latex], .ql-formula-embed');
+            if (el) {
+              let latex = el.getAttribute('data-latex') || '';
+              if (latex && typeof latexToUnicodeSimple === 'function') {
+                teks = latexToUnicodeSimple(latex) || latex;
+              } else if (latex) teks = latex;
             }
+          } else {
+            teks = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+          teks = teks.replace(/[*＊]\s*$/g, '').trim();
+          teks = repairOpsiMathText(teks);
+          teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+          teks = teks.replace(/\s+[B-H]\s*$/g, '').trim();
+          if (typeof plainMathToKatexHtml === 'function') {
+            const k = plainMathToKatexHtml(teks);
+            if (k && /ql-formula-embed/.test(k)) teks = k;
           }
           return { teks, is_benar: !!o.is_benar, letter: o.letter };
         });
-        list = resplitMergedOpsi(list);
+list = resplitMergedOpsi(list);
         s.opsi = list.map(o => ({
           teks: o.teks,
           is_benar: !!o.is_benar
@@ -7094,6 +7105,50 @@ function repairCorruptedSqrtText(s) {
   return t;
 }
 
+/** Khusus opsi jawaban: residual digit di sekitar n√m */
+function repairOpsiMathText(s) {
+  if (s == null || s === '') return s;
+  let t = String(s).replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  // pure number — biarkan
+  if (/^\d+([.,]\d+)?$/.test(t)) return t;
+
+  t = repairCorruptedSqrtText(t);
+  t = t.replace(/\s{2,}/g, ' ').trim();
+
+  // Core: coef√radicand di tengah tumpukan digit
+  // "2 3 2 3 2√3 2 3 2 3 2 3" → "2√3"
+  var m = t.match(/(\d+)\s*√\s*\(?\s*(\d+)\s*\)?/);
+  if (!m) m = t.match(/(\d+)\s*\\sqrt\s*\{\s*(\d+)\s*\}/);
+  if (m) {
+    var coef = m[1], rad = m[2];
+    var coreUni = coef + '√' + rad;
+    var coreTex = coef + '\\sqrt{' + rad + '}';
+    var digits = t.replace(/\D/g, '');
+    var coreDigs = coef + rad;
+    // Semua digit hanya terdiri dari angka coef/radicand → ini residual Word
+    if (digits.length >= coreDigs.length && digits.split('').every(function (d) {
+      return coreDigs.indexOf(d) >= 0;
+    })) {
+      t = /\\sqrt/.test(t) ? coreTex : coreUni;
+    }
+  }
+
+  // Ulangan core
+  t = t.replace(/(\d+\s*√\s*\d+)(?:\s+\1)+/g, '$1');
+  t = t.replace(/(\d+\\sqrt\{\d+\})(?:\s+\1)+/g, '$1');
+  // trailing/leading digit residual
+  t = t.replace(/^(?:\d\s+)+(\d\s*√\s*\d+)/g, '$1');
+  t = t.replace(/(\d\s*√\s*\d+)(?:\s+\d)+$/g, '$1');
+  t = t.replace(/^(?:\d\s+)+(\d\\sqrt\{\d+\})/g, '$1');
+  t = t.replace(/(\d\\sqrt\{\d+\})(?:\s+\d)+$/g, '$1');
+
+  // "2√3 B. 3√2" → hanya "2√3"
+  t = t.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t;
+}
+
 function plainMathToKatexHtml(teks) {
   if (!teks) return '';
   let s = repairCorruptedSqrtText(cleanMathInput(String(teks)));
@@ -7519,19 +7574,14 @@ function parseSoalFromText(raw) {
       found.push({ letter: m[1].toUpperCase(), teks: m[2].trim(), index: m.index });
     }
     if (found.length >= 2) {
-      // Hentikan jika huruf tidak berurutan (A,B,C,D lalu loncat) — tetap ambil sekuens awal
+      // Ambil A,B,C,D... berurutan; jika ada gap (C lalu E), tetap lanjut jika huruf naik
+      const byLetter = {};
+      found.forEach(f => { if (!byLetter[f.letter]) byLetter[f.letter] = f; });
       const ordered = [];
-      let expect = null;
-      for (const f of found) {
-        const code = f.letter.charCodeAt(0);
-        if (expect == null) {
-          if (f.letter !== 'A') continue; // mulai dari A
-          expect = code;
-        }
-        if (code !== expect) break;
-        ordered.push(f);
-        expect = code + 1;
-        if (ordered.length >= 8) break;
+      for (let code = 65; code <= 72; code++) { // A..H
+        const L = String.fromCharCode(code);
+        if (byLetter[L]) ordered.push(byLetter[L]);
+        else if (ordered.length >= 2) break; // gap setelah punya minimal 2
       }
       const use = ordered.length >= 2 ? ordered : found.slice(0, 8);
       use.forEach(f => {
@@ -7541,7 +7591,7 @@ function parseSoalFromText(raw) {
         let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks) || /\*\s*\)\s*$/.test(teks);
         if (!is_benar && /\*[)\]]?\s*$/.test(teks)) is_benar = true;
         teks = teks.replace(/\s*\*\s*$/, '').replace(/\(\s*\*\s*\)\s*$/, '').replace(/\*\s*\)\s*$/, '').trim();
-        teks = repairCorruptedSqrtText(teks);
+        teks = repairOpsiMathText(teks);
         if (teks) opsi.push({ teks, is_benar, letter: f.letter });
       });
       return opsi;
@@ -7575,7 +7625,7 @@ function parseSoalFromText(raw) {
         let is_benar = /\*/.test(teks);
         teks = teks.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim();
         teks = teks.replace(/\s+[A-H]\s*$/, '').trim();
-        teks = repairCorruptedSqrtText(teks);
+        teks = repairOpsiMathText(teks);
         if (teks) opsi.push({ teks, is_benar, letter: seq[i].letter });
       }
     }
@@ -7750,7 +7800,7 @@ async function submitImportSoal() {
         const oHasFormula = /ql-formula-embed|data-latex|class="katex"/i.test(teks);
         if (!oHasFormula) {
           teks = teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-          teks = repairCorruptedSqrtText(teks);
+          teks = repairOpsiMathText(teks);
           teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
           if (typeof plainMathToKatexHtml === 'function') {
             const k = plainMathToKatexHtml(teks);
