@@ -6886,6 +6886,58 @@ function repairCorruptedSqrtText(s) {
     return String(n).split('').map(function (d) { return ({ '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' })[d] || d; }).join('');
   };
 
+  // ========== 0. Pembagian pangkat residual (5⁶ : 5²) ==========
+  t = t.replace(/(\d)\s+(\d)\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1$3');
+  t = t.replace(/(\d)\s+(\d)\s+\1\^\{(\2)\}/g, '$1^{$3}');
+
+  (function fixDivisionPowers() {
+    var m = t.match(/^((?:Hasil|Nilai|Bentuk\s+sederhana)\s+dari\s+)(.+?)(\s+adalah\b.*)$/i);
+    if (!m) return;
+    var head = m[1], body = m[2], tail = m[3];
+    if (!/[:÷\/]/.test(body)) return;
+    if (/^\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*[:÷\/]\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*$/.test(body)) return;
+    if (/^\s*\d+\^\{\d+\}\s*[:÷\/]\s*\d+\^\{\d+\}\s*$/.test(body)) return;
+
+    var sm = body.match(/(\d)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/);
+    if (!sm) return;
+    var base = sm[1];
+    var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+    var exps = [];
+    var re = new RegExp(base + '([⁰¹²³⁴⁵⁶⁷⁸⁹]+)', 'g');
+    var mm;
+    while ((mm = re.exec(body)) !== null) {
+      exps.push(mm[1].split('').map(function (c) { return map[c] || ''; }).join(''));
+    }
+    re = new RegExp(base + '\\s+([0-9]{1,2})', 'g');
+    while ((mm = re.exec(body)) !== null) exps.push(mm[1]);
+    re = new RegExp(base + '\\^\\{(\\d+)\\}', 'g');
+    while ((mm = re.exec(body)) !== null) exps.push(mm[1]);
+
+    var seen = {}, uniq = [];
+    exps.forEach(function (e) {
+      if (e && !seen[e]) { seen[e] = 1; uniq.push(e); }
+    });
+    if (uniq.length >= 2) {
+      t = head + base + toSup(uniq[0]) + ' : ' + base + toSup(uniq[uniq.length - 1]) + tail;
+    } else if (uniq.length === 1) {
+      var other = body.replace(new RegExp(base, 'g'), '').replace(/\D/g, '');
+      var od = [];
+      other.split('').forEach(function (d) {
+        if (d !== uniq[0] && od.indexOf(d) < 0) od.push(d);
+      });
+      if (od.length) {
+        t = head + base + toSup(uniq[0]) + ' : ' + base + toSup(od[od.length - 1]) + tail;
+      }
+    }
+  })();
+
+  // Nested (3 2) 3 → (3²)³
+  t = t.replace(/\(\s*(\d)\s+(\d)\s*\)\s*(\d)(?:\s*[\(]?\s*\1\s*\2\s*[\)]?\s*\3)*/g, function (_, b, e1, e2) {
+    return '(' + b + toSup(e1) + ')' + toSup(e2);
+  });
+  t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\1)+/g, '$1');
+  t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]*)+/g, '$1');
+
   // ========== 1. Akar: residual angka di depan/belakang ==========
   // "12 12 √(12)" / "12 √12" → "√12"
   t = t.replace(/(\d+)(?:\s+\1)+\s*√\s*\(?\s*\1\s*\)?/g, '√$1');
