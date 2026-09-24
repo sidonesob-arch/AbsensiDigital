@@ -1172,9 +1172,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             </div>
             <div class="form-group">
               <label>Cari (NISN/NIP/Nama):</label>
-              <input type="text" id="editHadirKeyword" placeholder="Opsional...">
+              <input type="text" id="editHadirKeyword" placeholder="Ketik nama atau NISN lalu klik Tampilkan" onkeydown="if(event.key==='Enter'){event.preventDefault();loadEditKehadiran();}">
             </div>
           </div>
+          <p style="font-size:11px;color:#666;margin:0 0 8px;">💡 Isi tanggal + (opsional) nama/NISN, lalu klik <b>Tampilkan Data</b>. Pencarian nama mencari di catatan absensi periode tersebut.</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <button class="btn-primary" style="width:auto; padding:10px 22px;" onclick="loadEditKehadiran()">🔍 Tampilkan Data</button>
             <button class="btn-add" style="width:auto; padding:10px 18px;" onclick="openFormEditKehadiranBaru()">➕ Tambah / Ubah Manual</button>
@@ -2337,7 +2338,11 @@ function loadEditKehadiran() {
   const keyword = ($('editHadirKeyword')?.value || '').trim().toLowerCase();
   if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
   showBigPopup('info', 'Memuat', '⏳ Mengambil data kehadiran...', 0);
-  sendRequest({ action: 'download_absensi', role, kelas, tglMulai, tglSelesai }, res => {
+  sendRequest({
+    action: 'download_absensi',
+    role, kelas, tglMulai, tglSelesai,
+    keyword: ($('editHadirKeyword')?.value || '').trim()
+  }, res => {
     closeBigPopup();
     const tbody = $('tableEditHadirBody');
     const summary = $('editHadirSummary');
@@ -2355,12 +2360,13 @@ function loadEditKehadiran() {
       tanggal: r.tanggal || r.tgl || (r.timestamp ? String(r.timestamp).substring(0, 10) : ''),
       jam: r.jam || r.jamScan || (r.timestamp ? String(r.timestamp).substring(11, 19) : ''),
       sesi: r.sesi || r.session || '',
-      status: r.status || r.sesi || r.ket || '-',
+      status: r.status || r.status_raw || '-',
       keterangan: r.keterangan || r.ket || r.note || '',
       role: role,
       row_id: r.row_id || r.rowId || r._id || r.uuid || null,
       raw: r
     }));
+    // Filter lokal tambahan (aman jika backend belum filter keyword)
     if (keyword) {
       data = data.filter(r =>
         String(r.id).toLowerCase().includes(keyword) ||
@@ -2371,10 +2377,14 @@ function loadEditKehadiran() {
     editHadirCache = data;
     if (summary) {
       summary.style.display = 'block';
-      summary.innerHTML = `📊 Tipe: <b>${role.toUpperCase()}</b>${role === 'siswa' ? ' • Kelas: <b>' + (kelas || 'Semua') + '</b>' : ''} • Periode: <b>${tglMulai}</b> s/d <b>${tglSelesai}</b> • Tampil: <b>${data.length}</b> baris`;
+      summary.innerHTML = `📊 Tipe: <b>${role.toUpperCase()}</b>${role === 'siswa' ? ' • Kelas: <b>' + (kelas || 'Semua') + '</b>' : ''} • Periode: <b>${tglMulai}</b> s/d <b>${tglSelesai}</b> • Tampil: <b>${data.length}</b> baris` +
+        (keyword ? ` • Cari: <b>${escHtmlEdit(keyword)}</b>` : '');
     }
     if (!data.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Tidak ada data kehadiran pada filter ini.</td></tr>';
+      const hint = keyword
+        ? `Tidak ada catatan absensi untuk "<b>${escHtmlEdit(keyword)}</b>" pada periode ini.<br><span style="font-size:11px;color:#666;">Pastikan tanggal benar, atau gunakan tombol <b>➕ Tambah / Ubah Manual</b> untuk mengisi status.</span>`
+        : 'Tidak ada data kehadiran pada filter ini.<br><span style="font-size:11px;color:#666;">Perluas rentang tanggal, atau isi status baru via <b>➕ Tambah / Ubah Manual</b>.</span>';
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:16px;">${hint}</td></tr>`;
       return;
     }
     tbody.innerHTML = data.map((r, i) => `<tr>
