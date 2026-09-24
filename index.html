@@ -7558,7 +7558,11 @@ function parseSoalFromText(raw) {
   text = text.replace(/\s*(PERTANYAAN\s*[:：])/gi, '\n$1');
   text = text.replace(/\s*(KUNCI\s*[:：])/gi, '\n$1');
   // Opsi A. B. C. D. ... di baris sendiri (huruf + titik/kurung)
-  text = text.replace(/(?:^|[\s,;])([A-H])\s*[.、．\)]\s+/gim, '\n$1. ');
+  // Longgar: boleh tanpa spasi setelah titik (A.2√3), huruf kecil, kurung
+  text = text.replace(/(?:^|[\s,;>\n])([A-Ha-h])\s*[.、．\)]\s*/gm, '\n$1. ');
+  // Opsi nempel di tengah kalimat: "... adalah A. 50 B. 100"
+  text = text.replace(/(\S)([A-Ha-h])\s*[.、．\)]\s+/g, '$1\n$2. ');
+  // Spasi sebelum "adalah"
   // Spasi sebelum "adalah" jika nempel ke akar/angka: √12adalah → √12 adalah
   text = text.replace(/(√[\d.]+|(?:\\sqrt\{[^}]+\})|(?:\d+√\d+)|(?:\d+\^\{\d+\}))(?=[A-Za-zÀ-ü])/g, '$1 ');
   text = text.replace(/([0-9}])(?=adalah\b)/gi, '$1 ');
@@ -7582,73 +7586,121 @@ function parseSoalFromText(raw) {
   function extractOpsiFromText(chunk) {
     const opsi = [];
     if (!chunk) return opsi;
-    // Potong di SOAL berikutnya jika masih ikut
+    chunk = String(chunk);
+    // Potong di SOAL berikutnya
     chunk = chunk.split(/\n\s*SOAL\b/i)[0];
     chunk = chunk.split(/\bSOAL\s*\d*\s*\n/i)[0];
 
-    // Pola 1: opsi di awal baris  A. teks  / A) teks
-    const lineRe = /^\s*([A-H])\s*[.、．\)]\s+(.+)$/gim;
+    // Normalisasi label opsi di chunk
+    chunk = chunk.replace(/(?:^|[\s,;>\n])([A-Ha-h])\s*[.、．\)]\s*/gm, '\n$1. ');
+    chunk = chunk.replace(/(\S)([A-Ha-h])\s*[.、．\)]\s+/g, '$1\n$2. ');
+
+    // --- Pola 1: tiap opsi di baris sendiri ---
+    // Longgar: spasi setelah titik opsional
+    const lineRe = /^\s*([A-Ha-h])\s*[.、．\)]\s*(.+)$/gim;
     let m;
     const found = [];
     while ((m = lineRe.exec(chunk)) !== null) {
       found.push({ letter: m[1].toUpperCase(), teks: m[2].trim(), index: m.index });
     }
-    if (found.length >= 2) {
-      // Ambil A,B,C,D... berurutan; jika ada gap (C lalu E), tetap lanjut jika huruf naik
-      const byLetter = {};
-      found.forEach(f => { if (!byLetter[f.letter]) byLetter[f.letter] = f; });
-      const ordered = [];
-      for (let code = 65; code <= 72; code++) { // A..H
-        const L = String.fromCharCode(code);
-        if (byLetter[L]) ordered.push(byLetter[L]);
-        else if (ordered.length >= 2) break; // gap setelah punya minimal 2
-      }
-      const use = ordered.length >= 2 ? ordered : found.slice(0, 8);
-      use.forEach(f => {
-        let teks = f.teks;
-        // potong sisa SOAL / JENIS yang nempel di opsi terakhir
-        teks = teks.split(/\bSOAL\b/i)[0].split(/\bJENIS\s*[:：]/i)[0].trim();
-        let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks) || /\*\s*\)\s*$/.test(teks);
-        if (!is_benar && /\*[)\]]?\s*$/.test(teks)) is_benar = true;
-        teks = teks.replace(/\s*\*\s*$/, '').replace(/\(\s*\*\s*\)\s*$/, '').replace(/\*\s*\)\s*$/, '').trim();
-        teks = repairOpsiMathText(teks);
-        if (teks) opsi.push({ teks, is_benar, letter: f.letter });
-      });
-      return opsi;
+
+    function pushOpsi(letter, teks) {
+      if (!teks) return;
+      teks = teks.split(/\bSOAL\b/i)[0].split(/\bJENIS\s*[:：]/i)[0]
+        .split(/\n\s*KUNCI\s*[:：]/i)[0].trim();
+      // potong opsi berikutnya yang nempel
+      teks = teks.split(/\s+[B-H]\s*[.、．\)]\s*/)[0].trim();
+      let is_benar = /\*\s*$/.test(teks) || /\(\s*\*\s*\)\s*$/.test(teks) || /\*/.test(teks);
+      teks = teks.replace(/\s*\*\s*/g, ' ').replace(/\(\s*\*\s*\)/g, ' ').trim();
+      teks = teks.replace(/\s+/g, ' ').trim();
+      teks = (typeof repairOpsiMathText === 'function') ? repairOpsiMathText(teks) : teks;
+      // jangan buang opsi angka 0
+      if (teks === '' || teks == null) return;
+      opsi.push({ teks, is_benar: !!is_benar, letter: letter });
     }
 
-    // Pola 2: semua opsi dalam SATU baris:  A. ... B. ... C. ... D. ...
-    const inlineRe = /(?:^|[\s])([A-H])\s*[.、．\)]\s*/gi;
+    if (found.length >= 1) {
+      const byLetter = {};
+      found.forEach(f => { if (!byLetter[f.letter]) byLetter[f.letter] = f; });
+      // Ambil A..H yang ada (jangan stop di gap terlalu awal — minimal kumpulkan semua berurutan dari A)
+      const ordered = [];
+      for (let code = 65; code <= 72; code++) {
+        const L = String.fromCharCode(code);
+        if (byLetter[L]) ordered.push(byLetter[L]);
+        else if (ordered.length >= 1 && code > 65) {
+          // gap: coba lanjut cari huruf berikutnya (skip 1 gap)
+          let foundNext = false;
+          for (let k = code + 1; k <= 72; k++) {
+            const L2 = String.fromCharCode(k);
+            if (byLetter[L2]) { foundNext = true; break; }
+          }
+          if (!foundNext) break;
+        }
+      }
+      const use = ordered.length >= 1 ? ordered : found.slice(0, 8);
+      use.forEach(f => pushOpsi(f.letter, f.teks));
+      if (opsi.length >= 2) return opsi;
+      // jika < 2, lanjut coba pola lain (jangan return dulu)
+      opsi.length = 0;
+    }
+
+    // --- Pola 2: inline "A. ... B. ... C. ... D. ..." ---
+    const inlineRe = /(?:^|[\s])([A-Ha-h])\s*[.、．\)]\s*/gi;
     const marks = [];
     let im;
     while ((im = inlineRe.exec(chunk)) !== null) {
       marks.push({ letter: im[1].toUpperCase(), start: im.index, contentStart: im.index + im[0].length });
     }
     if (marks.length >= 2) {
-      // Mulai dari A, sekuensial
-      let startIdx = marks.findIndex(x => x.letter === 'A');
-      if (startIdx < 0) startIdx = 0;
+      const byLetter = {};
+      marks.forEach(mk => { if (!byLetter[mk.letter]) byLetter[mk.letter] = mk; });
       const seq = [];
-      let expectCode = marks[startIdx].letter.charCodeAt(0);
-      for (let i = startIdx; i < marks.length; i++) {
-        const code = marks[i].letter.charCodeAt(0);
-        if (code !== expectCode) break;
-        seq.push(marks[i]);
-        expectCode++;
-        if (seq.length >= 8) break;
+      for (let code = 65; code <= 72; code++) {
+        const L = String.fromCharCode(code);
+        if (byLetter[L]) seq.push(byLetter[L]);
       }
+      // urutkan by position
+      seq.sort((a, b) => a.start - b.start);
       for (let i = 0; i < seq.length; i++) {
         const end = i + 1 < seq.length ? seq[i + 1].start : chunk.length;
         let teks = chunk.slice(seq[i].contentStart, end).trim();
-        teks = teks.split(/\n\s*KUNCI\s*[:：]/i)[0].trim();
-        teks = teks.split(/\bSOAL\b/i)[0].split(/\bJENIS\s*[:：]/i)[0].trim();
-        let is_benar = /\*/.test(teks);
-        teks = teks.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim();
-        teks = teks.replace(/\s+[A-H]\s*$/, '').trim();
-        teks = repairOpsiMathText(teks);
-        if (teks) opsi.push({ teks, is_benar, letter: seq[i].letter });
+        pushOpsi(seq[i].letter, teks);
+      }
+      if (opsi.length >= 2) return opsi;
+      opsi.length = 0;
+    }
+
+    // --- Pola 3: numbering 1. 2. 3. 4. → A B C D ---
+    const numRe = /^\s*([1-8])\s*[.、．\)]\s*(.+)$/gim;
+    const nums = [];
+    while ((m = numRe.exec(chunk)) !== null) {
+      nums.push({ n: parseInt(m[1], 10), teks: m[2].trim() });
+    }
+    if (nums.length >= 2) {
+      nums.sort((a, b) => a.n - b.n);
+      nums.forEach((f, i) => {
+        if (f.n !== i + 1 && i === 0 && f.n !== 1) return;
+        pushOpsi(String.fromCharCode(64 + f.n), f.teks);
+      });
+      if (opsi.length >= 2) return opsi;
+      opsi.length = 0;
+    }
+
+    // --- Pola 4: baris pendek setelah pertanyaan (4 baris jawaban) ---
+    // Ambil baris non-kosong setelah "adalah" / "...." yang mirip opsi
+    const after = chunk.split(/\badalah\b|\.{2,}|…/i);
+    if (after.length >= 2) {
+      const tail = after.slice(1).join(' ');
+      const lines = tail.split(/\n/).map(l => l.trim()).filter(l => l && !/^KUNCI/i.test(l) && !/^SOAL/i.test(l));
+      const candidates = lines.filter(l => l.length < 80 && !/^JENIS|^POIN|^PERTANYAAN/i.test(l));
+      if (candidates.length >= 2 && candidates.length <= 8) {
+        candidates.forEach((teks, i) => {
+          pushOpsi(String.fromCharCode(65 + i), teks);
+        });
+        if (opsi.length >= 2) return opsi;
       }
     }
+
     return opsi;
   }
 
