@@ -1306,6 +1306,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <div><b id="ujianSoalJudul">-</b> <span id="ujianSoalMapel" style="color:#666; font-size:12px;"></span></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-add btn-sm" onclick="openFormSoalBaru()">➕ Tambah Soal</button>
+          <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:6px 10px;" onclick="rapikanSemuaSoalUjian()" title="Bersihkan residual akar/pangkat di semua soal lalu simpan">✦ Rapikan semua rumus</button>
           <button class="btn-sm" style="background:#1d6f42;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="openImportSoalModal()">📥 Import Word</button>
           <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="downloadTemplateSoal()">📄 Template Soal</button>
           <button class="btn-primary btn-sm" onclick="switchMenu('ujian-kelola', document.querySelector('[data-menu=ujian-kelola]'))">← Kembali</button>
@@ -5770,6 +5771,59 @@ function bukaBankSoal(ujianId) {
   loadUjianSoalList();
 }
 
+
+async function rapikanSemuaSoalUjian() {
+  if (!ujianSoalUjianId) return showBigPopup('warning', 'Info', 'Buka bank soal dulu.');
+  const list = window._ujianSoalCache || [];
+  if (!list.length) return showBigPopup('warning', 'Info', 'Belum ada soal.');
+  if (!confirm('Rapikan residual akar/pangkat pada ' + list.length + ' soal dan simpan ke database?\\n\\nSoal yang sangat rusak mungkin tetap perlu edit manual.')) return;
+
+  let ok = 0, fail = 0;
+  showBigPopup('info', 'Memproses', 'Merapikan soal 0/' + list.length + '…');
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    try {
+      let pertanyaan = deepCleanSoalText(String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+      // jika hasil masih jelek tapi ada nested, biarkan deepClean
+      if (typeof plainMathToKatexHtml === 'function' && /\\sqrt|√|\^\{/.test(pertanyaan)) {
+        const k = plainMathToKatexHtml(pertanyaan);
+        if (k && /ql-formula-embed/.test(k)) pertanyaan = k;
+      }
+      const opsi = (s.opsi || []).map(o => {
+        let teks = repairOpsiMathText(String(o.teks || '').replace(/<[^>]+>/g, ' ').trim());
+        if (typeof plainMathToKatexHtml === 'function' && /\\sqrt|√|\^\{/.test(teks)) {
+          const k = plainMathToKatexHtml(teks);
+          if (k && /ql-formula-embed/.test(k)) teks = k;
+        }
+        return { teks, is_benar: !!o.is_benar };
+      });
+      await new Promise((resolve) => {
+        sendRequest({
+          action: 'ujian_soal_save',
+          id: s.id,
+          ujian_id: ujianSoalUjianId,
+          jenis: s.jenis,
+          pertanyaan: pertanyaan,
+          poin: s.poin,
+          opsi: opsi,
+          kunci_bs: s.kunci_bs || null,
+          urutan: s.urutan
+        }, res => {
+          if (res.status === 'success') ok++;
+          else fail++;
+          resolve();
+        });
+      });
+    } catch (e) {
+      fail++;
+    }
+  }
+  loadUjianSoalList();
+  showBigPopup(fail ? 'warning' : 'success', 'Selesai',
+    'Rapikan selesai. Berhasil: ' + ok + (fail ? ', gagal: ' + fail : '') +
+    '.\\nJika masih ada yang rusak, edit manual dengan tombol √ / ✦.');
+}
+
 function loadUjianSoalList() {
   if (!ujianSoalUjianId) return;
   sendRequest({ action: 'ujian_soal_list', ujian_id: ujianSoalUjianId }, res => {
@@ -5794,7 +5848,7 @@ function loadUjianSoalList() {
             <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripGluedOptionsFromText(deepCleanSoalText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
@@ -6948,6 +7002,87 @@ function resplitMergedOpsi(opsiList) {
     final.push(o);
   });
   return final.length ? final : opsiList;
+}
+
+/** Bersihkan residual ekstrem pada soal esai/akar (Hitunglah / Sederhanakan) */
+function deepCleanSoalText(s) {
+  if (s == null || s === '') return s;
+  let t = repairCorruptedSqrtText(String(s));
+  t = t.replace(/\s{2,}/g, ' ').trim();
+
+  // Hitunglah + nested radical: ambil \sqrt{...} terdalam yang bermakna
+  (function () {
+    const m = t.match(/^(Hitunglah(?:\s+nilai\s+dari)?\s+)(.+)$/i);
+    if (!m) return;
+    const head = m[1];
+    let body = m[2];
+
+    // Cari nested: \sqrt{5 + 2\sqrt{5 - \sqrt{5}}} atau √(5+2√(5-√5))
+    let best = null;
+    // latex nested
+    const reNest = /\\sqrt\{([^{}]*\\sqrt\{[^{}]*\}[^{}]*)\}/g;
+    let mm;
+    while ((mm = reNest.exec(body)) !== null) {
+      best = '\\sqrt{' + mm[1] + '}';
+    }
+    // unicode nested √( ... √ ... )
+    if (!best) {
+      const u = body.match(/√\s*\(\s*[^)]*√[^)]+\)/);
+      if (u) best = u[0];
+    }
+    // sqrt(5 + 2sqrt(...))
+    if (!best) {
+      const s2 = body.match(/sqrt\s*\(\s*[^)]*sqrt[^)]+\)/i);
+      if (s2) {
+        let x = s2[0];
+        x = x.replace(/sqrt\s*\(/gi, '\\sqrt{').replace(/\)/g, '}');
+        best = x;
+      }
+    }
+    if (best) {
+      t = head + best;
+      return;
+    }
+
+    // Tanpa nested: buang residual digit di sekitar term √ yang valid
+    // "3 5 3√5 3 5 + 2 5 2√5" → ambil "3√5 + 2√5" sekali
+    const terms = body.match(/\d+\s*\\sqrt\{\d+\}|\d+\s*√\d+|\\sqrt\{\d+\}|√\d+/g);
+    if (terms && terms.length >= 1) {
+      // dedupe consecutive same
+      const uniq = [];
+      terms.forEach(function (x) {
+        const n = x.replace(/\s+/g, '');
+        if (!uniq.length || uniq[uniq.length - 1].replace(/\s+/g, '') !== n) uniq.push(x.replace(/\s+/g, ''));
+      });
+      // jika terlalu banyak pengulangan, ambil set unik pertama
+      if (terms.length > uniq.length + 1 && uniq.length <= 4) {
+        t = head + uniq.join(' + ').replace(/\+ -/g, '- ');
+      }
+    }
+  })();
+
+  // "34-25 + √8 ^(4) - 2^5 + √81 34 -25 + √81" → coba (√8)^4 - 2^5 + √81
+  (function () {
+    const m = t.match(/^(Hitunglah(?:\s+nilai\s+dari)?\s+)(.+)$/i);
+    if (!m) return;
+    const head = m[1];
+    let body = m[2];
+    // residual ulang di akhir: ".... 34 -25 + √81"
+    body = body.replace(/\s+\d{2,}\s*[+\-]\s*\d+\s*[+\-]\s*√\d+\s*$/g, '').trim();
+    body = body.replace(/\s+\d{2,}\s*[+\-]\s*\d+\s*[+\-]\s*\\sqrt\{\d+\}\s*$/g, '').trim();
+    // "√8 ^(4)" → "(\\sqrt{8})^{4}"
+    body = body.replace(/√\s*(\d+)\s*\^\s*\(?\s*(\d+)\s*\)?/g, '(\\sqrt{$1})^{$2}');
+    body = body.replace(/\\sqrt\{(\d+)\}\s*\^\s*\{?(\d+)\}?/g, '(\\sqrt{$1})^{$2}');
+    // "2^5" → "2^{5}"
+    body = body.replace(/\b(\d+)\s*\^\s*(\d+)\b/g, '$1^{$2}');
+    t = head + body;
+  })();
+
+  // Residual "n n n√n" final pass
+  t = t.replace(/(\d)(?:\s+\1)+\s*(√\d+|\\sqrt\{\d+\})/g, '$1$2');
+  t = t.replace(/(√\d+|\\sqrt\{\d+\})(?:\s+\d)+/g, '$1');
+
+  return t.replace(/\s{2,}/g, ' ').trim();
 }
 
 function repairCorruptedSqrtText(s) {
@@ -8613,7 +8748,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripGluedOptionsFromText(deepCleanSoalText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
       ${body}
     </div>`;
   }).join('');
