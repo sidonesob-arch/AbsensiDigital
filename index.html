@@ -90,6 +90,15 @@
   .fm-opsi-row .ql-toolbar.ql-snow { padding: 3px 4px; }
 
   .ql-formula-btn, .ql-video-btn { width: auto !important; padding: 0 6px !important; }
+  .ql-snow .ql-toolbar button.ql-sqrt::before { content: "√"; font-weight: 800; font-size: 15px; }
+  .ql-snow .ql-toolbar button.ql-power::before { content: "xⁿ"; font-weight: 800; font-size: 12px; }
+  .ql-snow .ql-toolbar button.ql-frac::before { content: "a/b"; font-weight: 700; font-size: 11px; }
+  .ql-snow .ql-toolbar button.ql-rapikan::before { content: "✦"; font-weight: 800; font-size: 14px; color: #0d9488; }
+  .ql-snow .ql-toolbar button.ql-sqrt,
+  .ql-snow .ql-toolbar button.ql-power,
+  .ql-snow .ql-toolbar button.ql-frac,
+  .ql-snow .ql-toolbar button.ql-rapikan { width: 32px; }
+
 
   .ql-snow .ql-toolbar button.ql-table::before,
   .ql-snow.ql-toolbar button.ql-table::before {
@@ -4988,7 +4997,7 @@ function previewChartBuilder() {
   });
 }
 
-function openMathLiveEditor(onInsert) {
+function openMathLiveEditor(onInsert, initialSnippet) {
   const old = document.getElementById('mathliveModalRoot');
   if (old) old.remove();
 
@@ -5005,22 +5014,23 @@ function openMathLiveEditor(onInsert) {
           Ketik di kotak putih, atau tekan tombol keyboard di atas.<br>
           Pintasan: <b>/</b> pecahan · <b>^</b> pangkat · ketik <b>sqrt</b> + spasi untuk akar.
         </div>
-        <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="mathliveSnippets">
-          <button type="button" data-ml-snippet="\\frac{#@}{#0}">a/b</button>
-          <button type="button" data-ml-snippet="\\sqrt{#0}">√</button>
-          <button type="button" data-ml-snippet="#@^{#0}">x²</button>
-          <button type="button" data-ml-snippet="\\int_{#@}^{#0}">∫</button>
-          <button type="button" data-ml-snippet="\\sum_{#@}^{#0}">Σ</button>
-          <button type="button" data-ml-snippet="\\pi">π</button>
-          <button type="button" data-ml-snippet="\\theta">θ</button>
-          <button type="button" data-ml-snippet="\\alpha">α</button>
-          <button type="button" data-ml-snippet="\\beta">β</button>
-          <button type="button" data-ml-snippet="\\times">×</button>
-          <button type="button" data-ml-snippet="\\div">÷</button>
-          <button type="button" data-ml-snippet="\\pm">±</button>
-          <button type="button" data-ml-snippet="\\leq">≤</button>
-          <button type="button" data-ml-snippet="\\geq">≥</button>
-          <button type="button" data-ml-snippet="\\neq">≠</button>
+        <div style="margin-top:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="mathliveSnippets">
+          <button type="button" data-ml-snippet="\sqrt{#0}">√ akar</button>
+          <button type="button" data-ml-snippet="\sqrt[3]{#0}">∛</button>
+          <button type="button" data-ml-snippet="#@^{#0}">xⁿ pangkat</button>
+          <button type="button" data-ml-snippet="(#@)^{#0}">(x)ⁿ</button>
+          <button type="button" data-ml-snippet="\frac{#@}{#0}">a/b</button>
+          <button type="button" data-ml-snippet="#@^{2}">x²</button>
+          <button type="button" data-ml-snippet="#@^{3}">x³</button>
+          <button type="button" data-ml-snippet="#@\times#0">×</button>
+          <button type="button" data-ml-snippet="#@\div#0">÷</button>
+          <button type="button" data-ml-snippet="#@:#0">:</button>
+          <button type="button" data-ml-snippet="\pi">π</button>
+          <button type="button" data-ml-snippet="\pm">±</button>
+          <button type="button" data-ml-snippet="\leq">≤</button>
+          <button type="button" data-ml-snippet="\geq">≥</button>
+          <button type="button" data-ml-snippet="\neq">≠</button>
+          <button type="button" data-ml-snippet="\times">×</button>
         </div>
         <div style="margin-top:8px;">
           <label style="font-size:11px;color:#64748b;">Atau tempel LaTeX manual:</label>
@@ -5073,6 +5083,17 @@ function openMathLiveEditor(onInsert) {
   }
   if (!mf) {
     host.innerHTML = '<p style="color:#b45309;font-size:12px;margin:0 0 6px;">MathLive tidak termuat — gunakan input LaTeX di bawah atau tombol pintasan.</p>';
+  }
+
+  // Sisipkan template awal (√ / pangkat / pecahan) jika dipanggil dari toolbar
+  if (initialSnippet && mf) {
+    try {
+      if (typeof mf.executeCommand === 'function') {
+        mf.executeCommand(['insert', initialSnippet]);
+      } else if ('value' in mf) {
+        mf.value = String(initialSnippet).replace(/#@|#0/g, '');
+      }
+    } catch (eSn) { console.warn('initialSnippet', eSn); }
   }
 
   setTimeout(() => {
@@ -5270,7 +5291,7 @@ function initSoalRichEditor(containerId, initialHtml) {
     [{ list: 'ordered' }, { list: 'bullet' }],
     [{ align: [] }],
     ['link', 'image', 'video', 'table', 'chart'],
-    ['formula'],
+    ['formula', 'sqrt', 'power', 'frac', 'rapikan'],
     ['clean']
   ];
   const quill = new Quill('#' + containerId, {
@@ -5318,6 +5339,44 @@ function initSoalRichEditor(containerId, initialHtml) {
           },
           formula: function () {
             openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex));
+          },
+          sqrt: function () {
+            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\sqrt{#0}');
+          },
+          power: function () {
+            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '#@^{#0}');
+          },
+          frac: function () {
+            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\frac{#@}{#0}');
+          },
+          rapikan: function () {
+            try {
+              const range = quill.getSelection(true);
+              if (range && range.length > 0) {
+                const selected = quill.getText(range.index, range.length);
+                const cleaned = repairCorruptedSqrtText(selected);
+                quill.deleteText(range.index, range.length, 'user');
+                quill.insertText(range.index, cleaned, 'user');
+                quill.setSelection(range.index + cleaned.length);
+                showBigPopup('success', 'Rapikan', 'Teks terpilih sudah dibersihkan dari residual.');
+              } else {
+                // Bersihkan seluruh isi editor (teks saja, pertahankan media)
+                const box = document.createElement('div');
+                box.innerHTML = quill.root.innerHTML;
+                const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+                const nodes = [];
+                while (walker.nextNode()) nodes.push(walker.currentNode);
+                nodes.forEach(n => {
+                  const t = n.nodeValue || '';
+                  if (t.trim()) n.nodeValue = repairCorruptedSqrtText(t);
+                });
+                quill.root.innerHTML = box.innerHTML;
+                showBigPopup('success', 'Rapikan', 'Seluruh pertanyaan dibersihkan dari angka residual.');
+              }
+            } catch (e) {
+              console.warn(e);
+              showBigPopup('danger', 'Rapikan', 'Gagal merapikan teks.');
+            }
           }
         }
       }
@@ -5365,6 +5424,23 @@ function initSoalRichEditor(containerId, initialHtml) {
     }
     quill.root.innerHTML = boot ? ('<p>' + boot + '</p>') : '';
   }
+  // Tooltip tombol rumus di toolbar
+  try {
+    const bar = el.parentElement && el.parentElement.querySelector('.ql-toolbar');
+    if (bar) {
+      const tips = {
+        'ql-formula': 'Editor rumus lengkap (Σ)',
+        'ql-sqrt': 'Sisip akar √',
+        'ql-power': 'Sisip pangkat xⁿ',
+        'ql-frac': 'Sisip pecahan a/b',
+        'ql-rapikan': 'Bersihkan angka residual di teks'
+      };
+      Object.keys(tips).forEach(cls => {
+        const btn = bar.querySelector('button.' + cls);
+        if (btn) btn.title = tips[cls];
+      });
+    }
+  } catch (e) {}
   activeSoalQuill = quill;
   return quill;
 }
