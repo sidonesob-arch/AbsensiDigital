@@ -1007,6 +1007,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="pengaturan-tab-btn" data-tab="pin-guru" onclick="togglePengaturanPanel('pin-guru')"><span class="tab-icon">🔐</span>Isi PIN Guru</button>
         <button class="pengaturan-tab-btn" data-tab="hari-libur" onclick="togglePengaturanPanel('hari-libur')"><span class="tab-icon">🎉</span>Hari Libur</button>
         <button class="pengaturan-tab-btn" data-tab="historis" onclick="togglePengaturanPanel('historis')"><span class="tab-icon">📦</span>Historis</button>
+        <button class="pengaturan-tab-btn" data-tab="edit-kehadiran" onclick="togglePengaturanPanel('edit-kehadiran')"><span class="tab-icon">✏️</span>Edit Kehadiran</button>
       </div>
 
       <!-- PANEL: SESI -->
@@ -1140,6 +1141,67 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger 23:59</button>
         </div>
         <div id="historisInfo" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
+      </div>
+
+      <!-- PANEL: EDIT KEHADIRAN (Super Admin only — menu Pengaturan) -->
+      <div class="pengaturan-panel" id="panel-edit-kehadiran">
+        <h4 class="panel-title">✏️ Edit Status Kehadiran</h4>
+        <div style="background:#fff3cd; padding:10px 12px; border-radius:8px; border-left:4px solid var(--warning); margin-bottom:12px; font-size:12px; color:#856404;">
+          ⚠️ Khusus <b>Super Admin</b>. Ubah status absensi yang sudah tercatat jika ada kondisi khusus (scan salah, lupa absen, izin belakangan, koreksi, dll).
+        </div>
+        <div class="download-card" style="margin-bottom:12px;">
+          <div class="download-filter">
+            <div class="form-group">
+              <label>Tipe:</label>
+              <select id="editHadirRole" onchange="toggleEditHadirKelas()">
+                <option value="siswa">Siswa</option>
+                <option value="guru">Guru</option>
+              </select>
+            </div>
+            <div class="form-group" id="editHadirKelasWrap">
+              <label>Kelas:</label>
+              <select id="editHadirKelas"><option value="">-- Semua --</option></select>
+            </div>
+            <div class="form-group">
+              <label>Dari Tanggal:</label>
+              <input type="date" id="editHadirTglMulai">
+            </div>
+            <div class="form-group">
+              <label>Sampai Tanggal:</label>
+              <input type="date" id="editHadirTglSelesai">
+            </div>
+            <div class="form-group">
+              <label>Cari (NISN/NIP/Nama):</label>
+              <input type="text" id="editHadirKeyword" placeholder="Opsional...">
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+            <button class="btn-primary" style="width:auto; padding:10px 22px;" onclick="loadEditKehadiran()">🔍 Tampilkan Data</button>
+            <button class="btn-add" style="width:auto; padding:10px 18px;" onclick="openFormEditKehadiranBaru()">➕ Tambah / Ubah Manual</button>
+          </div>
+        </div>
+        <div id="editHadirSummary" class="download-summary" style="display:none;"></div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;">No</th>
+                <th>ID</th>
+                <th>Nama</th>
+                <th>Unit</th>
+                <th>Tanggal</th>
+                <th>Jam</th>
+                <th>Sesi</th>
+                <th>Status</th>
+                <th>Ket.</th>
+                <th style="width:90px; text-align:center;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tableEditHadirBody">
+              <tr><td colspan="10" style="text-align:center;">Pilih filter dan klik Tampilkan Data.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -2231,6 +2293,277 @@ function simpanIzin() {
   });
 }
 
+// ===================== EDIT KEHADIRAN (Super Admin · Pengaturan) =====================
+let editHadirCache = [];
+
+function assertSuperAdminEditHadir() {
+  if (userRole !== 'super_admin') {
+    showBigPopup('warning', 'Akses Ditolak', 'Hanya Super Admin yang dapat mengedit kehadiran.');
+    return false;
+  }
+  return true;
+}
+
+function initEditKehadiran() {
+  if (!assertSuperAdminEditHadir()) return;
+  const today = new Date().toISOString().split('T')[0];
+  if ($('editHadirTglMulai') && !$('editHadirTglMulai').value) $('editHadirTglMulai').value = today;
+  if ($('editHadirTglSelesai') && !$('editHadirTglSelesai').value) $('editHadirTglSelesai').value = today;
+  toggleEditHadirKelas();
+  sendRequest({ action: 'get_kelas' }, res => {
+    if (res.status !== 'success') return;
+    const opts = (res.data || []).map(k => `<option value="${k}">${k}</option>`).join('');
+    const sel = $('editHadirKelas');
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">-- Semua --</option>' + opts;
+      if (cur) sel.value = cur;
+    }
+  });
+}
+
+function toggleEditHadirKelas() {
+  const role = $('editHadirRole')?.value || 'siswa';
+  const wrap = $('editHadirKelasWrap');
+  if (wrap) wrap.style.display = role === 'siswa' ? 'block' : 'none';
+}
+
+function loadEditKehadiran() {
+  if (!assertSuperAdminEditHadir()) return;
+  const role = $('editHadirRole').value;
+  const kelas = $('editHadirKelas')?.value || '';
+  const tglMulai = $('editHadirTglMulai').value;
+  const tglSelesai = $('editHadirTglSelesai').value;
+  const keyword = ($('editHadirKeyword')?.value || '').trim().toLowerCase();
+  if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
+  showBigPopup('info', 'Memuat', '⏳ Mengambil data kehadiran...', 0);
+  sendRequest({ action: 'download_absensi', role, kelas, tglMulai, tglSelesai }, res => {
+    closeBigPopup();
+    const tbody = $('tableEditHadirBody');
+    const summary = $('editHadirSummary');
+    if (res.status !== 'success') {
+      editHadirCache = [];
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">${res.message || 'Gagal memuat data'}</td></tr>`;
+      if (summary) summary.style.display = 'none';
+      return;
+    }
+    let data = (res.data || []).map((r, i) => ({
+      _idx: i,
+      id: r.id || r.nisn || r.nip || r.user_id || '',
+      nama: r.nama || r.name || '-',
+      unit: r.unit || r.kelas || r.mapel || '-',
+      tanggal: r.tanggal || r.tgl || (r.timestamp ? String(r.timestamp).substring(0, 10) : ''),
+      jam: r.jam || r.jamScan || (r.timestamp ? String(r.timestamp).substring(11, 19) : ''),
+      sesi: r.sesi || r.session || '',
+      status: r.status || r.sesi || r.ket || '-',
+      keterangan: r.keterangan || r.ket || r.note || '',
+      role: role,
+      row_id: r.row_id || r.rowId || r._id || r.uuid || null,
+      raw: r
+    }));
+    if (keyword) {
+      data = data.filter(r =>
+        String(r.id).toLowerCase().includes(keyword) ||
+        String(r.nama).toLowerCase().includes(keyword) ||
+        String(r.unit).toLowerCase().includes(keyword)
+      );
+    }
+    editHadirCache = data;
+    if (summary) {
+      summary.style.display = 'block';
+      summary.innerHTML = `📊 Tipe: <b>${role.toUpperCase()}</b>${role === 'siswa' ? ' • Kelas: <b>' + (kelas || 'Semua') + '</b>' : ''} • Periode: <b>${tglMulai}</b> s/d <b>${tglSelesai}</b> • Tampil: <b>${data.length}</b> baris`;
+    }
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Tidak ada data kehadiran pada filter ini.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((r, i) => `<tr>
+      <td>${i + 1}</td>
+      <td style="font-family:monospace;font-size:11px;">${escHtmlEdit(r.id)}</td>
+      <td>${escHtmlEdit(r.nama)}</td>
+      <td>${escHtmlEdit(r.unit)}</td>
+      <td>${escHtmlEdit(r.tanggal)}</td>
+      <td>${escHtmlEdit(r.jam || '-')}</td>
+      <td>${escHtmlEdit(r.sesi || '-')}</td>
+      <td><b>${escHtmlEdit(r.status)}</b></td>
+      <td style="font-size:10px;color:#666;">${escHtmlEdit(r.keterangan || '-')}</td>
+      <td style="text-align:center;">
+        <button class="btn-edit" title="Ubah status" onclick="openFormEditKehadiran(${r._idx})">✏️</button>
+        <button class="btn-danger" title="Hapus catatan" onclick="hapusKehadiranRow(${r._idx})">🗑️</button>
+      </td>
+    </tr>`).join('');
+  });
+}
+
+function escHtmlEdit(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function statusOptionsHtml(selected) {
+  const opts = ['TW', 'TL', 'Izin', 'Sakit', 'Alpa', 'Bolos', 'Hadir', 'Tidak Hadir'];
+  return opts.map(o => `<option value="${o}" ${String(selected) === o ? 'selected' : ''}>${o}</option>`).join('');
+}
+
+function openFormEditKehadiran(idx) {
+  if (!assertSuperAdminEditHadir()) return;
+  const r = editHadirCache.find(x => x._idx === idx);
+  if (!r) return showBigPopup('warning', 'Info', 'Data tidak ditemukan. Muat ulang daftar.');
+  const formHtml = `
+    <div style="background:var(--primary-lighter);padding:10px;border-radius:8px;margin-bottom:12px;font-size:12px;">
+      <b>${escHtmlEdit(r.nama)}</b> (${escHtmlEdit(r.id)}) · ${escHtmlEdit(r.unit)}<br>
+      Tanggal: <b>${escHtmlEdit(r.tanggal)}</b> · Jam: ${escHtmlEdit(r.jam || '-')} · Sesi: ${escHtmlEdit(r.sesi || '-')}
+    </div>
+    <input type="hidden" id="fmEditHadirIdx" value="${r._idx}">
+    <input type="hidden" id="fmEditHadirRole" value="${escHtmlEdit(r.role)}">
+    <input type="hidden" id="fmEditHadirId" value="${escHtmlEdit(r.id)}">
+    <input type="hidden" id="fmEditHadirTgl" value="${escHtmlEdit(r.tanggal)}">
+    <input type="hidden" id="fmEditHadirSesi" value="${escHtmlEdit(r.sesi || '')}">
+    <input type="hidden" id="fmEditHadirRowId" value="${escHtmlEdit(r.row_id || '')}">
+    <div class="form-group">
+      <label>Status Baru:</label>
+      <select id="fmEditHadirStatus">${statusOptionsHtml(r.status)}</select>
+    </div>
+    <div class="form-group">
+      <label>Jam (opsional, HH:MM atau HH:MM:SS):</label>
+      <input type="text" id="fmEditHadirJam" value="${escHtmlEdit(r.jam || '')}" placeholder="07:15:00">
+    </div>
+    <div class="form-group">
+      <label>Keterangan / Alasan koreksi:</label>
+      <input type="text" id="fmEditHadirKet" value="${escHtmlEdit(r.keterangan || '')}" placeholder="Misal: koreksi scan salah / izin belakangan">
+    </div>
+  `;
+  openFormModal('✏️ Ubah Status Kehadiran', formHtml, submitEditKehadiran);
+  setTimeout(() => {
+    if ($('formModalSaveBtn')) $('formModalSaveBtn').innerText = '💾 Simpan Perubahan';
+  }, 30);
+}
+
+function openFormEditKehadiranBaru() {
+  if (!assertSuperAdminEditHadir()) return;
+  const role = $('editHadirRole')?.value || 'siswa';
+  const today = $('editHadirTglMulai')?.value || new Date().toISOString().split('T')[0];
+  const formHtml = `
+    <div class="form-group">
+      <label>Peran:</label>
+      <select id="fmEditHadirRole">
+        <option value="siswa" ${role === 'siswa' ? 'selected' : ''}>Siswa</option>
+        <option value="guru" ${role === 'guru' ? 'selected' : ''}>Guru</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>ID (NISN / NIP):</label>
+      <input type="text" id="fmEditHadirId" placeholder="NISN atau NIP" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label>Tanggal:</label>
+      <input type="date" id="fmEditHadirTgl" value="${today}">
+    </div>
+    <div class="form-group">
+      <label>Sesi (opsional):</label>
+      <input type="text" id="fmEditHadirSesi" placeholder="Misal: Sesi 1 / kosongkan">
+    </div>
+    <div class="form-group">
+      <label>Status:</label>
+      <select id="fmEditHadirStatus">${statusOptionsHtml('Izin')}</select>
+    </div>
+    <div class="form-group">
+      <label>Jam (opsional):</label>
+      <input type="text" id="fmEditHadirJam" placeholder="07:15:00">
+    </div>
+    <div class="form-group">
+      <label>Keterangan:</label>
+      <input type="text" id="fmEditHadirKet" placeholder="Alasan">
+    </div>
+    <input type="hidden" id="fmEditHadirIdx" value="">
+    <input type="hidden" id="fmEditHadirRowId" value="">
+  `;
+  openFormModal('➕ Tambah / Ubah Status Manual', formHtml, submitEditKehadiran);
+  setTimeout(() => {
+    if ($('formModalSaveBtn')) $('formModalSaveBtn').innerText = '💾 Simpan';
+  }, 30);
+}
+
+function submitEditKehadiran() {
+  if (!assertSuperAdminEditHadir()) return;
+  const role = ($('fmEditHadirRole')?.value || '').trim();
+  const id = ($('fmEditHadirId')?.value || '').trim();
+  const tanggal = ($('fmEditHadirTgl')?.value || '').trim();
+  const sesi = ($('fmEditHadirSesi')?.value || '').trim();
+  const status = ($('fmEditHadirStatus')?.value || '').trim();
+  const jam = ($('fmEditHadirJam')?.value || '').trim();
+  const keterangan = ($('fmEditHadirKet')?.value || '').trim();
+  const row_id = ($('fmEditHadirRowId')?.value || '').trim();
+  if (!id) return showBigPopup('warning', 'Peringatan', 'ID (NISN/NIP) wajib diisi.');
+  if (!tanggal) return showBigPopup('warning', 'Peringatan', 'Tanggal wajib diisi.');
+  if (!status) return showBigPopup('warning', 'Peringatan', 'Status wajib dipilih.');
+
+  const payload = {
+    action: 'edit_kehadiran',
+    role, id, tanggal, sesi, status, jam, keterangan,
+    row_id: row_id || null
+  };
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan perubahan status...', 0);
+  sendRequest(payload, res => {
+    closeBigPopup();
+    if (res && res.status === 'error' && /tidak dikenal|unknown|not found|tidak valid|invalid action/i.test(res.message || '')) {
+      const izinLike = ['Izin', 'Sakit', 'Alpa', 'Bolos'].includes(status);
+      if (izinLike) {
+        sendRequest({
+          action: 'input_izin', role, id, tanggal, status,
+          keterangan: keterangan || 'Koreksi manual via Edit Kehadiran (Super Admin)'
+        }, res2 => {
+          showBigPopup(res2.status === 'success' ? 'success' : 'danger', 'Info', res2.message || 'Selesai (fallback input_izin).');
+          if (res2.status === 'success') {
+            closeFormModal();
+            loadEditKehadiran();
+            if (typeof fetchDashboardData === 'function') fetchDashboardData();
+          }
+        });
+        return;
+      }
+      showBigPopup('danger', 'Backend Belum Siap',
+        'Action <b>edit_kehadiran</b> belum tersedia di server.<br><br>' +
+        'Silakan deploy backend yang sudah diupdate.');
+      return;
+    }
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Edit Kehadiran', res.message || 'Selesai');
+    if (res.status === 'success') {
+      closeFormModal();
+      loadEditKehadiran();
+      if (typeof fetchDashboardData === 'function') fetchDashboardData();
+    }
+  });
+}
+
+function hapusKehadiranRow(idx) {
+  if (!assertSuperAdminEditHadir()) return;
+  const r = editHadirCache.find(x => x._idx === idx);
+  if (!r) return;
+  if (!confirm(`Hapus catatan kehadiran?\\n${r.nama} (${r.id})\\n${r.tanggal} · ${r.status}`)) return;
+  const payload = {
+    action: 'hapus_kehadiran',
+    role: r.role, id: r.id, tanggal: r.tanggal,
+    sesi: r.sesi || '', status: r.status,
+    row_id: r.row_id || null
+  };
+  showBigPopup('info', 'Menghapus', '⏳ Menghapus catatan...', 0);
+  sendRequest(payload, res => {
+    closeBigPopup();
+    if (res && res.status === 'error' && /tidak dikenal|unknown|not found|tidak valid|invalid action/i.test(res.message || '')) {
+      showBigPopup('danger', 'Backend Belum Siap',
+        'Action <b>hapus_kehadiran</b> belum tersedia di server.');
+      return;
+    }
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hapus', res.message || 'Selesai');
+    if (res.status === 'success') {
+      loadEditKehadiran();
+      if (typeof fetchDashboardData === 'function') fetchDashboardData();
+    }
+  });
+}
+
 function cariKehadiran() {
   sendRequest({
     action: 'cari_kehadiran', keyword: $('cariKeyword').value.trim(),
@@ -2405,6 +2738,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'seting-absen') loadSettingAbsen();
   if (tab === 'historis') loadHistorisInfo();
   if (tab === 'izin') loadAllowedUsers();
+  if (tab === 'edit-kehadiran') initEditKehadiran();
 }
 
 function renderSesiConfig(dataList) {
@@ -4830,69 +5164,6 @@ function normalizeOpsiHtml(html) {
   return out;
 }
 
-function safeRenderPertanyaan(html, opsi) {
-  if (!html) return '';
-  const s = String(html);
-  // Jika sudah HTML formula/media, JANGAN jalankan repair plain (merusak tag)
-  if (/ql-formula-embed|class="katex"|data-latex|<img\b|<table\b/i.test(s)) {
-    let cleaned = typeof stripOpsiTrailingFromPertanyaan === 'function'
-      ? stripOpsiTrailingFromPertanyaan(s, opsi || []) : s;
-    // Bersihkan atribut yang bocor sebagai teks (bukan di dalam tag)
-    cleaned = cleaned.replace(/(?:^|>)([^<]*?)(\bcontenteditable\s*=\s*["']?false["']?[^<]*)/gi, function(m, pre, leak) {
-      return (pre || '') + (m.startsWith('>') ? '>' : '');
-    });
-    // Jika HTML cacat (atribut terlihat di plain), bangun ulang dari data-latex
-    const tmp = document.createElement('div');
-    tmp.innerHTML = cleaned;
-    const plainCheck = (tmp.innerText || '').replace(/\s+/g, ' ');
-    if (/contenteditable\s*=|style\s*=\s*["']?display/i.test(plainCheck)) {
-      // Ekstrak semua data-latex, buang sampah, susun ulang
-      const latexs = [];
-      tmp.querySelectorAll('[data-latex]').forEach(el => {
-        const lx = (el.getAttribute('data-latex') || '').trim();
-        if (lx) latexs.push(lx);
-      });
-      let words = plainCheck
-        .replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ')
-        .replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ')
-        .replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ')
-        .replace(/\bclass\s*=\s*["'][^"']*["']/gi, ' ')
-        .replace(/display\s*:\s*inline-block[^;]*/gi, ' ')
-        .replace(/vertical-align\s*:[^;]*/gi, ' ')
-        .replace(/margin\s*:\s*0\s*2px[^;]*/gi, ' ')
-        .replace(/user-select\s*:[^;]*/gi, ' ')
-        .replace(/["']{1,}/g, ' ')
-        .replace(/\s{2,}/g, ' ').trim();
-      words = repairCorruptedSqrtText(words);
-      if (latexs.length) {
-        // Pakai latex bersih sebagai rumus utama
-        const unique = [...new Set(latexs.map(l => repairCorruptedSqrtText(l)))];
-        const main = unique[0];
-        // Ganti fragmen math di words dengan placeholder, lalu embed
-        let out = words
-          .replace(/\(\d+\^\{\d+\}\)\^\{\d+\}/g, '%%MATH%%')
-          .replace(/\d+\^\{\d+\}/g, '%%MATH%%')
-          .replace(/\(5²\)²|\(5\^2\)\^2/g, '%%MATH%%');
-        // Hanya satu placeholder
-        out = out.replace(/(?:%%MATH%%\s*)+/g, '%%MATH%%');
-        if (out.indexOf('%%MATH%%') >= 0 && typeof plainMathToKatexHtml === 'function') {
-          const emb = plainMathToKatexHtml(main);
-          out = out.replace('%%MATH%%', emb || main);
-          return out;
-        }
-        return (typeof plainMathToKatexHtml === 'function' ? plainMathToKatexHtml(main) : main) + ' ' + out.replace(/%%MATH%%/g, '').trim();
-      }
-      return (typeof plainMathToKatexHtml === 'function')
-        ? plainMathToKatexHtml(words) : words;
-    }
-    return cleaned;
-  }
-  // Plain text: repair + optional KaTeX
-  let t = stripOpsiTrailingFromPertanyaan(s, opsi || []);
-  t = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
-  return t;
-}
-
 function renderSoalHtml(html) {
   if (!html) return '';
   // Jika plain text tanpa tag, rapikan opsi nempel + escape + konversi KaTeX bila memungkinkan
@@ -4906,49 +5177,22 @@ function renderSoalHtml(html) {
     }
     return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  // HTML: hanya konversi ulang ke KaTeX jika TIDAK ada embed/media.
-  // Jangan pernah "strip" embed yang valid — itu penyebab atribut HTML bocor ke teks.
+  // HTML: selalu coba bersihkan plain di dalam jika tidak ada embed bagus
   try {
     const d = document.createElement('div');
     d.innerHTML = html;
-    const hasEmbed = !!d.querySelector('.katex, .ql-formula-embed');
-    const hasMedia = !!d.querySelector('img, table');
-    if (hasEmbed || hasMedia) {
-      // Bersihkan text node sampah (atribut HTML yang bocor) di sekitar embed
-      const walker = document.createTreeWalker(d, NodeFilter.SHOW_TEXT, null);
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      nodes.forEach(node => {
-        let t = node.nodeValue || '';
-        const cleaned = t
-          .replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ')
-          .replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ')
-          .replace(/\bclass\s*=\s*["'][^"']*ql-formula[^"']*["']/gi, ' ')
-          .replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ')
-          .replace(/\buser-select\s*=\s*["'][^"']*["']/gi, ' ')
-          .replace(/display\s*:\s*inline-block[^;"']*;?/gi, ' ')
-          .replace(/vertical-align\s*:[^;"']*;?/gi, ' ')
-          .replace(/margin\s*:\s*0\s*2px[^;"']*;?/gi, ' ')
-          .replace(/\s{2,}/g, ' ');
-        if (cleaned !== t) node.nodeValue = cleaned;
-      });
-      return d.innerHTML;
-    }
-    // Plain / HTML tanpa formula: perbaiki + KaTeX
-    let t = (d.innerText || '').replace(/\s+/g, ' ').trim();
-    t = stripBrokenMathMlFragments(t);
-    // Buang sisa atribut HTML yang nyangkut di plain
-    t = t.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
-    t = t.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
-    t = t.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
-    t = t.replace(/\s{2,}/g, ' ').trim();
-    const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
-    if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d|[⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(cleaned)) {
-      const k = plainMathToKatexHtml(cleaned);
-      if (k && /ql-formula-embed/.test(k)) return k;
-    }
-    if (cleaned !== t) {
-      return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if (!d.querySelector('.katex, .ql-formula-embed, img, table')) {
+      let t = (d.innerText || '').replace(/\s+/g, ' ').trim();
+      t = stripBrokenMathMlFragments(t);
+      const cleaned = stripGluedOptionsFromText(repairCorruptedSqrtText(t));
+      // Selalu pakai cleaned jika berbeda ATAU masih ada pola residual
+      if (cleaned !== t || /\d+\^\{\d+\}\s+\d|\√\d+\d|adalah\.\.\./.test(cleaned)) {
+        if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d/.test(cleaned)) {
+          const k = plainMathToKatexHtml(cleaned);
+          if (k && /ql-formula-embed/.test(k)) return k;
+        }
+        return cleaned.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
     }
   } catch (e) {}
   return html;
@@ -5235,7 +5479,7 @@ function loadUjianSoalList() {
             <button class="btn-danger btn-sm" style="padding:4px 8px;" title="Hapus soal" onclick="hapusSoalUjian('${s.id}')">🗑️</button>
           </span>
         </div>
-        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(safeRenderPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
+        <div class="soal-html-content" style="margin:8px 0;font-size:13px;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
         ${opsiHtml}
       </div>`;
     }).join('');
@@ -5848,34 +6092,10 @@ function previewImportSoal(ev) {
         const mediaBadge = (hasImg || hasTbl)
           ? ` <span style="font-size:10px;color:#0d9488;">[${hasImg ? '🖼' : ''}${hasTbl ? '▦' : ''}]</span>`
           : '';
-        // Preview: ambil teks bersih dari data-latex embed, jangan strip HTML mentah
-        let prevPlain = '';
-        try {
-          const tmpP = document.createElement('div');
-          tmpP.innerHTML = s.pertanyaan || '';
-          tmpP.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
-            let lx = (el.getAttribute('data-latex') || '').trim();
-            lx = repairCorruptedSqrtText(lx);
-            let nice = lx
-              .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
-                const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-                return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
-              })
-              .replace(/\((\d+)\^\{(\d+)\}\)\^\{(\d+)\}/g, (_, a, b, c) => {
-                const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-                const s1 = String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
-                const s2 = String(c).split('').map(d => sup[parseInt(d, 10)] || d).join('');
-                return '(' + a + s1 + ')' + s2;
-              })
-              .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
-              .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
-            el.replaceWith(document.createTextNode(nice || lx));
-          });
-          prevPlain = (tmpP.innerText || tmpP.textContent || '').replace(/\s+/g, ' ').trim();
-        } catch (e) {
-          prevPlain = (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        }
-        prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(prevPlain)).trim();
+        // Tampilkan preview: plain yang sudah diperbaiki (ganti ^{n} → superscript, \sqrt → √)
+        let prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(
+          (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+        )).trim();
         prevPlain = prevPlain
           .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
             const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
@@ -5883,7 +6103,7 @@ function previewImportSoal(ev) {
           })
           .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
           .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
-                return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
+        return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
           <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
           ${prevPlain.slice(0, 100)}${prevPlain.length > 100 ? '…' : ''}
           ${kunci.length ? `<br><span style="color:#16a34a;font-size:11px;">Kunci: ${kunci.map(k => {
@@ -6010,16 +6230,8 @@ function parseSoalFromHtml(html) {
     const latex = ann ? (ann.textContent || '').trim() : (el.textContent || '');
     el.replaceWith(document.createTextNode(latex ? ' ' + latex + ' ' : ''));
   });
-  // Prefer data-latex dari embed KaTeX (sumber kebenaran), ganti node embed
-  tmp.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
-    let lx = (el.getAttribute('data-latex') || '').trim();
-    if (lx) el.replaceWith(document.createTextNode(' ' + lx + ' '));
-  });
   let plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
   plain = stripBrokenMathMlFragments(plain);
-  // Buang atribut HTML yang mungkin nyangkut
-  plain = plain.replace(/\bcontenteditable\b[=\w"'-]*/gi, ' ');
-  plain = plain.replace(/\bdata-latex\b[=\w"'-]*/gi, ' ');
   // innerText KaTeX kadang menyisakan latex + angka dobel → perbaiki dulu
   plain = repairCorruptedSqrtText(plain);
   const fromText = parseSoalFromText(plain);
@@ -6053,29 +6265,22 @@ function parseSoalFromHtml(html) {
       // Pertanyaan — prioritaskan HTML formula bagus (OMML→KaTeX embed)
       const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
       const hasGoodFormula = /ql-formula-embed|data-latex|class="katex"/i.test(s.pertanyaan || '');
-      // Jika sudah ada embed KaTeX valid, JANGAN strip ke plain (penyebab atribut bocor)
-      if (hasGoodFormula) {
-        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
-        return;
-      }
-      if (hasMedia) {
-        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
-        return;
-      }
       let pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      // Buang sisa atribut HTML yang nyangkut di plain text
-      pPlain = pPlain.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
-      pPlain = pPlain.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
-      pPlain = pPlain.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
-      pPlain = pPlain.replace(/\bclass\s*=\s*["'][^"']*["']/gi, ' ');
-      pPlain = pPlain.replace(/display\s*:\s*inline-block[^;\s]*/gi, ' ');
-      pPlain = pPlain.replace(/vertical-align\s*:[^;\s]*/gi, ' ');
-      pPlain = pPlain.replace(/\s{2,}/g, ' ').trim();
       pPlain = repairCorruptedSqrtText(pPlain);
       pPlain = stripGluedOptionsFromText(pPlain);
-      const asKatex = (typeof plainMathToKatexHtml === 'function')
-        ? plainMathToKatexHtml(pPlain) : pPlain;
-      s.pertanyaan = asKatex || pPlain;
+      const stillCorrupt = /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|\d+\\sqrt\{\d+\}\d|adalah\s*\.{0,4}\s*\d/i.test(pPlain);
+
+      if (hasGoodFormula && !stillCorrupt) {
+        // Pertahankan embed KaTeX; hanya bersihkan opsi nempel di ujung
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      } else if (hasMedia) {
+        s.pertanyaan = stripOpsiTrailingFromPertanyaan(s.pertanyaan, s.opsi || []);
+      } else {
+        // Konversi plain yang sudah diperbaiki → KaTeX HTML agar rumus tampil rapi
+        const asKatex = (typeof plainMathToKatexHtml === 'function')
+          ? plainMathToKatexHtml(pPlain) : pPlain;
+        s.pertanyaan = asKatex || pPlain;
+      }
 
       // Opsi — perbaiki + konversi ke KaTeX bila memungkinkan
       if ((s.jenis === 'pg' || s.jenis === 'checkbox') && s.opsi && s.opsi.length) {
@@ -6333,152 +6538,6 @@ function repairCorruptedSqrtText(s) {
   t = stripBrokenMathMlFragments(t);
   t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
 
-  // ===== Nested power dari Word superscript (font style, bukan unicode/OMML) =====
-  // Contoh rusak: "( ( 5 2 ) ) 2" / "(52)2" / "(5²)²" → "(5^{2})^{2}"
-  for (let round = 0; round < 6; round++) {
-    const beforeNest = t;
-    // (((a b)) c) d
-    t = t.replace(/\(\s*\(\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\)\s*(\d+)\s*\)\s*(\d+)/g, '(($1^{$2})^{$3})^{$4}');
-    // ((a b)) c
-    t = t.replace(/\(\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\)\s*(\d+)/g, '($1^{$2})^{$3}');
-    // (a b) c  dengan spasi
-    t = t.replace(/\(\s*(\d+)\s+(\d+)\s*\)\s*(\d+)/g, '($1^{$2})^{$3}');
-    t = t.replace(/\(\s*(\d+)\s+(\d+)\s*\)(\d+)/g, '($1^{$2})^{$3}');
-    // (52)2  tanpa spasi di dalam kurung (mammoth sering gabung digit)
-    t = t.replace(/\(\s*(\d)(\d)\s*\)\s*(\d)/g, '($1^{$2})^{$3}');
-    t = t.replace(/\(\s*(\d)(\d)\s*\)(\d)/g, '($1^{$2})^{$3}');
-    // Unicode: (5²)²  /  (5²)^{2}  /  (5^{2})²
-    t = t.replace(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, s1, s2) {
-      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-      const e1 = [...s1].map(c => map[c] || c).join('');
-      const e2 = [...s2].map(c => map[c] || c).join('');
-      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
-    });
-    t = t.replace(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^\s*\{?\s*(\d+)\s*\}?/g, function(_, base, s1, e2) {
-      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-      const e1 = [...s1].map(c => map[c] || c).join('');
-      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
-    });
-    t = t.replace(/\(\s*(\d+)\s*\^\s*\{?\s*(\d+)\s*\}?\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, e1, s2) {
-      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-      const e2 = [...s2].map(c => map[c] || c).join('');
-      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
-    });
-    // (5^{2})^{2} sudah benar — biarkan
-    // Latex: \left(5^2\right)^{2} / \left(5²\right)^{2} / (\left(5^2\right)^{2}
-    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)\s*\^\s*\{?\s*(\d+)\s*\}?\s*\\right\s*\)\s*\^\s*\\?\{?\s*(\d+)\s*\\?\}?/g, '($1^{$2})^{$3}');
-    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)\s*\^\s*(\d+)\s*\\right\s*\)\s*\^\s*\{?(\d+)\}?/g, '($1^{$2})^{$3}');
-    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\\right\s*\)\s*\^\s*\{?\s*(\d+)\s*\}?/g, function(_, base, s1, e2) {
-      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-      const e1 = [...s1].map(c => map[c] || c).join('');
-      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
-    });
-    t = t.replace(/\(?\s*\\left\s*\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\\right\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, s1, s2) {
-      const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-      const e1 = [...s1].map(c => map[c] || c).join('');
-      const e2 = [...s2].map(c => map[c] || c).join('');
-      return '(' + base + '^{' + e1 + '})^{' + e2 + '}';
-    });
-    // Escape brace residual
-    t = t.replace(/\^\\\{(\d+)\\\}/g, '^{$1}');
-    t = t.replace(/\^\{\s*(\d+)\s*\}/g, '^{$1}');
-    // (5^{2})^{2}(5^{2})^{2} → sekali
-    t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
-    // (52)2 menempel ke bentuk benar: (52)2(5^{2})^{2}(52)2
-    t = t.replace(/(?:\(\s*\d\d\s*\)\s*\d)+(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\(\s*\d\d\s*\)\s*\d)*/g, '$1');
-    t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\(\s*\d\d\s*\)\s*\d)+/g, '$1');
-    t = t.replace(/(?:\(\s*\d\d\s*\)\s*\d)+/g, function(m) {
-      // Jika masih ada sisa (52)2 saja, konversi satu
-      const mm = m.match(/\(\s*(\d)(\d)\s*\)\s*(\d)/);
-      return mm ? ('(' + mm[1] + '^{' + mm[2] + '})^{' + mm[3] + '}') : m;
-    });
-    if (t === beforeNest) break;
-  }
-  // Rapikan sisa kurung & duplikat setelah konversi nested
-  // "( (5^{2})^{2} ( (5^{2})^{2" → "(5^{2})^{2}"
-  t = t.replace(/\(\s*(\(\d+\^\{\d+\}\)\^\{\d+\})/g, '$1');
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})\s*\(\s*/g, '$1 ');
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s+\1)+/g, '$1');
-  // Fragmen yatim: "5^{2})^{2}" atau "^{2})^{2}" tanpa kurung buka
-  t = t.replace(/(?:^|[\s(])(\d+)\^\{\d+\}\)\^\{\d+\}/g, function(m, _base) {
-    // Jika sudah ada bentuk lengkap di depan, buang fragmen ini
-    return m.charAt(0) === '(' ? m : m.charAt(0);
-  });
-  t = t.replace(/\s+\d+\^\{\d+\}\)\^\{\d+\}/g, '');
-  t = t.replace(/\s+\^\{\d+\}\)\^\{\d+\}/g, '');
-  // Kurung buka/tutup yatim di sekitar bentuk benar
-  t = t.replace(/\(\s*(\(\d+\^\{\d+\}\)\^\{\d+\})\s*\)/g, '$1');
-  t = t.replace(/\s+\(\s*(?=adalah\b)/gi, ' ');
-  // Duplikat akhir: "(5^{2})^{2} (5^{2})^{2}" 
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
-  t = t.replace(/\s{2,}/g, ' ').trim();
-  // Buang duplikat fragmen rusak setelah bentuk yang sudah benar
-  // "(5^{2})^{2} ( ( 5 2 ) ) 2 ( ( 5 2 ) ) 2" → "(5^{2})^{2}"
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\s*\(\s*\d+\s+\d+\s*\)\s*\)\s*\d+)+/g, '$1');
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\s*\d+\s+\d+\s*\)\s*\d+)+/g, '$1');
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s+\1)+/g, '$1');
-  // Duplikat bentuk benar berdampingan
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s*\(\d+\^\{\d+\}\)\^\{\d+\})+/g, '$1');
-  // Duplikat latex mentah + garbage
-  t = t.replace(/(\\left\([^)]*\\right\)\^\{?\d+\}?)(?:\s*\(\s*\(\s*\d+\s+\d+\s*\)\s*\)\s*\d+)+/g, '$1');
-  // Pangkat sederhana residual: "5 2" di konteks math
-  t = t.replace(/\b(\d+)\s+(\d)\b(?=\s*[\)]|\s*[×xX*·+\-^=]|\s+adalah\b|\s*\.{2,}|\s*$)/g, '$1^{$2}');
-  // Rapikan spasi di sekitar bentuk yang sudah benar
-  t = t.replace(/\(\s+(\d+)/g, '($1').replace(/(\d+)\s+\)/g, '$1)');
-  t = t.replace(/\s{2,}/g, ' ').trim();
-
-  // Buang atribut HTML yang bocor ke plain (contenteditable, style, data-latex, dll.)
-  t = t.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
-  t = t.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
-  t = t.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
-  t = t.replace(/\bclass\s*=\s*["'][^"']*ql-formula[^"']*["']/gi, ' ');
-  t = t.replace(/\buser-select\s*=\s*["'][^"']*["']/gi, ' ');
-  t = t.replace(/display\s*:\s*inline\s*-?\s*block[^;"']*/gi, ' ');
-  t = t.replace(/vertical\s*-\s*align\s*:[^;"']*/gi, ' ');
-  t = t.replace(/margin\s*:\s*0\s*2px[^;"']*/gi, ' ');
-  // Rapikan duplikat pangkat: "4^2 ^{4}^{2} 4^2" → "4^{2}"
-  t = t.replace(/(\d+)\s*\^\s*(\d+)\s+\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
-  t = t.replace(/(\d+)\s*\^\s*(\d+)\s+\^\{\1\}\^\{\2\}/g, '$1^{$2}');
-  t = t.replace(/(\d+)\s*\^\s*\{\s*(\d+)\s*\}\s*\^\s*\{\s*\1\s*\}\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
-  // Normalisasi semua 4^2 → 4^{2}
-  t = t.replace(/(\d+)\s*\^\s*(\d+)(?!\{)/g, '$1^{$2}');
-  // Opsi √ korup: "2³ √3 ^{2}" → "2√3"
-  t = t.replace(/(\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
-  t = t.replace(/(\d+)\s*\^\s*\{?\d+\}?\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
-  t = t.replace(/(\d+)\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1√$2');
-  t = t.replace(/(√\d+)\s*\^\s*\{?\d+\}?/g, '$1');
-  // Pola Word dobel: "2 5^{5} 2^{5}" atau "2 5 2^{5}" → "2^{5}"
-  t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}(?:\s+\1\s*\^\s*\{\s*\2\s*\})+/g, '$1^{$2}');
-  t = t.replace(/\b(\d+)\s+(\d+)\s*\^\s*\{\s*\2\s*\}/g, '$1^{$2}');
-  t = t.replace(/\b(\d+)\s+(\d+)(?=\s|$|[×xX*·+\-),;….])/g, function(m, a, b) {
-    // Hanya jika eksponen 1 digit (superscript Word klasik)
-    if (String(b).length === 1) return a + '^{' + b + '}';
-    return m;
-  });
-  // Residual "^{5}" menggantung setelah "2^{5} ^{5}"
-  t = t.replace(/(\d+\^\{\d+\})(?:\s*\^\s*\{\d+\})+/g, '$1');
-  // "2^{5} ^{5}" 
-  t = t.replace(/(\d+)\^\{(\d+)\}\s*\^\s*\{\2\}/g, '$1^{$2}');
-
-  // "4^{2} 4^{2}" berulang → satu
-  t = t.replace(/(\d+\^\{\d+\})(?:\s+\1)+/g, '$1');
-  // "4^{2} 4^2" (campuran) → "4^{2}"
-  t = t.replace(/(\d+)\^\{(\d+)\}(?:\s+\1\s*\^\s*\{?\2\}?)+/g, '$1^{$2}');
-  // Rantai perkalian: ambil token n^{m} unik berurutan, buang angka polos residual
-  // "4^{2} 4^{2} × 4^{3} 4^{3}" → "4^{2} × 4^{3}"
-  t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·]\s*\d+\^\{\d+\})*)(?:\s+\d+(?:\s*\^\s*\{?\d+\}?)?)+/g, '$1');
-  t = t.replace(/(\d+\^\{\d+\})(?:\s+\d+\^\{\d+\})+(\s*[×xX*·])/g, '$1$2');
-  // Nested sudah benar + duplikat: "(5^{2})^{2} (5^{2})^{2}" → satu
-  t = t.replace(/(\(\d+\^\{\d+\}\)\^\{\d+\})(?:\s+\1)+/g, '$1');
-  // "(5^2)^2 (5^{2})^{2}" → "(5^{2})^{2}"
-  t = t.replace(/\(\s*(\d+)\s*\^\s*(\d+)\s*\)\s*\^\s*(\d+)\s+\(\1\^\{\2\}\)\^\{\3\}/g, '($1^{$2})^{$3}');
-  t = t.replace(/\(\s*(\d+)\^\{\s*(\d+)\s*\}\s*\)\s*\^\{\s*(\d+)\s*\}\s+\(\1\^\{\2\}\)\^\{\3\}/g, '($1^{$2})^{$3}');
-  // Residual cuplikan: )^{2}"  atau  )^2"
-  t = t.replace(/\)\s*\^\s*\{?\d+\}?\s*["']+/g, ' ');
-  t = t.replace(/["']{2,}/g, ' ');
-  t = t.replace(/\s{2,}/g, ' ').trim();
-
   // --- Perbaiki per-suku di antara operator, lalu rapikan lintas-suku ---
   function repairAtom(atom) {
     let a = String(atom || '').trim();
@@ -6700,29 +6759,7 @@ function plainMathToKatexHtml(teks) {
   }
 
   // 1) Ganti fragment latex di dalam kalimat: coef?\sqrt{...}, n^{m}, \frac{a}{b}
-  //    Urutan: yang lebih spesifik dulu (nested power SEBELUM pangkat tunggal)
-  // Normalisasi 4^2 → 4^{2} agar matcher konsisten
-  s = s.replace(/(\d+)\^(\d+)(?!\{)/g, '$1^{$2}');
-  // Buang sisa atribut HTML di plain
-  s = s.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
-  s = s.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
-  s = s.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
-  s = s.replace(/\s{2,}/g, ' ').trim();
-
-  // Nested: (5^{2})^{2}  →  satu embed utuh
-  s = s.replace(/\((\d+)\^\{(\d+)\}\)\^\{(\d+)\}/g, function(_, a, b, c) {
-    return toEmbed('(' + a + '^{' + b + '})^{' + c + '}');
-  });
-  s = s.replace(/\((\d+)\^(\d+)\)\^(\d+)/g, function(_, a, b, c) {
-    return toEmbed('(' + a + '^{' + b + '})^{' + c + '}');
-  });
-  // Unicode nested: (5²)²
-  s = s.replace(/\((\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, sup1, sup2) {
-    const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-    const e1 = [...sup1].map(c => map[c] || c).join('');
-    const e2 = [...sup2].map(c => map[c] || c).join('');
-    return toEmbed('(' + base + '^{' + e1 + '})^{' + e2 + '}');
-  });
+  //    Urutan: yang lebih spesifik dulu
   s = s.replace(/(\d*)\\sqrt\{([^{}]+)\}/g, function(_, coef, inner) {
     const latex = (coef || '') + '\\sqrt{' + inner + '}';
     return toEmbed(latex);
@@ -6738,12 +6775,6 @@ function plainMathToKatexHtml(teks) {
   });
   s = s.replace(/(\d+)\^(\d+)/g, function(_, a, b) {
     return toEmbed(a + '^{' + b + '}');
-  });
-  // Unicode pangkat tunggal: 5²
-  s = s.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function(_, base, sups) {
-    const map = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-    const exp = [...sups].map(c => map[c] || c).join('');
-    return toEmbed(base + '^{' + exp + '}');
   });
 
   // 2) Jika masih ada unicode √, konversi per-token
@@ -6847,30 +6878,6 @@ function extractRichPertanyaanFromHtmlPart(partHtml, soalMeta) {
       c.style.padding = c.style.padding || '6px 8px';
     });
   });
-
-  // Bersihkan text node sampah di sekitar formula embed
-  // (Word sering sisipkan fallback "2 5" di samping equation 2^{5})
-  const hasAnyEmbed = !!box.querySelector('.ql-formula-embed, .katex, .math-fallback');
-  if (hasAnyEmbed) {
-    const walker2 = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
-    const tnodes = [];
-    while (walker2.nextNode()) tnodes.push(walker2.currentNode);
-    tnodes.forEach(node => {
-      if (node.parentElement && node.parentElement.closest('.ql-formula-embed, .katex, .math-fallback')) return;
-      let t = node.nodeValue || '';
-      const before = t;
-      // Hanya buang token yang murni angka/spasi/latex bocor (bukan kalimat)
-      if (/^[\s\d×xX*·+\-^=()\\left\right{}√.]+$/.test(t) && t.trim().length < 40) {
-        t = ' ';
-      } else {
-        t = t.replace(/\bcontenteditable\b[^\s]*/gi, ' ');
-        t = t.replace(/\bdata-latex\b[^\s]*/gi, ' ');
-        t = t.replace(/\\left|\\right/g, ' ');
-        t = t.replace(/\s{2,}/g, ' ');
-      }
-      if (t !== before) node.nodeValue = t;
-    });
-  }
 
   // Pastikan formula embeds tetap
   const out = box.innerHTML.trim();
@@ -7082,20 +7089,7 @@ function cleanupOpsiMathText(teks) {
   if (d.querySelector('.katex, .ql-formula-embed')) return teks;
   let plain = (d.innerText || d.textContent || teks).replace(/\s+/g, ' ').trim();
   plain = plain.replace(/[*＊]\s*$/g, '').trim();
-  // Buang atribut HTML yang bocor
-  plain = plain.replace(/\bcontenteditable\s*=\s*["']?false["']?/gi, ' ');
-  plain = plain.replace(/\bstyle\s*=\s*["'][^"']*["']/gi, ' ');
-  plain = plain.replace(/\bdata-latex\s*=\s*["'][^"']*["']/gi, ' ');
-  // Pola korupsi opsi √: "2³ √3 ^{2}" atau "2^3 √3 ^2" → "2√3"
-  // (angka + superscript + √ + angka + superscript residual)
-  plain = plain.replace(/(\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
-  plain = plain.replace(/(\d+)\s*\^\s*\{?\d+\}?\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?/g, '$1√$2');
-  plain = plain.replace(/(\d+)\s*√\s*(\d+)\s*(?:\^\s*\{?\d+\}?|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1√$2');
-  // Residual ^{n} menggantung setelah √n
-  plain = plain.replace(/(√\d+)\s*\^\s*\{?\d+\}?/g, '$1');
-  plain = plain.replace(/(√\d+)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, '$1');
   plain = repairCorruptedSqrtText(plain);
-  plain = plain.replace(/\s{2,}/g, ' ').trim();
 
   // Latex mentah atau unicode √ → KaTeX
   if (/\\sqrt|\\frac|\^\{|√/.test(plain)) {
@@ -7949,7 +7943,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     }
     return `<div class="uji-soal-card" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;" data-soal-id="${s.id}">
       <div style="font-weight:700;color:var(--primary);margin-bottom:8px;">Soal ${i+1} <span style="font-weight:500;color:#666;font-size:11px;">(${s.jenis} · ${s.poin} poin)</span></div>
-      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(safeRenderPertanyaan(s.pertanyaan || '', s.opsi || []))}</div>
+      <div class="soal-html-content" style="margin-bottom:10px;font-size:14px;line-height:1.45;">${renderSoalHtml(stripGluedOptionsFromText(repairCorruptedSqrtText(stripOpsiTrailingFromPertanyaan(s.pertanyaan || '', s.opsi || []))))}</div>
       ${body}
     </div>`;
   }).join('');
