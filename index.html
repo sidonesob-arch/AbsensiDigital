@@ -6641,10 +6641,13 @@ function parseSoalFromHtml(html) {
           return { teks, is_benar: !!o.is_benar, letter: o.letter };
         });
 list = resplitMergedOpsi(list);
-        s.opsi = list.map(o => ({
-          teks: o.teks,
-          is_benar: !!o.is_benar
-        })).filter(o => (o.teks || '').replace(/<[^>]+>/g, '').trim());
+        s.opsi = list.map(o => {
+          let teks = String(o.teks || '');
+          if (!/ql-formula-embed|data-latex/.test(teks)) {
+            teks = repairOpsiMathText(teks.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+          }
+          return { teks, is_benar: !!o.is_benar };
+        }).filter(o => (o.teks || '').replace(/<[^>]+>/g, '').trim());
       }
     })(s);
 
@@ -6934,6 +6937,23 @@ function repairCorruptedSqrtText(s) {
     t = t.replace(/(\d[⁰¹²³⁴⁵⁶⁷⁸⁹]\s*[×xX*·]\s*\d[⁰¹²³⁴⁵⁶⁷⁸⁹])\s+\d\s+\d\s*[×xX*·]\s*\d\s+\d/g, '$1');
     if (t === before) break;
   }
+
+  // "4² 4 2 × 4³" → "4² × 4³" (residual base+exp di antara pangkat)
+  t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s+\1\s+(\d)\s*([×xX*·+\-])\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b1, s1, dig, op, b2, s2) {
+    var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+    var exp1 = s1.split('').map(function (c) { return map[c] || ''; }).join('');
+    if (dig === exp1 || dig === b1) return b1 + s1 + ' ' + op + ' ' + b2 + s2;
+    return b1 + s1 + ' ' + b1 + ' ' + dig + ' ' + op + ' ' + b2 + s2;
+  });
+  // "4^{2} 4 2 × 4^{3}"
+  t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\s+\2\s*([×xX*·+\-])\s*(\d+)\^\{(\d+)\}/g, '$1^{$2} $3 $4^{$5}');
+  // "4² 4 2 ×" without second power yet
+  t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s+\1\s+(\d)\s*([×xX*·+\-])/g, function (_, b1, s1, dig, op) {
+    var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+    var exp1 = s1.split('').map(function (c) { return map[c] || ''; }).join('');
+    if (dig === exp1 || dig === b1) return b1 + s1 + ' ' + op;
+    return b1 + s1 + ' ' + b1 + ' ' + dig + ' ' + op;
+  });
 
   // "2 5 2 5 2⁵" → "2⁵"
   t = t.replace(/(\d)(?:\s+(\d))+\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, base, _e, sup) {
