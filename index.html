@@ -6172,11 +6172,37 @@ function walkDocxBodyToHtml(doc) {
   if (!body) return null;
   let eqCount = 0;
   const parts = [];
+  // Digit-string dari equation terakhir — untuk membuang fallback Word "25" setelah √25
+  let lastEqDigits = [];
+
+  function extractDigitsFromLatex(latex) {
+    const ds = [];
+    String(latex || '').replace(/\sqrt\{(\d+)\}/g, (_, n) => { ds.push(n); return ''; });
+    String(latex || '').replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => { ds.push(a, b, a + b); return ''; });
+    String(latex || '').replace(/\d+/g, (n) => { ds.push(n); return ''; });
+    return ds;
+  }
 
   function walk(node) {
     if (!node) return;
     if (node.nodeType === 3) {
-      parts.push(node.nodeValue || '');
+      let val = node.nodeValue || '';
+      // Buang teks yang hanya angka/spasi residual setelah equation
+      if (lastEqDigits.length) {
+        const onlyNums = val.replace(/[\s ]+/g, ' ').trim();
+        if (/^[\d\s]+$/.test(onlyNums) && onlyNums.length > 0) {
+          const nums = onlyNums.split(/\s+/).filter(Boolean);
+          // jika semua angka muncul di equation terakhir → skip total
+          if (nums.every(n => lastEqDigits.indexOf(n) >= 0 || lastEqDigits.some(d => d.indexOf(n) >= 0 || n.indexOf(d) >= 0))) {
+            return;
+          }
+          // buang angka yang cocok, sisakan sisanya
+          const kept = nums.filter(n => lastEqDigits.indexOf(n) < 0);
+          if (!kept.length) return;
+          val = (val.match(/^\s*/) || [''])[0] + kept.join(' ') + (val.match(/\s*$/) || [''])[0];
+        }
+      }
+      parts.push(val);
       return;
     }
     if (node.nodeType !== 1) return;
@@ -6207,6 +6233,7 @@ function walkDocxBodyToHtml(doc) {
       const latex = ommlToLatex(node).trim();
       if (latex) {
         eqCount++;
+        lastEqDigits = extractDigitsFromLatex(latex);
         parts.push(' ');
         parts.push(latexToHtmlSnippet(latex));
         parts.push(' ');
@@ -6787,165 +6814,97 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
   t = t.replace(/\s{2,}/g, ' ').trim();
 
-  // ---------- 1) Hapus duplikasi formula (Word Choice + Fallback) ----------
-  (function dedupe() {
-    const m = t.match(/^(.*?)((?:Hasil|Nilai)\s+dari\s+)?(.+?)(\s+adalah\b.*|\s*\.{2,}.*)?$/i);
-    if (!m) return;
-    const head = (m[1] || '') + (m[2] || '');
-    let body = (m[3] || '').trim();
-    const tail = m[4] || '';
-    if (body.length < 12) return;
-    const norm = (x) => String(x).replace(/[√\\\s\{\}\^]/g, '').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
-    const score = (x) => ((x.match(/√|\\sqrt/g) || []).length) * 3 + ((x.match(/[²³\^]/g) || []).length);
-    const half = Math.floor(body.length / 2);
-    for (let len = Math.min(half, 90); len >= 10; len--) {
-      const left = body.slice(0, len).trim();
-      const rest = body.slice(len).trim();
-      const nl = norm(left), nr = norm(rest);
-      if (nl.length >= 6 && (nr.startsWith(nl.slice(0, Math.min(10, nl.length))) || nl.startsWith(nr.slice(0, Math.min(10, nr.length))))) {
-        body = score(left) >= score(rest) ? left : rest;
-        t = (head + body + tail).replace(/\s{2,}/g, ' ').trim();
-        return;
-      }
-    }
-    // Pengulangan setelah √n : "... √49 3² + ..."
-    const rep = body.match(/^(.*?√\s*\d+|\.*?\\sqrt\{\d+\})\s+((?:\d+[²³]|\d+\^\{?\d+\}?)\s*\+.*)$/);
-    if (rep && score(rep[1]) > 0 && score(rep[2]) > 0) {
-      body = score(rep[1]) >= score(rep[2]) ? rep[1].trim() : rep[2].trim();
-      t = (head + body + tail).replace(/\s{2,}/g, ' ').trim();
-    }
-  })();
+  // ===== A) Pola EXACT dari Word residual (screenshot) =====
+  // "12 12 √(12)" / "12 12 √12" / "12 12 \sqrt{12}" → "√12"
+  t = t.replace(/(\d+)(?:\s+\1)+\s*√\s*\(?\s*\1\s*\)?/g, '√$1');
+  t = t.replace(/(\d+)(?:\s+\1)+\s*\\sqrt\{\1\}/g, '\\sqrt{$1}');
+  // "25 + 16 25 √(25) + 16 √(16)" → "√25 + √16"
+  t = t.replace(/(\d+)\s*\+\s*(\d+)\s+\1\s*√\s*\(?\s*\1\s*\)?\s*\+\s*\2\s*√\s*\(?\s*\2\s*\)?/g, '√$1 + √$2');
+  t = t.replace(/(\d+)\s*\+\s*(\d+)\s+\1\s*\\sqrt\{\1\}\s*\+\s*\2\s*\\sqrt\{\2\}/g, '\\sqrt{$1} + \\sqrt{$2}');
+  // "25 √(25)" / "25 √25" → "√25"
+  t = t.replace(/(\d+)\s*√\s*\(?\s*\1\s*\)?/g, '√$1');
+  t = t.replace(/(\d+)\s*\\sqrt\{\1\}/g, '\\sqrt{$1}');
+  // "√(25) 25" / "√25 25" → "√25"
+  t = t.replace(/√\s*\(?\s*(\d+)\s*\)?\s+\1\b/g, '√$1');
+  t = t.replace(/\\sqrt\{(\d+)\}\s+\1\b/g, '\\sqrt{$1}');
 
-  // ---------- 2) Pecahan Word rusak: "3² + 4 9 3 49 + √49" ----------
-  const supU2n = { '²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9','¹':'1','⁰':'0' };
-  function expOf(supU, supB) {
-    return supB || supU2n[supU] || '2';
-  }
-  t = t.replace(
-    /(\d+)([²³⁴⁵⁶⁷⁸⁹]|\^\{(\d+)\})\s*\+\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\+\s*√\s*\7\b/g,
-    function (_, base, supU, supB, a, b, c, d) {
-      return '(' + base + '^{' + expOf(supU, supB) + '} + ' + a + '\\sqrt{' + b + '})/(' + c + '\\sqrt{' + d + '}) + \\sqrt{' + d + '}';
-    }
-  );
-  t = t.replace(
-    /(\d+)([²³⁴⁵⁶⁷⁸⁹]|\^\{(\d+)\})\s*\+\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?=\s*[+\-.]|\s*adalah|$)/g,
-    function (_, base, supU, supB, a, b, c, d) {
-      return '(' + base + '^{' + expOf(supU, supB) + '} + ' + a + '\\sqrt{' + b + '})/(' + c + '\\sqrt{' + d + '})';
-    }
-  );
-
-  // ---------- 3) Unicode superscript → latex ----------
-  t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, base, sups) {
-    const exp = sups.split('').map(function (c) { return supU2n[c] || ''; }).join('');
-    return base + '^{' + exp + '}';
+  // ===== B) Pangkat residual: "4 2 4²" / "4 2 4^{2}" / "2 5 2 5 2⁵" → "4^{2}" / "2^{5}" =====
+  const supMap = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+  // "2 5 2 5 2⁵" atau "2 5 2⁵"
+  t = t.replace(/(\d)(?:\s+(\d))+\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, base, _e, sup) {
+    return base + '^{' + (supMap[sup] || '') + '}';
+  });
+  t = t.replace(/(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?/g, '$1^{$2}');
+  t = t.replace(/(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])/g, function (_, a, b, sup) {
+    return a + '^{' + (supMap[sup] || b) + '}';
+  });
+  // "4 2 × 4 3 4² × 4³" → "4^{2} × 4^{3}"
+  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?\s*\3\s*\4\s*\^\s*\{?\5\}?/g,
+    '$1^{$2} $3 $4^{$5}');
+  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])\s*\3\s*\4([²³⁴⁵⁶⁷⁸⁹])/g,
+    function (_, a, b, op, c, d, s1, s2) {
+      return a + '^{' + (supMap[s1] || b) + '} ' + op + ' ' + c + '^{' + (supMap[s2] || d) + '}';
+    });
+  // "4 2 × 4 3" diikuti "4² × 4³" sudah tertangani; jika hanya "4 2 × 4 3 4 2 × 4 3" → "4^{2} × 4^{3}"
+  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)(?:\s+\1\s+\2\s*\3\s*\4\s+\5)*/g, '$1^{$2} $3 $4^{$5}');
+  // Sisa "4 2⁴ × 4 3⁴" → "4^{2} × 4^{3}" (angka di depan superscript)
+  t = t.replace(/(\d)\s+(\d)([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, a, b, sup) {
+    return a + '^{' + (supMap[sup] || b) + '}';
+  });
+  t = t.replace(/(\d)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, base, sups) {
+    return base + '^{' + sups.split('').map(c => supMap[c] || '').join('') + '}';
   });
 
-  // ---------- 4) Rapikan pangkat dobel / residu pangkat ----------
-  // "3^{2} 3 2" / "3^{2}32" / "3^{2} 32" → "3^{2}"
-  for (let r = 0; r < 5; r++) {
-    const before = t;
-    t = t.replace(/(\d+)\^\{(\d+)\}\s*\1\s*\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\s*\1\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\1\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\s+\2(?=\s|[+\-×*/)=]|$)/g, '$1^{$2}');
-    // "3^{2}^{2}" / dobel caret
-    t = t.replace(/(\d+)\^\{(\d+)\}\s*\^\{?\2\}?/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\^\{(\d+)\}/g, '$1^{$2}');
-    // "3^2 3 2"
-    t = t.replace(/(\d+)\^(\d)\s+\1\s+\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^(\d)\1\2\b/g, '$1^{$2}');
-    // "3^{2} + 3 2" residual setelah operator sudah ada bentuk baik di kiri
-    t = t.replace(/(\d+\^\{\d+\})\s*[+\-×*/]\s*(?:\d+\s+)+\d+(?=\s*[+\-×*/)]|\s*adalah|$)/g, function (m) {
-      // jangan hapus jika ada √ di segmen
-      if (/√|\\sqrt/.test(m)) return m;
-      // jika pola "3^{2} + 4" valid, biarkan; hanya hapus jika angka residual menempel pola base+exp
-      return m;
-    });
-    if (t === before) break;
-  }
+  // ===== C) "4√3 4 3" / "4 √(3) 4 3" → "4√3" =====
+  t = t.replace(/(\d+)\s*√\s*\(?\s*(\d+)\s*\)?\s+\1\s+\2\b/g, '$1√$2');
+  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s+\1\s+\2\b/g, '$1\\sqrt{$2}');
 
-  // ---------- 5) Rapikan akar + angka residu ----------
+  // ===== D) Bersihkan \left \right yang bocor jadi teks + residu digit =====
+  // "(( 5 2 ) 2 (left( 5 2 5² )right)^2)" → "(5^{2})^{2}"
+  t = t.replace(/\\left\s*\(/g, '(');
+  t = t.replace(/\\right\s*\)/g, ')');
+  t = t.replace(/\bleft\s*\(/gi, '(');
+  t = t.replace(/\bright\s*\)/gi, ')');
+  // "(5 2)^2" / "( 5 2 ) 2" / "(5 2 5²)" → "(5^{2})"
+  t = t.replace(/\(\s*(\d)\s+(\d)\s*\)\s*\^?\s*\{?(\d)?\}?/g, function (_, a, b, e) {
+    if (e) return '(' + a + '^{' + b + '})^{' + e + '}';
+    return '(' + a + '^{' + b + '})';
+  });
+  t = t.replace(/\(\s*(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?\s*\)/g, '($1^{$2})');
+  t = t.replace(/\(\s*(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])\s*\)/g, function (_, a, b, s) {
+    return '(' + a + '^{' + (supMap[s] || b) + '})';
+  });
+  // "(5^{2})^{2}" sudah baik; residu digit di sekitar kurung
+  t = t.replace(/\)\s*\^?\s*\{?(\d)\}?\s*\(\s*\1\s*\)/g, ')^{$1}');
+  // Rangkaian kurung rusak berulang: ambil pola (base^{exp})^{exp}
+  t = t.replace(/(?:\(\s*)+(\d+)\^\{(\d+)\}(?:\s*\)\s*)+\^\{(\d+)\}/g, '($1^{$2})^{$3}');
+  t = t.replace(/(?:\(\s*)+(\d+)\^\{(\d+)\}(?:\s*\)\s*)+/g, '($1^{$2})');
+
+  // ===== E) Residu umum berulang =====
   for (let r = 0; r < 6; r++) {
     const before = t;
-    // \sqrt{25}25 / \sqrt{25} 25 → \sqrt{25}
-    t = t.replace(/\\sqrt\{(\d+)\}\s*\1\b/g, '\\sqrt{$1}');
-    t = t.replace(/√\s*(\d+)\s*\1\b/g, '√$1');
-    // 4\sqrt{9}4 9 / 4\sqrt{9} 4 9 → 4\sqrt{9}
-    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\s*\2\b/g, '$1\\sqrt{$2}');
-    t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\2\b/g, '$1\\sqrt{$2}');
-    t = t.replace(/(\d+)√\s*(\d+)\s*\1\s*\2\b/g, '$1√$2');
-    t = t.replace(/(\d+)√\s*(\d+)\s*\1\2\b/g, '$1√$2');
-    // 25\sqrt{25} → \sqrt{25}
-    t = t.replace(/(\d+)\\sqrt\{\1\}/g, '\\sqrt{$1}');
-    t = t.replace(/(\d+)√\1\b/g, '√$1');
-    // "\sqrt{25} + \sqrt{16} 25 + 16" → "\sqrt{25} + \sqrt{16}"
-    t = t.replace(/(\\sqrt\{\d+\}|√\d+)(\s*[+\-]\s*)(\\sqrt\{\d+\}|√\d+)(?:\s*\d+\s*[+\-]\s*)+\d+\b/g, '$1$2$3');
-    t = t.replace(/(\\sqrt\{\d+\}|√\d+)(\s*[+\-]\s*)(\\sqrt\{\d+\}|√\d+)\s*[+\-]\s*\d+\b/g, '$1$2$3');
-    // "\sqrt{25} + \sqrt{16}25" (nempel)
-    t = t.replace(/(\\sqrt\{(\d+)\}|√(\d+))(\s*[+\-]\s*)(\\sqrt\{(\d+)\}|√(\d+))\2\b/g, '$1$4$5');
-    // Residual di akhir sebelum "adalah" / "...."
-    t = t.replace(/((?:\\sqrt\{\d+\}|√\d+|\d+\\sqrt\{\d+\}|\d+√\d+|\d+\^\{\d+\})(?:\s*[+\-×*/]\s*(?:\\sqrt\{\d+\}|√\d+|\d+\\sqrt\{\d+\}|\d+√\d+|\d+\^\{\d+\}|\d+))*)\s*(?:\d+\s*[+\-×*/]\s*)+\d+(?=\s*adalah|\s*\.{2,}|$)/gi, '$1');
-    // "4 9" → "4√9" hanya di antara operator jika belum ada akar di dekatnya
-    t = t.replace(/([+\-/=×x*·]\s*)(\d{1,2})\s+(\d{1,4})(?=\s*[+\-/=×x*·)]|\s+adalah|\s*\.|$)/g, function (m, op, a, b) {
-      if (parseInt(a, 10) > 0 && parseInt(b, 10) > 1) return op + a + '√' + b;
-      return m;
-    });
-    if (t === before) break;
-  }
-
-  // ---------- 6) √ unicode → \sqrt{...} agar KaTeX konsisten ----------
-  t = t.replace(/(\d*)\s*√\s*\(([^)]+)\)/g, function (_, coef, inner) {
-    return (coef || '') + '\\sqrt{' + inner + '}';
-  });
-  t = t.replace(/(\d*)\s*√\s*([0-9a-zA-Z]+)/g, function (_, coef, inner) {
-    return (coef || '') + '\\sqrt{' + inner + '}';
-  });
-
-  // ---------- 7) Residual setelah latex sudah terbentuk ----------
-  for (let r = 0; r < 4; r++) {
-    const before = t;
-    t = t.replace(/(\\sqrt\{(\d+)\})\s*\2\b/g, '$1');
-    t = t.replace(/(\d+)(\\sqrt\{(\d+)\})\s*\1\s*\3\b/g, '$1$2');
-    t = t.replace(/(\d+\^\{\d+\})\s*\d{1,3}(?=\s*[+\-)]|\s*adalah|\s*\.{2,}|$)/g, function (m, pow) {
-      // Hanya buang jika angka residual = gabungan base+exp
-      const mm = pow.match(/(\d+)\^\{(\d+)\}/);
-      if (!mm) return m;
-      const glued = mm[1] + mm[2];
-      const rest = m.slice(pow.length).trim();
-      if (rest === glued || rest === mm[1] || rest === mm[2]) return pow;
-      return m;
-    });
-    // "3^{2} + 4\sqrt{9} 32 + 49" residual
-    t = t.replace(/(\d+\^\{\d+\}\s*[+\-]\s*\d+\\sqrt\{\d+\})(?:\s*\d+\s*[+\-]\s*\d+)+\b/g, '$1');
-    t = t.replace(/(\d+\\sqrt\{\d+\}\s*[+\-]\s*\d+\\sqrt\{\d+\})(?:\s*\d+\s*[+\-]\s*\d+)+\b/g, '$1');
-    if (t === before) break;
-  }
-
-  // ---------- 7b) Residu "bagus + jelek" setelah formula utuh ----------
-  // "3^{2} + 4\sqrt{9} 3 2 + 4 9" → "3^{2} + 4\sqrt{9}"
-  // "\sqrt{25} + \sqrt{16} 25 + 16" → "\sqrt{25} + \sqrt{16}"
-  for (let r = 0; r < 4; r++) {
-    const before = t;
-    // Setelah rangkaian term math yang valid, buang sisa angka/spasi+operator+angka sampai adalah/...
-    t = t.replace(
-      /((?:\d+\^\{\d+\}|\d*\\sqrt\{\d+\}|\d+)(?:\s*[+\-×*/]\s*(?:\d+\^\{\d+\}|\d*\\sqrt\{\d+\}|\d+))+)(?:\s+\d+(?:\s*[+\-×*/]\s*\d+)*)+(?=\s*adalah|\s*\.{2,}|\s*$)/g,
-      '$1'
-    );
-    // "…\sqrt{9} 4 9" / "…^{2} 3 2"
-    t = t.replace(/(\\sqrt\{(\d+)\})\s+\d+\s+\2\b/g, '$1');
-    t = t.replace(/(\d+\^\{(\d+)\})\s+\d+\s+\2\b/g, '$1');
-    t = t.replace(/(\d+)(\\sqrt\{(\d+)\})\s+\1\s+\3\b/g, '$1$2');
-    // Dobel pangkat sisa: "3^{2} 2" jika 2 = eksponen
+    t = t.replace(/(\\sqrt\{(\d+)\}|√(\d+))\s+\2\b/g, '$1');
+    t = t.replace(/(\\sqrt\{(\d+)\}|√(\d+))\s+\3\b/g, '$1');
+    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\s+\2\b/g, '$1^{$2}');
+    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\2\b/g, '$1^{$2}');
     t = t.replace(/(\d+)\^\{(\d+)\}\s+\2\b/g, '$1^{$2}');
-    // "4\sqrt{9} 9"
-    t = t.replace(/(\d*\\sqrt\{(\d+)\})\s+\2\b/g, '$1');
+    t = t.replace(/(\d+)(\\sqrt\{(\d+)\}|√(\d+))\s+\1\s+\3\b/g, '$1$2');
+    t = t.replace(/(\d+)(\\sqrt\{(\d+)\}|√(\d+))\s+\1\s+\4\b/g, '$1$2');
+    // "√25 + √16 25 + 16"
+    t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})(?:\s+\d+\s*[+\-]\s*)+\d+/g, '$1 $2 $3');
+    // digit digit berulang di depan √ yang sama
+    t = t.replace(/(\d+)(?:\s+\1)+\s*(?=√|\\sqrt)/g, '');
     if (t === before) break;
   }
 
-  // ---------- 8) Rapikan spasi operator ----------
+  // ===== F) Unicode √ → \sqrt untuk KaTeX =====
+  t = t.replace(/(\d*)\s*√\s*\(([^)]+)\)/g, (_, c, inner) => (c || '') + '\\sqrt{' + inner + '}');
+  t = t.replace(/(\d*)\s*√\s*([0-9a-zA-Z]+)/g, (_, c, inner) => (c || '') + '\\sqrt{' + inner + '}');
+
+  // ===== G) Spasi operator =====
   t = t.replace(/\s*([+\-×÷:*/])\s*/g, ' $1 ');
   t = t.replace(/\s{2,}/g, ' ');
-  t = t.replace(/(\\sqrt\{[^}]+\}|\d+\^\{\d+\})(?=adalah\b)/gi, '$1 ');
+  t = t.replace(/(\}|\)|\d)(?=adalah\b)/gi, '$1 ');
   t = t.replace(/\s{2,}/g, ' ').trim();
   return t;
 }
