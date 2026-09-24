@@ -7023,6 +7023,69 @@ function repairCorruptedSqrtText(s) {
   // Setelah konversi, "(5^{2})²" mungkin jadi campur — rapikan
   t = t.replace(/\((\d+\^\{\d+\})\)\^\{(\d+)\}/g, '($1)^{$2}');
 
+  // ========== 5b. Residual setelah pangkat yang sudah benar ==========
+  // "2⁵ 2 5 2 5" → "2⁵"
+  t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,8})(?=\s*adalah|\s*\.{2,}|\s*$)/g, function (full, base, sup, rest) {
+    var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+    var exp = sup.split('').map(function (c) { return map[c] || ''; }).join('');
+    var nums = rest.trim().split(/\s+/).filter(Boolean);
+    if (nums.length && nums.every(function (n) { return n === base || n === exp || n === (base + exp); })) {
+      return base + sup;
+    }
+    return full;
+  });
+  t = t.replace(/(\d+)\^\{(\d+)\}((?:\s+\d+){1,8})(?=\s*adalah|\s*\.{2,}|\s*$)/g, function (full, base, exp, rest) {
+    var nums = rest.trim().split(/\s+/).filter(Boolean);
+    if (nums.length && nums.every(function (n) { return n === base || n === exp || n === (base + exp); })) {
+      return base + '^{' + exp + '}';
+    }
+    return full;
+  });
+
+  // ========== 5c. "(5²)²" tertimbun sampah kurung/digit ==========
+  (function fixNestedPowerBody() {
+    var m = t.match(/^(.*?Hasil\s+dari\s+)(.+?)(\s+adalah\b.*)$/i);
+    if (!m) return;
+    var head = m[1], body = m[2], tail = m[3];
+    var cleanBody = body.replace(/\\left|\\right|\bleft\b|\bright\b/gi, '').replace(/\s+/g, ' ').trim();
+    // Sudah rapi?
+    if (/^\(?\d+\^\{\d+\}\)?(\^\{\d+\})?$/.test(cleanBody)) return;
+    if (/^\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+$/.test(cleanBody)) return;
+    if (/^\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+$/.test(cleanBody)) return;
+
+    var best = null;
+    var p;
+    p = cleanBody.match(/\(\s*(\d+)\s*\^\s*\{(\d+)\}\s*\)\s*\^\s*\{(\d+)\}/);
+    if (p) best = '(' + p[1] + '^{' + p[2] + '})^{' + p[3] + '}';
+    if (!best) {
+      p = cleanBody.match(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/);
+      if (p) best = '(' + p[1] + p[2] + ')' + p[3];
+    }
+    if (!best) {
+      p = cleanBody.match(/\(\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^?\s*\(?\s*(\d+)\s*\)?/);
+      if (p) {
+        var map = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
+        best = '(' + p[1] + p[2] + ')' + String(p[3]).split('').map(function (d) { return map[d] || d; }).join('');
+      }
+    }
+    if (!best) {
+      p = cleanBody.match(/\(\s*\(?\s*(\d)\s+(\d)\s*\)?\s*\)\s*(\d)/);
+      if (p) best = '(' + p[1] + '^{' + p[2] + '})^{' + p[3] + '}';
+    }
+    // Hanya sampah digit/kurung → (5^{2})^{2} jika pola 5 & 2 dominan (625 = (5^2)^2)
+    if (!best && /^[\d\s()^⁰¹²³⁴⁵⁶⁷⁸⁹{}\^]+$/.test(cleanBody)) {
+      var digs = cleanBody.match(/\d/g) || [];
+      var n5 = digs.filter(function (d) { return d === '5'; }).length;
+      var n2 = digs.filter(function (d) { return d === '2'; }).length;
+      if (n5 >= 1 && n2 >= 2) best = '(5^{2})^{2}';
+    }
+    if (best) t = head + best + tail;
+  })();
+
+  // "dari√" → "dari √"
+  t = t.replace(/dari√/gi, 'dari √');
+  t = t.replace(/dari\\sqrt/gi, 'dari \\sqrt');
+
   // ========== 6. Spasi ==========
   t = t.replace(/\s*([+\-×÷:*/])\s*/g, ' $1 ');
   t = t.replace(/\s{2,}/g, ' ');
