@@ -90,14 +90,23 @@
   .fm-opsi-row .ql-toolbar.ql-snow { padding: 3px 4px; }
 
   .ql-formula-btn, .ql-video-btn { width: auto !important; padding: 0 6px !important; }
-  .ql-snow .ql-toolbar button.ql-sqrt::before { content: "√"; font-weight: 800; font-size: 15px; }
-  .ql-snow .ql-toolbar button.ql-power::before { content: "xⁿ"; font-weight: 800; font-size: 12px; }
-  .ql-snow .ql-toolbar button.ql-frac::before { content: "a/b"; font-weight: 700; font-size: 11px; }
-  .ql-snow .ql-toolbar button.ql-rapikan::before { content: "✦"; font-weight: 800; font-size: 14px; color: #0d9488; }
   .ql-snow .ql-toolbar button.ql-sqrt,
   .ql-snow .ql-toolbar button.ql-power,
+  .ql-snow .ql-toolbar button.ql-sub,
   .ql-snow .ql-toolbar button.ql-frac,
-  .ql-snow .ql-toolbar button.ql-rapikan { width: 32px; }
+  .ql-snow .ql-toolbar button.ql-rapikan {
+    width: auto !important;
+    min-width: 28px;
+    padding: 0 6px !important;
+    font-weight: 800;
+    font-size: 13px;
+    color: #0f172a;
+  }
+  .ql-snow .ql-toolbar button.ql-sqrt::before { content: "√"; font-size: 16px; }
+  .ql-snow .ql-toolbar button.ql-power::before { content: "xⁿ"; font-size: 13px; }
+  .ql-snow .ql-toolbar button.ql-sub::before { content: "xₙ"; font-size: 13px; }
+  .ql-snow .ql-toolbar button.ql-frac::before { content: "a/b"; font-size: 12px; }
+  .ql-snow .ql-toolbar button.ql-rapikan::before { content: "✦"; font-size: 14px; color: #0d9488; }
 
 
   .ql-snow .ql-toolbar button.ql-table::before,
@@ -5292,7 +5301,8 @@ function initSoalRichEditor(containerId, initialHtml) {
     [{ list: 'ordered' }, { list: 'bullet' }],
     [{ align: [] }],
     ['link', 'image', 'video', 'table', 'chart'],
-    ['formula', 'sqrt', 'power', 'frac', 'rapikan'],
+    [{ 'script': 'sub' }, { 'script': 'super' }],
+    ['formula', 'sqrt', 'power', 'sub', 'frac', 'rapikan'],
     ['clean']
   ];
   const quill = new Quill('#' + containerId, {
@@ -5342,14 +5352,46 @@ function initSoalRichEditor(containerId, initialHtml) {
             openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex));
           },
           sqrt: function () {
-            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\sqrt{#0}');
+            // Sisip akar: minta isi, atau buka MathLive
+            const inside = prompt('Isi di dalam akar √ (contoh: 72 atau 5+2√5):\nKosongkan untuk buka editor rumus lengkap.', '');
+            if (inside === null) return;
+            if (String(inside).trim() === '') {
+              openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\\sqrt{#0}');
+              return;
+            }
+            insertLatexIntoQuill(quill, '\\sqrt{' + String(inside).trim() + '}');
           },
           power: function () {
-            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '#@^{#0}');
+            const base = prompt('Basis pangkat (contoh: 2 atau x):', '');
+            if (base === null) return;
+            const exp = prompt('Eksponen (contoh: 4):', '');
+            if (exp === null) return;
+            if (!String(base).trim() || !String(exp).trim()) {
+              openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '#@^{#0}');
+              return;
+            }
+            insertLatexIntoQuill(quill, String(base).trim() + '^{' + String(exp).trim() + '}');
+          },
+          sub: function () {
+            const base = prompt('Basis subscript (contoh: a atau x):', '');
+            if (base === null) return;
+            const sub = prompt('Subscript (contoh: n atau 1):', '');
+            if (sub === null || !String(base).trim()) return;
+            // Prefer unicode/HTML sub via latex
+            insertLatexIntoQuill(quill, String(base).trim() + '_{' + String(sub).trim() + '}');
           },
           frac: function () {
-            openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\frac{#@}{#0}');
+            const num = prompt('Pembilang (atas):', '');
+            if (num === null) return;
+            const den = prompt('Penyebut (bawah):', '');
+            if (den === null) return;
+            if (!String(num).trim() || !String(den).trim()) {
+              openMathLiveEditor((latex) => insertLatexIntoQuill(quill, latex), '\\frac{#@}{#0}');
+              return;
+            }
+            insertLatexIntoQuill(quill, '\\frac{' + String(num).trim() + '}{' + String(den).trim() + '}');
           },
+
           rapikan: function () {
             try {
               const range = quill.getSelection(true);
@@ -5431,11 +5473,18 @@ function initSoalRichEditor(containerId, initialHtml) {
     if (bar) {
       const tips = {
         'ql-formula': 'Editor rumus lengkap (Σ)',
-        'ql-sqrt': 'Sisip akar √',
+        'ql-sqrt': 'Sisip tanda akar √',
         'ql-power': 'Sisip pangkat xⁿ',
+        'ql-sub': 'Sisip subscript xₙ',
         'ql-frac': 'Sisip pecahan a/b',
         'ql-rapikan': 'Bersihkan angka residual di teks'
       };
+      // Pastikan label tombol terlihat (beberapa browser tidak render ::before)
+      const labels = { 'ql-sqrt': '√', 'ql-power': 'xⁿ', 'ql-sub': 'xₙ', 'ql-frac': 'a/b', 'ql-rapikan': '✦' };
+      Object.keys(labels).forEach(cls => {
+        const btn = bar.querySelector('button.' + cls);
+        if (btn && !(btn.textContent || '').trim()) btn.textContent = labels[cls];
+      });
       Object.keys(tips).forEach(cls => {
         const btn = bar.querySelector('button.' + cls);
         if (btn) btn.title = tips[cls];
