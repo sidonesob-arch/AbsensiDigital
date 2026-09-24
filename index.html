@@ -6359,26 +6359,34 @@ function previewImportSoal(ev) {
           ? ` <span style="font-size:10px;color:#0d9488;">[${hasImg ? '🖼' : ''}${hasTbl ? '▦' : ''}]</span>`
           : '';
         // Tampilkan preview: plain yang sudah diperbaiki (ganti ^{n} → superscript, \sqrt → √)
-                let prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(
-          (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
-        )).trim();
-        // Bersihkan residu angka di preview (√25 25 → √25, 3^{2} 32 → 3^{2})
-        prevPlain = prevPlain
-          .replace(/\\sqrt\{(\d+)\}\s*\1\b/g, '\\sqrt{$1}')
-          .replace(/(\d+)\\sqrt\{(\d+)\}\s*\1\s*\2\b/g, '$1\\sqrt{$2}')
-          .replace(/(\\sqrt\{\d+\}|\d+\\sqrt\{\d+\}|\d+\^\{\d+\})(?:\s+\d+){1,4}(?=\s*[+\-)]|\s*adalah|\s*\.|$)/g, '$1')
-          .replace(/(\d+\^\{\d+\})\s*\d{1,3}(?=\s*[+\-)]|\s*adalah|\s*\.|$)/g, '$1');
+                        let prevPlain = '';
+        (function () {
+          const box = document.createElement('div');
+          box.innerHTML = s.pertanyaan || '';
+          box.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
+            let latex = el.getAttribute('data-latex') || '';
+            if (!latex) return;
+            let nice = latex;
+            try { if (typeof latexToUnicodeSimple === 'function') nice = latexToUnicodeSimple(latex) || latex; } catch (e) {}
+            el.replaceWith(document.createTextNode(' ' + nice + ' '));
+          });
+          box.querySelectorAll('.katex, .katex-html, .katex-mathml').forEach(el => el.replaceWith(document.createTextNode('')));
+          prevPlain = (box.innerText || box.textContent || '').replace(/\s+/g, ' ').trim();
+        })();
+        if (!prevPlain) {
+          prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(
+            (s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+          )).trim();
+        } else {
+          prevPlain = stripGluedOptionsFromText(repairCorruptedSqrtText(prevPlain)).trim();
+        }
         prevPlain = prevPlain
           .replace(/(\d+)\^\{(\d+)\}/g, (_, a, b) => {
             const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
             return a + String(b).split('').map(d => sup[parseInt(d, 10)] || d).join('');
           })
           .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
-          .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)')
-          // Residu setelah jadi unicode: √(25) 25 → √(25)
-          .replace(/√\((\d+)\)\s*\1\b/g, '√($1)')
-          .replace(/(\d+)√\((\d+)\)\s*\1\s*\2\b/g, '$1√($2)')
-          .replace(/([²³⁴⁵⁶⁷⁸⁹])\s*\d{1,3}(?=\s*[+\-)]|\s*adalah|\s*\.|$)/g, '$1');
+          .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
 return `<div style="border-bottom:1px solid #eee;padding:6px 0;">
           <b>#${i+1}</b> [${jenisLabel[s.jenis]||s.jenis}] ${s.poin}p —${mediaBadge}
           ${prevPlain.slice(0, 100)}${prevPlain.length > 100 ? '…' : ''}
@@ -6498,17 +6506,48 @@ function parseSoalFromHtml(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = work;
 
-  // Plain text untuk struktur SOAL / opsi (tanpa mengandalkan HTML formula)
-  // Formula di plain: pakai innerText (sudah ter-render KaTeX → unicode) agar opsi bersih
-  // Hapus MathML yang mungkin masih di DOM sebelum ambil text
+  // PENTING: ambil data-latex dari embed KaTeX SEBELUM innerText
+  // (innerText KaTeX menghasilkan digit terpisah: "2^5" → "2 5 2 5")
+  function formulaElToPlain(el) {
+    let latex = el.getAttribute('data-latex') || '';
+    if (!latex && el.querySelector) {
+      const inner = el.querySelector('[data-latex]');
+      if (inner) latex = inner.getAttribute('data-latex') || '';
+    }
+    latex = String(latex || '').trim();
+    if (latex && typeof latexToUnicodeSimple === 'function') {
+      try {
+        const u = latexToUnicodeSimple(latex);
+        if (u) return ' ' + u + ' ';
+      } catch (e) {}
+    }
+    if (latex) return ' ' + latex + ' ';
+    return ' ' + (el.textContent || '').replace(/\s+/g, '') + ' ';
+  }
+  tmp.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
+    // Hindari double-replace anak di dalam parent
+    if (el.closest && el.parentElement && el.parentElement.closest && el.parentElement.closest('.ql-formula-embed') && !el.classList.contains('ql-formula-embed')) {
+      return;
+    }
+    el.replaceWith(document.createTextNode(formulaElToPlain(el)));
+  });
+  // Hapus sisa span.katex yang tidak punya data-latex (digit terpecah)
+  tmp.querySelectorAll('.katex, .katex-html, .katex-mathml').forEach(el => {
+    el.replaceWith(document.createTextNode(''));
+  });
   tmp.querySelectorAll('math, semantics, annotation').forEach(el => {
     const ann = el.querySelector && el.querySelector('annotation[encoding*="tex"], annotation');
-    const latex = ann ? (ann.textContent || '').trim() : (el.textContent || '');
-    el.replaceWith(document.createTextNode(latex ? ' ' + latex + ' ' : ''));
+    const latex = ann ? (ann.textContent || '').trim() : '';
+    if (latex) {
+      let nice = latex;
+      try { if (typeof latexToUnicodeSimple === 'function') nice = latexToUnicodeSimple(latex) || latex; } catch (e) {}
+      el.replaceWith(document.createTextNode(' ' + nice + ' '));
+    } else {
+      el.replaceWith(document.createTextNode(''));
+    }
   });
   let plain = (tmp.innerText || tmp.textContent || '').replace(/\r/g, '');
   plain = stripBrokenMathMlFragments(plain);
-  // innerText KaTeX kadang menyisakan latex + angka dobel → perbaiki dulu
   plain = repairCorruptedSqrtText(plain);
   const fromText = parseSoalFromText(plain);
   if (!fromText.length) return [];
@@ -6541,7 +6580,21 @@ function parseSoalFromHtml(html) {
       // Pertanyaan — prioritaskan HTML formula bagus (OMML→KaTeX embed)
       const hasMedia = /<img\b|<table\b/i.test(s.pertanyaan || '');
       const hasGoodFormula = /ql-formula-embed|data-latex|class="katex"/i.test(s.pertanyaan || '');
-      let pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      let pPlain = '';
+      (function () {
+        const box = document.createElement('div');
+        box.innerHTML = s.pertanyaan || '';
+        box.querySelectorAll('.ql-formula-embed, [data-latex]').forEach(el => {
+          let latex = el.getAttribute('data-latex') || '';
+          if (!latex) return;
+          let nice = latex;
+          try { if (typeof latexToUnicodeSimple === 'function') nice = latexToUnicodeSimple(latex) || latex; } catch (e) {}
+          el.replaceWith(document.createTextNode(' ' + nice + ' '));
+        });
+        box.querySelectorAll('.katex, .katex-html, .katex-mathml').forEach(el => el.replaceWith(document.createTextNode('')));
+        pPlain = (box.innerText || box.textContent || '').replace(/\s+/g, ' ').trim();
+      })();
+      if (!pPlain) pPlain = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       pPlain = repairCorruptedSqrtText(pPlain);
       pPlain = stripGluedOptionsFromText(pPlain);
       const stillCorrupt = /2\s+5\s+2\^|\d+\s+\d+\s+\d+\s*\\sqrt|\d+\\sqrt\{\d+\}\d|adalah\s*\.{0,4}\s*\d/i.test(pPlain);
