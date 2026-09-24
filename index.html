@@ -5485,7 +5485,8 @@ function renderSoalHtml(html) {
   // Jika plain text tanpa tag, rapikan opsi nempel + escape + konversi KaTeX bila memungkinkan
   if (html.indexOf('<') === -1) {
     let t = typeof stripGluedOptionsFromText === 'function' ? stripGluedOptionsFromText(html) : html;
-    t = typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText(t) : t;
+    t = typeof deepCleanSoalText === 'function' ? deepCleanSoalText(t)
+      : (typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText(t) : t);
     // Coba render KaTeX untuk pangkat/akar
     if (typeof plainMathToKatexHtml === 'function' && /√|\\sqrt|\^\{|\^\d/.test(t)) {
       const k = plainMathToKatexHtml(t);
@@ -5541,7 +5542,7 @@ function enhanceSoalHtmlInDom(rootEl) {
       let plain = (el.textContent || '').trim();
       if (!plain || plain.length > 400) return;
       plain = stripBrokenMathMlFragments(plain);
-      plain = repairCorruptedSqrtText(plain);
+      plain = typeof deepCleanSoalText === 'function' ? deepCleanSoalText(plain) : repairCorruptedSqrtText(plain);
       plain = stripGluedOptionsFromText(plain);
       // Selalu update teks yang sudah diperbaiki (meski tanpa KaTeX)
       const needsKatex = /√|\\sqrt|\^\{|\^\d|\\frac/.test(plain);
@@ -7007,81 +7008,87 @@ function resplitMergedOpsi(opsiList) {
 /** Bersihkan residual ekstrem pada soal esai/akar (Hitunglah / Sederhanakan) */
 function deepCleanSoalText(s) {
   if (s == null || s === '') return s;
-  let t = repairCorruptedSqrtText(String(s));
+  let t = String(s);
+  // Buang tanda ! residual di akhir (sering dari Word/OCR)
+  t = t.replace(/\s*!\s*$/g, '').trim();
+  t = repairCorruptedSqrtText(t);
   t = t.replace(/\s{2,}/g, ' ').trim();
 
-  // Hitunglah + nested radical: ambil \sqrt{...} terdalam yang bermakna
-  (function () {
-    const m = t.match(/^(Hitunglah(?:\s+nilai\s+dari)?\s+)(.+)$/i);
-    if (!m) return;
-    const head = m[1];
-    let body = m[2];
+  // --- Ekstrak token math yang valid, susun ulang soal Hitunglah/Sederhanakan ---
+  (function rebuildFromTokens() {
+    const headMatch = t.match(/^((?:Hitunglah(?:\s+nilai\s+dari)?|Sederhanakan(?:\s+dan\s+hitunglah)?|Sederhanakan\s+bentuk)\s+)(.+)$/i);
+    if (!headMatch) return;
+    const head = headMatch[1];
+    let body = headMatch[2].replace(/\s*!\s*$/g, '').trim();
 
-    // Cari nested: \sqrt{5 + 2\sqrt{5 - \sqrt{5}}} atau √(5+2√(5-√5))
-    let best = null;
-    // latex nested
-    const reNest = /\\sqrt\{([^{}]*\\sqrt\{[^{}]*\}[^{}]*)\}/g;
-    let mm;
-    while ((mm = reNest.exec(body)) !== null) {
-      best = '\\sqrt{' + mm[1] + '}';
-    }
-    // unicode nested √( ... √ ... )
-    if (!best) {
-      const u = body.match(/√\s*\(\s*[^)]*√[^)]+\)/);
-      if (u) best = u[0];
-    }
-    // sqrt(5 + 2sqrt(...))
-    if (!best) {
-      const s2 = body.match(/sqrt\s*\(\s*[^)]*sqrt[^)]+\)/i);
-      if (s2) {
-        let x = s2[0];
-        x = x.replace(/sqrt\s*\(/gi, '\\sqrt{').replace(/\)/g, '}');
-        best = x;
-      }
-    }
-    if (best) {
-      t = head + best;
-      return;
-    }
+    // Token bagus: 2⁴ 3^{2} √18 2√3 \sqrt{18} 2\sqrt{5} (√8)^{4} × : + -
+    const tokenRe = /(\(\s*\\sqrt\{\d+\}\s*\)\s*\^\{\d+\}|\(\s*√\d+\s*\)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+\^\{\d+\}|\d*\\sqrt\{\d+\}|\d*√\d+|\\sqrt\{\d+\}|√\d+|[×÷:+\-])/g;
+    const raw = [];
+    let m;
+    while ((m = tokenRe.exec(body)) !== null) raw.push(m[1].replace(/\s+/g, ''));
+    if (raw.length < 1) return;
 
-    // Tanpa nested: buang residual digit di sekitar term √ yang valid
-    // "3 5 3√5 3 5 + 2 5 2√5" → ambil "3√5 + 2√5" sekali
-    const terms = body.match(/\d+\s*\\sqrt\{\d+\}|\d+\s*√\d+|\\sqrt\{\d+\}|√\d+/g);
-    if (terms && terms.length >= 1) {
-      // dedupe consecutive same
-      const uniq = [];
-      terms.forEach(function (x) {
-        const n = x.replace(/\s+/g, '');
-        if (!uniq.length || uniq[uniq.length - 1].replace(/\s+/g, '') !== n) uniq.push(x.replace(/\s+/g, ''));
+    // Normalisasi token
+    const norm = raw.map(function (x) {
+      if (/^[×÷:+\-]$/.test(x)) return x;
+      x = x.replace(/√(\d+)/g, '\\sqrt{$1}');
+      x = x.replace(/(\d+)√(\d+)/g, '$1\\sqrt{$2}');
+      // unicode sup → latex
+      const map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+      x = x.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b, s) {
+        return b + '^{' + s.split('').map(function (c) { return map[c] || ''; }).join('') + '}';
       });
-      // jika terlalu banyak pengulangan, ambil set unik pertama
-      if (terms.length > uniq.length + 1 && uniq.length <= 4) {
-        t = head + uniq.join(' + ').replace(/\+ -/g, '- ');
+      return x;
+    });
+
+    // Susun: angka/rumus diselingi operator; buang operator dobel & residual berulang
+    const out = [];
+    let lastWasOp = true;
+    const seenSeq = {};
+    for (let i = 0; i < norm.length; i++) {
+      const tok = norm[i];
+      const isOp = /^[×÷:+\-]$/.test(tok);
+      if (isOp) {
+        if (lastWasOp) continue;
+        out.push(tok);
+        lastWasOp = true;
+      } else {
+        // skip jika token sama dengan 2 sebelumnya (residual loop)
+        if (out.length >= 1 && out[out.length - 1] === tok) continue;
+        out.push(tok);
+        lastWasOp = false;
       }
     }
+    while (out.length && /^[×÷:+\-]$/.test(out[out.length - 1])) out.pop();
+    if (!out.length) return;
+
+    // Jika masih terlalu panjang (> 8 token) kemungkinan residual — ambil pola unik pertama
+    let final = out;
+    if (out.length > 8) {
+      // Cari subsequence unik: potong saat sequence mulai berulang
+      const key = out.join(' ');
+      const half = Math.floor(out.length / 2);
+      for (let len = Math.min(half, 6); len >= 3; len--) {
+        const left = out.slice(0, len).join(' ');
+        const rest = out.slice(len).join(' ');
+        if (rest.indexOf(left) === 0 || rest.startsWith(out.slice(0, Math.min(3, len)).join(' '))) {
+          final = out.slice(0, len);
+          break;
+        }
+      }
+      if (final.length > 7) final = out.slice(0, 7);
+    }
+
+    // Format tampilan: spasi di sekitar operator
+    const pretty = final.map(function (x, i) {
+      if (/^[×÷:+\-]$/.test(x)) return ' ' + x + ' ';
+      return x;
+    }).join('').replace(/\s{2,}/g, ' ').trim();
+
+    if (pretty.length >= 2) t = head + pretty;
   })();
 
-  // "34-25 + √8 ^(4) - 2^5 + √81 34 -25 + √81" → coba (√8)^4 - 2^5 + √81
-  (function () {
-    const m = t.match(/^(Hitunglah(?:\s+nilai\s+dari)?\s+)(.+)$/i);
-    if (!m) return;
-    const head = m[1];
-    let body = m[2];
-    // residual ulang di akhir: ".... 34 -25 + √81"
-    body = body.replace(/\s+\d{2,}\s*[+\-]\s*\d+\s*[+\-]\s*√\d+\s*$/g, '').trim();
-    body = body.replace(/\s+\d{2,}\s*[+\-]\s*\d+\s*[+\-]\s*\\sqrt\{\d+\}\s*$/g, '').trim();
-    // "√8 ^(4)" → "(\\sqrt{8})^{4}"
-    body = body.replace(/√\s*(\d+)\s*\^\s*\(?\s*(\d+)\s*\)?/g, '(\\sqrt{$1})^{$2}');
-    body = body.replace(/\\sqrt\{(\d+)\}\s*\^\s*\{?(\d+)\}?/g, '(\\sqrt{$1})^{$2}');
-    // "2^5" → "2^{5}"
-    body = body.replace(/\b(\d+)\s*\^\s*(\d+)\b/g, '$1^{$2}');
-    t = head + body;
-  })();
-
-  // Residual "n n n√n" final pass
-  t = t.replace(/(\d)(?:\s+\1)+\s*(√\d+|\\sqrt\{\d+\})/g, '$1$2');
-  t = t.replace(/(√\d+|\\sqrt\{\d+\})(?:\s+\d)+/g, '$1');
-
+  t = t.replace(/\s*!\s*$/g, '').trim();
   return t.replace(/\s{2,}/g, ' ').trim();
 }
 
