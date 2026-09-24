@@ -6962,6 +6962,75 @@ function repairCorruptedSqrtText(s) {
     return String(n).split('').map(function (d) { return ({ '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' })[d] || d; }).join('');
   };
 
+  // ========== 0a. Teks "sqrt" mentah (Word/fallback) → akar ==========
+  // Iterasi brace: sqrt{...} dan sqrt(...)
+  for (let i = 0; i < 8; i++) {
+    const before = t;
+    t = t.replace(/(\d*)\s*sqrt\s*\{([^{}]+)\}/gi, function (_, coef, inner) {
+      return (coef || '') + '\\sqrt{' + inner + '}';
+    });
+    t = t.replace(/(\d*)\s*sqrt\s*\(([^)]+)\)/gi, function (_, coef, inner) {
+      return (coef || '') + '\\sqrt{' + inner + '}';
+    });
+    if (t === before) break;
+  }
+  // "33sqrt5" → "3\sqrt{5}" (digit dobel residual di coef)
+  t = t.replace(/(\d)\1\s*sqrt\s*(\d+)/gi, '$1\\sqrt{$2}');
+  t = t.replace(/(\d+)\s*sqrt\s*(\d+)/gi, '$1\\sqrt{$2}');
+  t = t.replace(/\bsqrt\s*(\d+)/gi, '\\sqrt{$1}');
+  // "sqrt53sqrt{...}" → residual 53 di depan nested → buang 53 jika nested ada
+  t = t.replace(/\\sqrt\{(\d{2,})\}(\\sqrt\{)/g, '$2');
+  t = t.replace(/sqrt(\d{1,3})(\\sqrt\{)/gi, '$2');
+  t = t.replace(/\bsqrt\b/gi, '√');
+
+  // Ulangan term "3\sqrt{5} + 2\sqrt{5}" 
+  t = t.replace(/(\d+\\sqrt\{\d+\}(?:\s*[+\-]\s*\d+\\sqrt\{\d+\})*)(?:\s+\1)+/g, '$1');
+
+  // Esai: "Hitunglah 3√5+2√5 = √{nested} 3√5+..." → ambil nested sebagai soal
+  (function fixHitunglahNested() {
+    var m = t.match(/^(Hitunglah\s+)(.+)$/i);
+    if (!m) return;
+    var head = m[1], body = m[2];
+    // Cari nested \sqrt{ yang berisi + atau - di dalamnya
+    var nested = body.match(/\\sqrt\{[^{}]*[+\-][^{}]*\\sqrt/);
+    if (!nested) nested = body.match(/\\sqrt\{[^{}]{5,}\}/);
+    if (nested) {
+      // Ambil dari nested sampai brace seimbang sederhana
+      var startIdx = body.indexOf(nested[0]);
+      // Perluas ke nested terluar di dekat =
+      var eq = body.indexOf('=');
+      if (eq >= 0 && startIdx > eq) {
+        // nested di kanan =
+        var right = body.slice(eq + 1).trim();
+        // potong residual jawaban di ujung (3\sqrt{5}+...)
+        right = right.replace(/\s+\d+\\sqrt\{\d+\}(?:\s*[+\-]\s*\d+\\sqrt\{\d+\})*\s*$/g, '').trim();
+        // buang angka residual di depan nested
+        right = right.replace(/^\d+\\sqrt\{\d+\}(?:\s*[+\-]\s*\d+\\sqrt\{\d+\})*\s*/g, '').trim();
+        right = right.replace(/^\\sqrt\{\d{2,}\}/g, '').trim();
+        if (/\\sqrt\{/.test(right)) {
+          t = head + right;
+          return;
+        }
+      }
+    }
+    // Jika ada = , pilih sisi dengan nested lebih dalam
+    if (body.indexOf('=') >= 0) {
+      var parts = body.split('=');
+      var left = parts[0].trim();
+      var right = parts.slice(1).join('=').trim();
+      function depth(s) {
+        return (s.match(/\\sqrt\{/g) || []).length * 3 + (s.match(/[+\-]/g) || []).length;
+      }
+      if (depth(right) > depth(left)) {
+        right = right.replace(/\s+\d+\\sqrt\{\d+\}(?:\s*[+\-]\s*\d+\\sqrt\{\d+\})*\s*$/g, '').trim();
+        t = head + right;
+      } else {
+        left = left.replace(/^\d+\\sqrt\{\d+\}(?:\s*[+\-]\s*\d+\\sqrt\{\d+\})*\s*/g, '').trim();
+        if (/\\sqrt\{/.test(left) || /√/.test(left)) t = head + left;
+      }
+    }
+  })();
+
   // ========== 0. Pembagian pangkat residual (5⁶ : 5²) ==========
   t = t.replace(/(\d)\s+(\d)\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, '$1$3');
   t = t.replace(/(\d)\s+(\d)\s+\1\^\{(\2)\}/g, '$1^{$3}');
