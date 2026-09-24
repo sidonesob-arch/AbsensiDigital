@@ -1175,7 +1175,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <input type="text" id="editHadirKeyword" placeholder="Ketik nama atau NISN lalu klik Tampilkan" onkeydown="if(event.key==='Enter'){event.preventDefault();loadEditKehadiran();}">
             </div>
           </div>
-          <p style="font-size:11px;color:#666;margin:0 0 8px;">💡 Menampilkan <b>catatan absensi yang sama</b> seperti menu Cari Data Kehadiran (bukan daftar semua siswa). Gunakan ✏️ untuk mengubah TW/TL/Izin/Sakit/A/B, atau ➕ untuk menambah status yang terlewat.</p>
+          <p style="font-size:11px;color:#666;margin:0 0 8px;">💡 Sama seperti <b>Cari Data Kehadiran</b>: ketik nama/NISN (wajib jika tanpa tanggal). Hasil = catatan absensi nyata. ✏️ ubah status (mis. B→TW), ➕ tambah sesi, 🗑️ hapus.</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <button class="btn-primary" style="width:auto; padding:10px 22px;" onclick="loadEditKehadiran()">🔍 Tampilkan Data</button>
             <button class="btn-add" style="width:auto; padding:10px 18px;" onclick="openFormEditKehadiranBaru()">➕ Tambah / Ubah Manual</button>
@@ -2361,13 +2361,19 @@ function loadEditKehadiran() {
   const tglMulai = $('editHadirTglMulai').value;
   const tglSelesai = $('editHadirTglSelesai').value;
   const keyword = ($('editHadirKeyword')?.value || '').trim().toLowerCase();
-  if (!tglMulai || !tglSelesai) return showBigPopup('warning', 'Peringatan', 'Pilih rentang tanggal terlebih dahulu!');
+  // Tanggal opsional jika ada keyword (mirip Cari Data). Jika diisi, dipakai sebagai filter.
+  const kw = ($('editHadirKeyword')?.value || '').trim();
+  if (!kw && (!tglMulai || !tglSelesai)) {
+    return showBigPopup('warning', 'Peringatan', 'Isi kata kunci (nama/NISN) atau rentang tanggal terlebih dahulu!');
+  }
 
   showBigPopup('info', 'Memuat', '⏳ Mengambil data kehadiran...', 0);
   sendRequest({
     action: 'download_absensi',
-    role, kelas, tglMulai, tglSelesai,
-    keyword: ($('editHadirKeyword')?.value || '').trim()
+    role, kelas,
+    tglMulai: tglMulai || '',
+    tglSelesai: tglSelesai || '',
+    keyword: kw
   }, res => {
     closeBigPopup();
     const tbody = $('tableEditHadirBody');
