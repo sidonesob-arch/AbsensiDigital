@@ -453,7 +453,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 #loginModal, #loginSiswaModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 3000; }
 .modal-content { background: #fff; padding: 25px; border-radius: 10px; width: 90%; max-width: 350px; text-align: center; }
 
-.input-nilai-sm { width: 80px; text-align: center; padding: 8px 6px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; min-height: 36px; -webkit-appearance: none; }
+.input-nilai-sm { width: 70px; text-align: center; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
 .jadwal-header { background: #e8f0fe; padding: 12px 15px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 15px; }
 .jadwal-header h4 { margin: 0; color: var(--primary); font-size: 14px; }
 /* export-section defined above */
@@ -3367,146 +3367,55 @@ function loadInputNilaiData() {
   const mapel = $('filterInputNilaiMapel').value;
   const kelas = $('filterInputNilaiKelas').value;
   if (!mapel) return showBigPopup("warning", "Filter", "Pilih Mapel terlebih dahulu!");
-  let guru = ($('guruNamaDisplay').innerText || '').trim();
-  if ((!guru || guru === '-') && userRole === 'guru' && userData) {
-    guru = (userData.nama || '').trim();
-    if (guru) setText('guruNamaDisplay', guru);
-  }
+  const guru = $('guruNamaDisplay').innerText;
   sendRequest({ action: 'get_nilai', guru, mapel, kelas }, res => {
     const tbody = $('tableInputNilaiBody');
-    if (res.status === 'success' && res.data && res.data.length > 0) {
+    if (res.status === 'success' && res.data.length > 0) {
       currentInputNilaiList = res.data;
-      tbody.innerHTML = res.data.map((item, idx) => {
-        const nisn = String(item.nisn || '').replace(/"/g, '&quot;');
-        const nama = String(item.nama || '').replace(/</g, '&lt;');
-        const kls = String(item.kelas || '').replace(/</g, '&lt;');
-        return `<tr>
+      tbody.innerHTML = res.data.map((item, idx) => `<tr>
         <td>${idx + 1}</td>
-        <td><b>${nama}</b><br><small>NISN: ${nisn}</small></td>
-        <td>${kls}</td>
-        <td><input type="text" inputmode="decimal" class="input-nilai-sm" id="nilai_${idx}"
-          data-idx="${idx}" data-nisn="${nisn}" data-nama="${nama}" data-kelas="${kls}"
-          placeholder="0-100" autocomplete="off"
-          style="font-size:16px; min-height:36px; width:80px;"></td>
-      </tr>`;
-      }).join('');
-    } else {
-      currentInputNilaiList = [];
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada data siswa.</td></tr>';
-    }
+        <td><b>${item.nama}</b><br><small>NISN: ${item.nisn}</small></td>
+        <td>${item.kelas}</td>
+        <td><input type="number" step="any" class="input-nilai-sm" id="nilai_${idx}" placeholder="Nilai"></td>
+      </tr>`).join('');
+    } else tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada data siswa.</td></tr>';
   });
 }
-
-/** Normalisasi input nilai (koma → titik, buang spasi) */
-function normalizeNilaiInput(raw) {
-  if (raw == null) return '';
-  let s = String(raw).trim().replace(/\s+/g, '').replace(',', '.');
-  // buang karakter non-angka kecuali titik minus
-  s = s.replace(/[^0-9.\-]/g, '');
-  if (s === '' || s === '.' || s === '-') return '';
-  const n = parseFloat(s);
-  if (isNaN(n)) return '';
-  return String(n);
-}
-
 function simpanDataNilai() {
-  // PENTING di HP: blur dulu agar nilai di keyboard tersimpan ke input
-  try {
-    const ae = document.activeElement;
-    if (ae && typeof ae.blur === 'function') ae.blur();
-  } catch (e) {}
-
   let guru = ($('guruNamaDisplay').innerText || '').trim();
   // Fallback: ambil dari session guru jika display kosong/admin
   if ((!guru || guru === '-' || /^(admin|administrator|super admin)$/i.test(guru)) && userRole === 'guru' && userData) {
     guru = (userData.nama || '').trim();
     if (guru) setText('guruNamaDisplay', guru);
   }
-  const mapel = ($('filterInputNilaiMapel').value || '').trim();
-  let jenisNilai = ($('inputNamaJenisNilai').value || '').trim() || 'NH1';
-  jenisNilai = jenisNilai.replace(/\s+/g, ' ').trim();
-
+  const mapel = $('filterInputNilaiMapel').value;
+  const jenisNilai = ($('inputNamaJenisNilai').value || '').trim() || 'NH1';
   if (!guru || guru === '-' || /^(admin|administrator|super admin)$/i.test(guru)) {
     return showBigPopup("warning", "Peringatan", "Guru tidak teridentifikasi! Login sebagai Guru agar nama guru terisi otomatis.");
   }
   if (!mapel) return showBigPopup("warning", "Peringatan", "Pilih Mapel!");
-  if (!currentInputNilaiList.length) return showBigPopup("warning", "Peringatan", "Tidak ada daftar siswa! Klik Muat Data Siswa dulu.");
+  if (!currentInputNilaiList.length) return showBigPopup("warning", "Peringatan", "Tidak ada daftar siswa!");
+  let hasValue = false;
+  const payloadList = currentInputNilaiList.map((item, idx) => {
+    const val = $(`nilai_${idx}`).value;
+    if (val && val.trim() !== '') hasValue = true;
+    return { nisn: item.nisn, nama: item.nama, kelas: item.kelas, nilai: val || '' };
+  });
+  if (!hasValue) return showBigPopup("warning", "Peringatan", "Tidak ada nilai yang diisi!");
 
-  // Kumpulkan dari DOM (lebih andal di HP daripada hanya index array)
-  const payloadList = [];
-  const inputs = document.querySelectorAll('#tableInputNilaiBody input.input-nilai-sm, #tableInputNilaiBody input[id^="nilai_"]');
-  if (inputs.length) {
-    inputs.forEach((el) => {
-      const raw = el.value;
-      const nilai = normalizeNilaiInput(raw);
-      if (nilai === '') return; // hanya kirim yang terisi
-      const idx = parseInt(el.getAttribute('data-idx') || el.id.replace('nilai_', ''), 10);
-      const item = (!isNaN(idx) && currentInputNilaiList[idx]) ? currentInputNilaiList[idx] : null;
-      const nisn = el.getAttribute('data-nisn') || (item && item.nisn) || '';
-      const nama = el.getAttribute('data-nama') || (item && item.nama) || '';
-      const kelas = el.getAttribute('data-kelas') || (item && item.kelas) || '';
-      if (!nisn) return;
-      payloadList.push({ nisn: String(nisn), nama: String(nama), kelas: String(kelas), nilai: nilai });
-    });
-  } else {
-    // fallback index
-    currentInputNilaiList.forEach((item, idx) => {
-      const el = $('nilai_' + idx);
-      if (!el) return;
-      const nilai = normalizeNilaiInput(el.value);
-      if (nilai === '') return;
-      payloadList.push({ nisn: String(item.nisn), nama: String(item.nama), kelas: String(item.kelas), nilai: nilai });
-    });
-  }
-
-  if (!payloadList.length) {
-    return showBigPopup("warning", "Peringatan", "Tidak ada nilai yang diisi! Ketik nilai lalu ketuk Simpan (pastikan keyboard tertutup).");
-  }
-
-  const guruId = (userData && (userData.nip || userData.id)) ? String(userData.nip || userData.id) : '';
-
-  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan ' + payloadList.length + ' nilai ke database...', 0);
-  sendRequest({
-    action: 'save_nilai',
-    guru: guru,
-    guru_id: guruId,
-    nip: guruId,
-    mapel: mapel,
-    jenisNilai: jenisNilai,
-    listNilai: payloadList
-  }, res => {
-    const ok = res && (res.status === 'success' || res.status === 'warning');
-    let msg = (res && res.message) ? res.message : 'Selesai';
-    if (res && res.detail && res.detail.length) {
-      msg += '<br><small style="color:#666;">' + res.detail.slice(0, 8).join('<br>') + '</small>';
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan nilai ke database...', 0);
+  sendRequest({ action: 'save_nilai', guru, mapel, jenisNilai, listNilai: payloadList }, res => {
+    const ok = res.status === 'success' || res.status === 'warning';
+    let msg = res.message || 'Selesai';
+    if (res.detail && res.detail.length) {
+      msg += '<br><small style="color:#666;">' + res.detail.slice(0, 5).join('<br>') + '</small>';
     }
-    if (res && typeof res.verified === 'number') {
-      msg += '<br><small>Terverifikasi di DB: ' + res.verified + ' baris</small>';
+    if (typeof res.verified === 'number') {
+      msg += `<br><small>Terverifikasi di DB: ${res.verified} baris</small>`;
     }
-    if (res && typeof res.saved === 'number') {
-      msg += '<br><small>Tersimpan: ' + res.saved + ' / dikirim: ' + payloadList.length + '</small>';
-    }
-    if (!res || res.status === 'error') {
-      msg += '<br><small style="color:#991b1b;">Cek koneksi & pastikan login sebagai Guru. Jenis nilai: <b>' + jenisNilai + '</b>, Mapel: <b>' + mapel + '</b></small>';
-    }
-    showBigPopup(ok ? ((res.failed > 0) ? 'warning' : 'success') : 'danger', ok ? 'Hasil Simpan' : 'Gagal Simpan', msg);
-    if (res && (res.status === 'success' || res.status === 'warning') && (res.saved > 0 || res.inserted > 0 || res.updated > 0 || res.verified > 0)) {
-      // kosongkan input yang sudah tersimpan
-      document.querySelectorAll('#tableInputNilaiBody input.input-nilai-sm').forEach(el => { el.value = ''; });
-      // Auto-refresh Daftar Nilai agar langsung terlihat tanpa buka menu ulang
-      try {
-        if (typeof loadFilterDaftarNilaiWithGuru === 'function') {
-          // sinkronkan filter daftar dengan mapel yang baru disimpan
-          const selMapel = $('filterDaftarNilaiMapel');
-          if (selMapel && mapel) {
-            const opt = Array.from(selMapel.options).find(o => o.value === mapel);
-            if (opt) selMapel.value = mapel;
-          }
-        }
-        if (typeof loadDaftarNilaiData === 'function') {
-          setTimeout(() => loadDaftarNilaiData(), 400);
-        }
-      } catch (e) { console.warn('refresh daftar nilai', e); }
+    showBigPopup(ok ? (res.failed > 0 ? 'warning' : 'success') : 'danger', ok ? 'Hasil Simpan' : 'Gagal Simpan', msg);
+    if (res.status === 'success') {
+      currentInputNilaiList.forEach((_, idx) => { const el = $(`nilai_${idx}`); if (el) el.value = ''; });
     }
   });
 }
@@ -5578,6 +5487,7 @@ function hapusResidualDiEditorSoal() {
   if (!quill) return showBigPopup('warning', 'Info', 'Editor soal belum aktif.');
   try {
     applyResidualCleanToQuill(quill);
+    // Juga bersihkan opsi jika ada
     document.querySelectorAll('#fmSoalOpsiList .fm-opsi-row').forEach(row => {
       if (row._quill) {
         try { applyResidualCleanToQuill(row._quill, true); } catch (e) {}
@@ -5590,7 +5500,7 @@ function hapusResidualDiEditorSoal() {
   }
 }
 
-/** Bersihkan residual di editor Quill — plain full-text agar konteks residual utuh */
+/** Bersihkan residual di editor Quill: plain full-text agar konteks angka residual utuh */
 function applyResidualCleanToQuill(quill, isOpsi) {
   if (!quill) return false;
   const cleanFn = function (x) {
@@ -5612,6 +5522,7 @@ function applyResidualCleanToQuill(quill, isOpsi) {
     }
     return cleaned !== selected;
   }
+  // Full content: konversi HTML → plain editable → clean → set ulang sebagai plain
   let plain = '';
   try {
     if (typeof formulaHtmlToEditableText === 'function') {
@@ -5623,6 +5534,7 @@ function applyResidualCleanToQuill(quill, isOpsi) {
     plain = (quill.getText() || '').replace(/\n$/, '');
   }
   const cleaned = cleanFn(plain);
+  // Set sebagai plain text agar residual benar-benar hilang (bukan per-node)
   const len = quill.getLength();
   quill.deleteText(0, Math.max(0, len - 1), 'user');
   if (cleaned) quill.insertText(0, cleaned, 'user');
@@ -5967,10 +5879,7 @@ async function rapikanSemuaSoalUjian() {
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
     try {
-      let pertanyaan = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      if (typeof repairCorruptedSqrtText === 'function') pertanyaan = repairCorruptedSqrtText(pertanyaan);
-      if (typeof stripResidualDigitsAroundMath === 'function') pertanyaan = stripResidualDigitsAroundMath(pertanyaan);
-      pertanyaan = deepCleanSoalText(pertanyaan);
+      let pertanyaan = deepCleanSoalText(String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
       // jika hasil masih jelek tapi ada nested, biarkan deepClean
       if (typeof plainMathToKatexHtml === 'function' && /\\sqrt|√|\^\{/.test(pertanyaan)) {
         const k = plainMathToKatexHtml(pertanyaan);
@@ -7191,34 +7100,40 @@ function resplitMergedOpsi(opsiList) {
   return final.length ? final : opsiList;
 }
 
-/** Bersihkan residual ekstrem pada soal esai/akar + residual digit umum */
+/** Bersihkan residual ekstrem pada soal esai/akar (Hitunglah / Sederhanakan) + residual digit umum */
 function deepCleanSoalText(s) {
   if (s == null || s === '') return s;
   let t = String(s);
+  // Buang tanda ! residual di akhir (sering dari Word/OCR)
   t = t.replace(/\s*!\s*$/g, '').trim();
-  if (typeof repairCorruptedSqrtText === 'function') t = repairCorruptedSqrtText(t);
-  if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
+  t = repairCorruptedSqrtText(t);
+  t = stripResidualDigitsAroundMath(t);
   t = t.replace(/\s{2,}/g, ' ').trim();
 
+  // --- Ekstrak token math yang valid, susun ulang soal Hitunglah/Sederhanakan/Hasil dari ---
   (function rebuildFromTokens() {
     const headMatch = t.match(/^((?:Hitunglah(?:\s+nilai\s+dari)?|Sederhanakan(?:\s+dan\s+hitunglah)?|Sederhanakan\s+bentuk|Hasil\s+dari|Nilai\s+dari|Bentuk\s+sederhana\s+dari)\s+)(.+)$/i);
     if (!headMatch) return;
     const head = headMatch[1];
     let body = headMatch[2].replace(/\s*!\s*$/g, '').trim();
+    // potong tail "adalah ...."
     const tailMatch = body.match(/^(.*?)(\s+adalah\b.*)$/i);
     let tail = '';
     if (tailMatch) { body = tailMatch[1].trim(); tail = tailMatch[2]; }
 
+    // Token bagus: 2⁴ 3^{2} √18 2√3 \sqrt{18} 2\sqrt{5} (√8)^{4} × : + -
     const tokenRe = /(\(\s*\\sqrt\{\d+\}\s*\)\s*\^\{\d+\}|\(\s*√\d+\s*\)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+\^\{\d+\}|\(\d+\^\{\d+\}\)\^\{\d+\}|\d*\\sqrt\{\d+\}|\d*√\d+|\\sqrt\{\d+\}|√\d+|[×÷:+\-])/g;
     const raw = [];
     let m;
     while ((m = tokenRe.exec(body)) !== null) raw.push(m[1].replace(/\s+/g, ''));
     if (raw.length < 1) return;
 
+    // Normalisasi token
     const norm = raw.map(function (x) {
       if (/^[×÷:+\-]$/.test(x)) return x;
       x = x.replace(/√(\d+)/g, '\\sqrt{$1}');
       x = x.replace(/(\d+)√(\d+)/g, '$1\\sqrt{$2}');
+      // unicode sup → latex
       const map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
       x = x.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b, s) {
         return b + '^{' + s.split('').map(function (c) { return map[c] || ''; }).join('') + '}';
@@ -7229,6 +7144,7 @@ function deepCleanSoalText(s) {
       return x;
     });
 
+    // Susun: angka/rumus diselingi operator; buang operator dobel & residual berulang
     const out = [];
     let lastWasOp = true;
     for (let i = 0; i < norm.length; i++) {
@@ -7269,15 +7185,15 @@ function deepCleanSoalText(s) {
     if (pretty.length >= 2) t = head + pretty + (tail || '');
   })();
 
-  if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
+  t = stripResidualDigitsAroundMath(t);
   t = t.replace(/\s*!\s*$/g, '').trim();
   return t.replace(/\s{2,}/g, ' ').trim();
 }
 
 /**
  * Hapus angka residu di sekitar token akar/pangkat.
- * "2√3 2 3" → "2√3", "√18 18" → "√18", "4² 4 2" → "4²",
- * "4² × 4³ 4 2 4 3" → "4² × 4³", "(5²)² (5²)2" → "(5²)²"
+ * Contoh: "2√3 2 3" → "2√3", "√18 18" → "√18", "4² 4 2" → "4²",
+ * "2√3 2 3 2√3 2 3" → "2√3", "4² × 4³ 4 2 4 3" → "4² × 4³"
  */
 function stripResidualDigitsAroundMath(s) {
   if (s == null || s === '') return s;
@@ -7288,24 +7204,29 @@ function stripResidualDigitsAroundMath(s) {
     return String(n).split('').map(function (d) { return m[d] || d; }).join('');
   };
 
-  for (let r = 0; r < 8; r++) {
+  // Ulangan identik token math (dengan residual digit di antaranya)
+  for (let r = 0; r < 6; r++) {
     const before = t;
 
-    // coef√rad + residual digits
-    t = t.replace(/(\d+)\s*√\s*(\d+)((?:\s+\d+){1,16})/g, function (full, coef, rad, rest) {
+    // --- Akar: coef√rad / √rad / coef\sqrt{rad} ---
+    // "2√3 2 3" / "2√3 2 3 2 3"
+    t = t.replace(/(\d+)\s*√\s*(\d+)((?:\s+\d+){1,12})/g, function (full, coef, rad, rest) {
       const coreDigs = coef + rad;
       const nums = rest.trim().split(/\s+/).filter(Boolean);
       if (!nums.length) return full;
       if (nums.every(function (n) {
         return n === coef || n === rad || n === coreDigs ||
           (n.length <= coreDigs.length && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
-      })) return coef + '√' + rad;
+      })) {
+        return coef + '√' + rad;
+      }
+      // potong prefix residual saja
       let i = 0;
       while (i < nums.length && (nums[i] === coef || nums[i] === rad || nums[i] === coreDigs)) i++;
       if (i > 0) return coef + '√' + rad + (i < nums.length ? ' ' + nums.slice(i).join(' ') : '');
       return full;
     });
-    t = t.replace(/(\d*)\\sqrt\{(\d+)\}((?:\s+\d+){1,16})/g, function (full, coef, rad, rest) {
+    t = t.replace(/(\d*)\\sqrt\{(\d+)\}((?:\s+\d+){1,12})/g, function (full, coef, rad, rest) {
       const c = coef || '';
       const coreDigs = c + rad;
       const nums = rest.trim().split(/\s+/).filter(Boolean);
@@ -7313,91 +7234,105 @@ function stripResidualDigitsAroundMath(s) {
       if (nums.every(function (n) {
         return n === c || n === rad || n === coreDigs ||
           (n.length <= Math.max(coreDigs.length, 1) && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
-      })) return (c ? c : '') + '\\sqrt{' + rad + '}';
+      })) {
+        return (c ? c : '') + '\\sqrt{' + rad + '}';
+      }
       return full;
     });
-    // √18 18
+    // "√18 18" / "√(18) 18"
     t = t.replace(/√\s*\(?\s*(\d+)\s*\)?((?:\s+\1)+)/g, '√$1');
     t = t.replace(/\\sqrt\{(\d+)\}((?:\s+\1)+)/g, '\\sqrt{$1}');
-    // leading residual: 2 3 2√3
-    t = t.replace(/((?:\d+\s+){1,10})(\d+)\s*√\s*(\d+)/g, function (full, lead, coef, rad) {
+    // leading residual: "2 3 2√3" → "2√3"
+    t = t.replace(/((?:\d+\s+){1,8})(\d+)\s*√\s*(\d+)/g, function (full, lead, coef, rad) {
       const coreDigs = coef + rad;
       const nums = lead.trim().split(/\s+/).filter(Boolean);
       if (nums.length && nums.every(function (n) {
         return n === coef || n === rad || n === coreDigs ||
           [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; });
-      })) return coef + '√' + rad;
+      })) {
+        return coef + '√' + rad;
+      }
       return full;
     });
-    t = t.replace(/((?:\d+\s+){1,10})(\d*)\\sqrt\{(\d+)\}/g, function (full, lead, coef, rad) {
+    t = t.replace(/((?:\d+\s+){1,8})(\d*)\\sqrt\{(\d+)\}/g, function (full, lead, coef, rad) {
       const c = coef || '';
       const coreDigs = c + rad;
       const nums = lead.trim().split(/\s+/).filter(Boolean);
       if (nums.length && nums.every(function (n) {
         return n === c || n === rad || n === coreDigs ||
           (coreDigs && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
-      })) return (c ? c : '') + '\\sqrt{' + rad + '}';
+      })) {
+        return (c ? c : '') + '\\sqrt{' + rad + '}';
+      }
       return full;
     });
-    // 18√18 → √18
-    t = t.replace(/\b(\d+)\s*√\s*\1\b/g, '√$1');
-    t = t.replace(/\b(\d+)\\sqrt\{\1\}/g, '\\sqrt{$1}');
 
-    // power unicode residual: 2⁵ 2 5
-    t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,16})/g, function (full, base, sup, rest) {
+    // --- Pangkat unicode: "2⁵ 2 5" / "4² 4 2" ---
+    t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,12})/g, function (full, base, sup, rest) {
       const exp = [...sup].map(function (c) { return supMap[c] || ''; }).join('');
       const nums = rest.trim().split(/\s+/).filter(Boolean);
       if (!nums.length) return full;
       if (nums.every(function (n) {
         return n === base || n === exp || n === (base + exp) ||
           [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
-      })) return base + sup;
+      })) {
+        return base + sup;
+      }
       let i = 0;
       while (i < nums.length && (nums[i] === base || nums[i] === exp || nums[i] === (base + exp))) i++;
       if (i > 0) return base + sup + (i < nums.length ? ' ' + nums.slice(i).join(' ') : '');
       return full;
     });
-    t = t.replace(/(\d+)\^\{(\d+)\}((?:\s+\d+){1,16})/g, function (full, base, exp, rest) {
+    // latex pangkat: "2^{5} 2 5"
+    t = t.replace(/(\d+)\^\{(\d+)\}((?:\s+\d+){1,12})/g, function (full, base, exp, rest) {
       const nums = rest.trim().split(/\s+/).filter(Boolean);
       if (!nums.length) return full;
       if (nums.every(function (n) {
         return n === base || n === exp || n === (base + exp) ||
           [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
-      })) return base + '^{' + exp + '}';
+      })) {
+        return base + '^{' + exp + '}';
+      }
       return full;
     });
-    // leading before power
-    t = t.replace(/((?:\d+\s+){1,10})(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (full, lead, base, sup) {
+    // leading residual sebelum pangkat: "2 5 2⁵"
+    t = t.replace(/((?:\d+\s+){1,8})(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (full, lead, base, sup) {
       const exp = [...sup].map(function (c) { return supMap[c] || ''; }).join('');
       const nums = lead.trim().split(/\s+/).filter(Boolean);
       if (nums.length && nums.every(function (n) {
         return n === base || n === exp || n === (base + exp) ||
           [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
-      })) return base + sup;
+      })) {
+        return base + sup;
+      }
       return full;
     });
-    t = t.replace(/((?:\d+\s+){1,10})(\d+)\^\{(\d+)\}/g, function (full, lead, base, exp) {
+    t = t.replace(/((?:\d+\s+){1,8})(\d+)\^\{(\d+)\}/g, function (full, lead, base, exp) {
       const nums = lead.trim().split(/\s+/).filter(Boolean);
       if (nums.length && nums.every(function (n) {
         return n === base || n === exp || n === (base + exp) ||
           [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
-      })) return base + '^{' + exp + '}';
+      })) {
+        return base + '^{' + exp + '}';
+      }
       return full;
     });
 
-    // nested power
+    // Nested power residual: "(5²)² (5²)2" / "(5²)2 (5²)²"
     t = t.replace(/(\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)\s*\d*)+/g, '$1');
     t = t.replace(/(\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\1)+/g, '$1');
     t = t.replace(/\((\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\)\s*(\d)\b(?:\s+\(\1\)\s*\2)*/g, function (_, inner, exp) {
       return '(' + inner + ')' + toSup(exp);
     });
 
-    // √25 + √16 25 + 16
+    // "18 √18" / "18√18" → "√18" (coef sama radicand = residual)
+    t = t.replace(/\b(\d+)\s*√\s*\1\b/g, '√$1');
+    t = t.replace(/\b(\d+)\\sqrt\{\1\}/g, '\\sqrt{$1}');
+    // "√25 + √16 25 + 16" residual plain di belakang pasangan akar
     t = t.replace(/(√\s*\d+(?:\s*[+\-]\s*√\s*\d+)+)(?:\s+\d+(?:\s*[+\-]\s*\d+)+)+/g, '$1');
     t = t.replace(/(\\sqrt\{\d+\}(?:\s*[+\-]\s*\\sqrt\{\d+\})+)(?:\s+\d+(?:\s*[+\-]\s*\d+)+)+/g, '$1');
-
-    // residual after A × B powers
-    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*([×xX*·+\-÷:])\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,12})/g, function (full, a, op, b, rest) {
+    // residual digit setelah "A × B" power pair
+    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*([×xX*·+\-÷:])\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,10})/g, function (full, a, op, b, rest) {
       var sa = a.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
       var sb = b.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
       var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
@@ -7411,32 +7346,35 @@ function stripResidualDigitsAroundMath(s) {
       return full;
     });
 
-    // duplicate tokens
+    // Ulangan penuh token: "2√3 2√3" / "4² × 4³ 4² × 4³"
     t = t.replace(/(\d+\s*√\s*\d+)(?:\s+\1)+/g, '$1');
     t = t.replace(/(\d*\\sqrt\{\d+\})(?:\s+\1)+/g, '$1');
     t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+(?:\s*[×xX*·+\-÷:]\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)*)(?:\s+\1)+/g, '$1');
     t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·+\-÷:]\s*\d+\^\{\d+\})*)(?:\s+\1)+/g, '$1');
 
-    // between operator residual
+    // Residual di antara operator: "4² 4 2 × 4³ 4 3" → "4² × 4³"
     t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s+\1\s+(\d)\s*([×xX*·+\-÷:])\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b1, s1, dig, op, b2, s2) {
       const exp1 = [...s1].map(function (c) { return supMap[c] || ''; }).join('');
       if (dig === exp1 || dig === b1) return b1 + s1 + ' ' + op + ' ' + b2 + s2;
       return b1 + s1 + ' ' + b1 + ' ' + dig + ' ' + op + ' ' + b2 + s2;
     });
-    t = t.replace(/(\d+)\s*√\s*(\d+)\s*([×xX*·+\-÷:])\s*(\d+)\s*√\s*(\d+)(?:\s+\d+){1,10}/g, function (full, c1, r1, op, c2, r2) {
+    t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*([×xX*·+\-÷:])\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s+\1\s+\d+\s*\3\s+\4\s+\d+/g, '$1$2 $3 $4$5');
+    t = t.replace(/(\d+)\s*√\s*(\d+)\s*([×xX*·+\-÷:])\s*(\d+)\s*√\s*(\d+)(?:\s+\d+){1,8}/g, function (full, c1, r1, op, c2, r2) {
       const core = c1 + r1 + c2 + r2;
-      const base = c1 + '√' + r1 + ' ' + op + ' ' + c2 + '√' + r2;
-      const trail = full.slice(base.length);
+      const trail = full.slice((c1 + '√' + r1 + ' ' + op + ' ' + c2 + '√' + r2).length);
       const nums = trail.trim().split(/\s+/).filter(Boolean);
       if (nums.length && nums.every(function (n) {
         return [...n].every(function (d) { return core.indexOf(d) >= 0; });
-      })) return base;
+      })) {
+        return c1 + '√' + r1 + ' ' + op + ' ' + c2 + '√' + r2;
+      }
       return full;
     });
 
     if (t === before) break;
   }
 
+  // "dari√" spacing
   t = t.replace(/dari√/gi, 'dari √');
   t = t.replace(/dari\\sqrt/gi, 'dari \\sqrt');
   t = t.replace(/\s{2,}/g, ' ').trim();
