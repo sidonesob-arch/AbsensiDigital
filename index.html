@@ -710,10 +710,13 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <div class="nav-category">DASHBOARD</div>
     <a class="nav-item active" data-menu="dashboard" onclick="switchMenu('dashboard', this)">🏠 Dashboard Utama</a>
 
-    <div class="nav-category">ORANG TUA / TAMU</div>
+    <div class="nav-category">ORANG TUA / SISWA</div>
     <a class="nav-item" data-menu="cari" onclick="switchMenu('cari', this)">🔍 Cari Data Siswa</a>
     <a class="nav-item" data-menu="siswa-fingerprint" onclick="switchMenu('siswa-fingerprint', this)">👆 Sidik Jari Siswa</a>
+    <a class="nav-item" data-menu="lihat-nilai-saya" onclick="switchMenu('lihat-nilai-saya', this)">📊 Lihat Nilai Saya</a>
     <a class="nav-item" data-menu="cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
+    <a class="nav-item" data-menu="ujian-siswa" onclick="switchMenu('ujian-siswa', this)">🖊️ Kerjakan Ujian</a>
+    <a class="nav-item" data-menu="kelulusan" onclick="switchMenu('kelulusan', this)">🎓 Kelulusan</a>
 
     <div class="nav-category">MENU UTAMA</div>
     <a class="nav-item" data-menu="scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
@@ -731,9 +734,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" data-menu="daftar-nilai" onclick="checkMenuAccess('daftar-nilai', this)">📋 Daftar Nilai</a>
     <a class="nav-item" data-menu="ujian-kelola" onclick="checkMenuAccess('ujian-kelola', this)">📝 Kelola Ujian</a>
     <a class="nav-item" data-menu="download-absensi" onclick="checkMenuAccess('download-absensi', this)">⬇️ Download Absensi</a>
-    <a class="nav-item" data-menu="kelulusan" onclick="checkMenuAccess('kelulusan', this)">🎓 Kelulusan</a>
-    <div class="nav-category">UJIAN SISWA</div>
-    <a class="nav-item" data-menu="ujian-siswa" onclick="switchMenu('ujian-siswa', this)">🖊️ Kerjakan Ujian</a>
   </div>
 
   <div class="content-container" id="appContent">
@@ -843,6 +843,37 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     </div>
 
     <!-- CEK SYARAT -->
+    <!-- LIHAT NILAI SAYA -->
+    <div id="menu-lihat-nilai-saya" class="section">
+      <h3 style="color:var(--primary); font-size:15px; margin-top:0;">📊 Lihat Nilai Saya</h3>
+      <div id="nilaiSayaLoginHint" style="background:#fff3cd; padding:14px; border-radius:8px; margin-bottom:14px; font-size:13px; border-left:4px solid #f59e0b;">
+        Login sebagai <b>Siswa</b> terlebih dahulu (menu profil → Login Siswa) untuk melihat nilai Anda.
+      </div>
+      <div id="nilaiSayaContent" style="display:none;">
+        <div style="background:#fff; border-radius:10px; padding:14px; border:1px solid var(--border-light); margin-bottom:12px;">
+          <div style="font-size:13px; color:var(--primary); font-weight:700;" id="nilaiSayaHeaderNama">-</div>
+          <div style="font-size:11px; color:var(--muted); margin-top:2px;" id="nilaiSayaHeaderMeta">-</div>
+        </div>
+        <div class="table-responsive">
+          <table id="tableNilaiSaya">
+            <thead>
+              <tr>
+                <th style="width:36px;">No</th>
+                <th>Mata Pelajaran</th>
+                <th style="width:70px;">Kode</th>
+                <th style="width:90px; text-align:center;">Rata-rata</th>
+                <th style="width:70px; text-align:center;">Jumlah</th>
+              </tr>
+            </thead>
+            <tbody id="tableNilaiSayaBody">
+              <tr><td colspan="5" style="text-align:center; color:#666;">Memuat...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:11px; color:#64748b; margin-top:10px;">Rata-rata dihitung dari seluruh jenis nilai (UH, PTS, PAS, dll.) yang sudah tercatat per mapel.</p>
+      </div>
+    </div>
+
     <div id="menu-cek-syarat" class="section">
       <h3 style="color:var(--primary); font-size:15px;">🎓 Cek Syarat Naik Kelas / Lulus</h3>
       <div id="syaratBelumLogin" class="syarat-empty">
@@ -1807,6 +1838,8 @@ function submitLoginSiswa() {
       updateSiswaUI();
       setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
       updateTopbarUserInfo();
+      if (typeof loadNilaiSaya === "function" && $("menu-lihat-nilai-saya") && $("menu-lihat-nilai-saya").classList.contains("active")) loadNilaiSaya();
+      if (typeof loadUjianTersediaSiswa === "function" && $("menu-ujian-siswa") && $("menu-ujian-siswa").classList.contains("active")) loadUjianTersediaSiswa();
       updateSyaratAccessUI();
       const msg = res.fingerprintAllowed === false
         ? ('Selamat datang, ' + res.nama + '!\n\nCatatan: izin absensi sidik jari Anda sedang dinonaktifkan. Hubungi admin bila perlu.')
@@ -2116,6 +2149,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'ujian-siswa') loadUjianTersediaSiswa();
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
+  if (menuName === 'lihat-nilai-saya') loadNilaiSaya();
   if (menuName === 'download-absensi') initDownloadAbsensi();
   if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
   if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
@@ -2934,6 +2968,78 @@ function updateSyaratAccessUI() {
     content.style.display = 'none';
   }
 }
+
+// ===================== LIHAT NILAI SAYA =====================
+const MAPEL_NILAI_ORDER = [
+  { code: 'PAI', label: 'Pendidikan Agama Islam', aliases: ['pai', 'pendidikan agama islam', 'pendidikan agama', 'agama islam', 'agama'] },
+  { code: 'B. IND', label: 'Bahasa Indonesia', aliases: ['b. ind', 'b.ind', 'b ind', 'bahasa indonesia', 'bindo', 'indo'] },
+  { code: 'PP', label: 'Pendidikan Pancasila', aliases: ['pp', 'pendidikan pancasila', 'pancasila', 'ppkn', 'pkn', 'pendidikan kewarganegaraan'] },
+  { code: 'MTK', label: 'Matematika', aliases: ['mtk', 'matematika', 'math', 'mat'] },
+  { code: 'IPA', label: 'Ilmu Pengetahuan Alam', aliases: ['ipa', 'ilmu pengetahuan alam', 'sains'] },
+  { code: 'IPS', label: 'Ilmu Pengetahuan Sosial', aliases: ['ips', 'ilmu pengetahuan sosial'] },
+  { code: 'B. ING', label: 'Bahasa Inggris', aliases: ['b. ing', 'b.ing', 'b ing', 'bahasa inggris', 'english', 'bing'] },
+  { code: 'PENJAS', label: 'Pendidikan Jasmani', aliases: ['penjas', 'pjok', 'pendidikan jasmani', 'olahraga', 'penjaskes'] },
+  { code: 'TIK', label: 'Informatika', aliases: ['tik', 'informatika', 'komputer', 't.i.k'] },
+  { code: 'PKR', label: 'Seni Budaya & Prakarya', aliases: ['pkr', 'sbdp', 'seni budaya', 'seni budaya & prakarya', 'seni budaya dan prakarya', 'prakarya', 'senbud'] },
+  { code: 'B. SND', label: 'Bahasa Sunda', aliases: ['b. snd', 'b.snd', 'b snd', 'bahasa sunda', 'sunda'] },
+];
+
+function matchMapelOrder(mapelName) {
+  const n = String(mapelName || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (!n) return -1;
+  for (let i = 0; i < MAPEL_NILAI_ORDER.length; i++) {
+    const m = MAPEL_NILAI_ORDER[i];
+    if (m.aliases.some(a => n === a || n.includes(a) || a.includes(n))) return i;
+  }
+  return -1;
+}
+
+function loadNilaiSaya() {
+  const hint = $('nilaiSayaLoginHint');
+  const content = $('nilaiSayaContent');
+  if (!siswaUserData || !siswaUserData.nisn) {
+    if (hint) hint.style.display = 'block';
+    if (content) content.style.display = 'none';
+    return;
+  }
+  if (hint) hint.style.display = 'none';
+  if (content) content.style.display = 'block';
+  setText('nilaiSayaHeaderNama', siswaUserData.nama || 'Siswa');
+  setText('nilaiSayaHeaderMeta', 'NISN: ' + (siswaUserData.nisn || '-') + ' · Kelas: ' + (siswaUserData.kelas || '-'));
+  const tbody = $('tableNilaiSayaBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666;">⏳ Memuat nilai...</td></tr>';
+  sendRequest({ action: 'get_nilai_siswa', nisn: siswaUserData.nisn }, res => {
+    if (!tbody) return;
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#b91c1c;">${res.message || 'Gagal memuat nilai'}</td></tr>`;
+      return;
+    }
+    const rows = res.data || [];
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666;">Belum ada nilai tercatat.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((r, i) => {
+      const avg = r.rata_rata != null ? Number(r.rata_rata).toFixed(2) : '-';
+      const avgNum = parseFloat(avg);
+      let color = 'var(--primary)';
+      if (!isNaN(avgNum)) {
+        if (avgNum >= 80) color = '#16a34a';
+        else if (avgNum >= 70) color = '#0d9488';
+        else if (avgNum < 60) color = '#dc2626';
+        else color = '#b45309';
+      }
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><b>${r.label || r.mapel || '-'}</b></td>
+        <td><span class="tag-mini">${r.code || '-'}</span></td>
+        <td style="text-align:center; font-weight:800; font-size:14px; color:${color};">${avg}</td>
+        <td style="text-align:center;">${r.jumlah || 0}</td>
+      </tr>`;
+    }).join('');
+  });
+}
+
 function loadCekSyarat() {
   updateSyaratAccessUI();
   if (!siswaUserData || !siswaUserData.nisn) return;
