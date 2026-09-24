@@ -6867,97 +6867,166 @@ function repairCorruptedSqrtText(s) {
   t = t.replace(/[\u00A0\u2000-\u200B\u202F\u205F]/g, ' ');
   t = t.replace(/\s{2,}/g, ' ').trim();
 
-  // ===== A) Pola EXACT dari Word residual (screenshot) =====
-  // "12 12 √(12)" / "12 12 √12" / "12 12 \sqrt{12}" → "√12"
+  const supMap = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+  const toSup = function (n) {
+    return String(n).split('').map(function (d) { return ({ '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' })[d] || d; }).join('');
+  };
+
+  // ========== 1. Akar: residual angka di depan/belakang ==========
+  // "12 12 √(12)" / "12 √12" → "√12"
   t = t.replace(/(\d+)(?:\s+\1)+\s*√\s*\(?\s*\1\s*\)?/g, '√$1');
+  t = t.replace(/(\d+)\s+√\s*\(?\s*\1\s*\)?/g, '√$1');
   t = t.replace(/(\d+)(?:\s+\1)+\s*\\sqrt\{\1\}/g, '\\sqrt{$1}');
-  // "25 + 16 25 √(25) + 16 √(16)" → "√25 + √16"
-  t = t.replace(/(\d+)\s*\+\s*(\d+)\s+\1\s*√\s*\(?\s*\1\s*\)?\s*\+\s*\2\s*√\s*\(?\s*\2\s*\)?/g, '√$1 + √$2');
-  t = t.replace(/(\d+)\s*\+\s*(\d+)\s+\1\s*\\sqrt\{\1\}\s*\+\s*\2\s*\\sqrt\{\2\}/g, '\\sqrt{$1} + \\sqrt{$2}');
-  // "25 √(25)" / "25 √25" → "√25"
-  t = t.replace(/(\d+)\s*√\s*\(?\s*\1\s*\)?/g, '√$1');
-  t = t.replace(/(\d+)\s*\\sqrt\{\1\}/g, '\\sqrt{$1}');
-  // "√(25) 25" / "√25 25" → "√25"
+  t = t.replace(/(\d+)\s+\\sqrt\{\1\}/g, '\\sqrt{$1}');
+  // "√(12) 12" / "√12 12"
   t = t.replace(/√\s*\(?\s*(\d+)\s*\)?\s+\1\b/g, '√$1');
   t = t.replace(/\\sqrt\{(\d+)\}\s+\1\b/g, '\\sqrt{$1}');
 
-  // ===== B) Pangkat residual: "4 2 4²" / "4 2 4^{2}" / "2 5 2 5 2⁵" → "4^{2}" / "2^{5}" =====
-  const supMap = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
-  // "2 5 2 5 2⁵" atau "2 5 2⁵"
-  t = t.replace(/(\d)(?:\s+(\d))+\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, base, _e, sup) {
-    return base + '^{' + (supMap[sup] || '') + '}';
-  });
-  t = t.replace(/(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?/g, '$1^{$2}');
-  t = t.replace(/(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])/g, function (_, a, b, sup) {
-    return a + '^{' + (supMap[sup] || b) + '}';
-  });
-  // "4 2 × 4 3 4² × 4³" → "4^{2} × 4^{3}"
-  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?\s*\3\s*\4\s*\^\s*\{?\5\}?/g,
-    '$1^{$2} $3 $4^{$5}');
-  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])\s*\3\s*\4([²³⁴⁵⁶⁷⁸⁹])/g,
-    function (_, a, b, op, c, d, s1, s2) {
-      return a + '^{' + (supMap[s1] || b) + '} ' + op + ' ' + c + '^{' + (supMap[s2] || d) + '}';
-    });
-  // "4 2 × 4 3" diikuti "4² × 4³" sudah tertangani; jika hanya "4 2 × 4 3 4 2 × 4 3" → "4^{2} × 4^{3}"
-  t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)(?:\s+\1\s+\2\s*\3\s*\4\s+\5)*/g, '$1^{$2} $3 $4^{$5}');
-  // Sisa "4 2⁴ × 4 3⁴" → "4^{2} × 4^{3}" (angka di depan superscript)
-  t = t.replace(/(\d)\s+(\d)([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, a, b, sup) {
-    return a + '^{' + (supMap[sup] || b) + '}';
-  });
-  t = t.replace(/(\d)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, base, sups) {
-    return base + '^{' + sups.split('').map(c => supMap[c] || '').join('') + '}';
-  });
+  // "25 + 16 √(25) + √(16) 25 + 16 ..." → "√25 + √16"
+  // Angka plain di depan yang sama dengan isi akar, lalu diulang di belakang
+  t = t.replace(
+    /(\d+)\s*\+\s*(\d+)\s+√\s*\(?\s*\1\s*\)?\s*\+\s*√\s*\(?\s*\2\s*\)?(?:\s+\1\s*\+\s*\2)*(?:\s+\1)?(?:\s+\2)?/g,
+    '√$1 + √$2'
+  );
+  t = t.replace(
+    /(\d+)\s*\+\s*(\d+)\s+\\sqrt\{\1\}\s*\+\s*\\sqrt\{\2\}(?:\s+\1\s*\+\s*\2)*/g,
+    '\\sqrt{$1} + \\sqrt{$2}'
+  );
+  // "√(25) + √(16) 25 + 16" / "√25 + √16 25 + 16"
+  t = t.replace(
+    /√\s*\(?\s*(\d+)\s*\)?\s*\+\s*√\s*\(?\s*(\d+)\s*\)?(?:\s+\1\s*\+\s*\2)+/g,
+    '√$1 + √$2'
+  );
+  t = t.replace(
+    /\\sqrt\{(\d+)\}\s*\+\s*\\sqrt\{(\d+)\}(?:\s+\1\s*\+\s*\2)+/g,
+    '\\sqrt{$1} + \\sqrt{$2}'
+  );
+  // "25 + 16 √25 + 16 √16" (√ tanpa kurung, residual di depan)
+  t = t.replace(
+    /(\d+)\s*\+\s*(\d+)\s+√\s*\1\s*\+\s*(?:\2\s+)?√\s*\2(?:\s+\1\s*\+\s*\2)*/g,
+    '√$1 + √$2'
+  );
 
-  // ===== C) "4√3 4 3" / "4 √(3) 4 3" → "4√3" =====
-  t = t.replace(/(\d+)\s*√\s*\(?\s*(\d+)\s*\)?\s+\1\s+\2\b/g, '$1√$2');
-  t = t.replace(/(\d+)\\sqrt\{(\d+)\}\s+\1\s+\2\b/g, '$1\\sqrt{$2}');
+  // ========== 2. Pangkat dobel: "4² × 4³ 4² × 4³" → "4² × 4³" ==========
+  // Samakan unicode / latex dulu
+  t = t.replace(/(\d+)\^\{(\d+)\}/g, function (_, a, b) { return a + toSup(b); });
+  t = t.replace(/(\d+)\^(\d)/g, function (_, a, b) { return a + toSup(b); });
 
-  // ===== D) Bersihkan \left \right yang bocor jadi teks + residu digit =====
-  // "(( 5 2 ) 2 (left( 5 2 5² )right)^2)" → "(5^{2})^{2}"
-  t = t.replace(/\\left\s*\(/g, '(');
-  t = t.replace(/\\right\s*\)/g, ')');
-  t = t.replace(/\bleft\s*\(/gi, '(');
-  t = t.replace(/\bright\s*\)/gi, ')');
-  // "(5 2)^2" / "( 5 2 ) 2" / "(5 2 5²)" → "(5^{2})"
-  t = t.replace(/\(\s*(\d)\s+(\d)\s*\)\s*\^?\s*\{?(\d)?\}?/g, function (_, a, b, e) {
-    if (e) return '(' + a + '^{' + b + '})^{' + e + '}';
-    return '(' + a + '^{' + b + '})';
-  });
-  t = t.replace(/\(\s*(\d)\s+(\d)\s+\1\s*\^\s*\{?\2\}?\s*\)/g, '($1^{$2})');
-  t = t.replace(/\(\s*(\d)\s+(\d)\s+\1([²³⁴⁵⁶⁷⁸⁹])\s*\)/g, function (_, a, b, s) {
-    return '(' + a + '^{' + (supMap[s] || b) + '})';
-  });
-  // "(5^{2})^{2}" sudah baik; residu digit di sekitar kurung
-  t = t.replace(/\)\s*\^?\s*\{?(\d)\}?\s*\(\s*\1\s*\)/g, ')^{$1}');
-  // Rangkaian kurung rusak berulang: ambil pola (base^{exp})^{exp}
-  t = t.replace(/(?:\(\s*)+(\d+)\^\{(\d+)\}(?:\s*\)\s*)+\^\{(\d+)\}/g, '($1^{$2})^{$3}');
-  t = t.replace(/(?:\(\s*)+(\d+)\^\{(\d+)\}(?:\s*\)\s*)+/g, '($1^{$2})');
-
-  // ===== E) Residu umum berulang =====
-  for (let r = 0; r < 6; r++) {
+  // Formula pangkat yang diulang identik
+  // "4² × 4³ 4² × 4³" 
+  for (let r = 0; r < 4; r++) {
     const before = t;
-    t = t.replace(/(\\sqrt\{(\d+)\}|√(\d+))\s+\2\b/g, '$1');
-    t = t.replace(/(\\sqrt\{(\d+)\}|√(\d+))\s+\3\b/g, '$1');
-    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\s+\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\s+\1\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)\^\{(\d+)\}\s+\2\b/g, '$1^{$2}');
-    t = t.replace(/(\d+)(\\sqrt\{(\d+)\}|√(\d+))\s+\1\s+\3\b/g, '$1$2');
-    t = t.replace(/(\d+)(\\sqrt\{(\d+)\}|√(\d+))\s+\1\s+\4\b/g, '$1$2');
-    // "√25 + √16 25 + 16"
-    t = t.replace(/(√\d+|\\sqrt\{\d+\})\s*([+\-])\s*(√\d+|\\sqrt\{\d+\})(?:\s+\d+\s*[+\-]\s*)+\d+/g, '$1 $2 $3');
-    // digit digit berulang di depan √ yang sama
-    t = t.replace(/(\d+)(?:\s+\1)+\s*(?=√|\\sqrt)/g, '');
+    // (term) (term yang sama)
+    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+(?:\s*[×xX*·+\-]\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)*)\s+\1\b/g, '$1');
+    // "4² × 4³ adalah" sudah bersih; residual "4 2 × 4 3" di depan/belakang
+    t = t.replace(/(\d)\s+(\d)\s*([×xX*·])\s*(\d)\s+(\d)\s+(\1[⁰¹²³⁴⁵⁶⁷⁸⁹]\s*\3\s*\4[⁰¹²³⁴⁵⁶⁷⁸⁹])/g, '$6');
+    t = t.replace(/(\d[⁰¹²³⁴⁵⁶⁷⁸⁹]\s*[×xX*·]\s*\d[⁰¹²³⁴⁵⁶⁷⁸⁹])\s+\d\s+\d\s*[×xX*·]\s*\d\s+\d/g, '$1');
     if (t === before) break;
   }
 
-  // ===== F) Unicode √ → \sqrt untuk KaTeX =====
-  t = t.replace(/(\d*)\s*√\s*\(([^)]+)\)/g, (_, c, inner) => (c || '') + '\\sqrt{' + inner + '}');
-  t = t.replace(/(\d*)\s*√\s*([0-9a-zA-Z]+)/g, (_, c, inner) => (c || '') + '\\sqrt{' + inner + '}');
+  // "2 5 2 5 2⁵" → "2⁵"
+  t = t.replace(/(\d)(?:\s+(\d))+\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, base, _e, sup) {
+    return base + sup;
+  });
+  t = t.replace(/(\d)\s+(\d)\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, function (_, a, b, sup) {
+    return a + sup;
+  });
 
-  // ===== G) Spasi operator =====
+  // ========== 3. Pangkat bersarang residual: "(5²)2 (5²)^(2) (5²)2" → "(5²)²" ==========
+  // "( 5² )2" / "(5²)2" / "(5²)^(2)"
+  t = t.replace(/\(\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^?\s*\(?\s*(\d+)\s*\)?/g, function (_, inner, exp) {
+    return '(' + inner + ')' + toSup(exp);
+  });
+  t = t.replace(/\(\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)([⁰¹²³⁴⁵⁶⁷⁸⁹])/g, '($1)$2');
+  // Ulangan "(5²)² (5²)²" → "(5²)²"
+  t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹])(?:\s+\1)+/g, '$1');
+  // "(5²)2 (5²)2 (5²)2" → ambil dengan eksponen
+  t = t.replace(/(\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)\s*\d)(?:\s+\1)+/g, function (m, first) {
+    const mm = first.match(/\(\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*(\d)/);
+    if (mm) return '(' + mm[1] + ')' + toSup(mm[2]);
+    return first;
+  });
+  // left/right bocor
+  t = t.replace(/\\left\s*\(/g, '(').replace(/\\right\s*\)/g, ')');
+  t = t.replace(/\bleft\s*\(/gi, '(').replace(/\bright\s*\)/gi, ')');
+  // "(5 2)" → "(5²)" jika dilanjutkan eksponen
+  t = t.replace(/\(\s*(\d)\s+(\d)\s*\)\s*\^?\s*\{?(\d)\}?/g, function (_, a, b, e) {
+    if (e) return '(' + a + toSup(b) + ')' + toSup(e);
+    return '(' + a + toSup(b) + ')';
+  });
+  t = t.replace(/\(\s*(\d)\s+(\d)\s+\1([⁰¹²³⁴⁵⁶⁷⁸⁹])\s*\)/g, function (_, a, b, s) {
+    return '(' + a + s + ')';
+  });
+
+  // ========== 3b. Rapikan (base^exp)^exp residual ==========
+  // "(5²)^(2)" / "(5²)^2" → "(5²)²"
+  t = t.replace(/\(\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^\s*\(?\s*(\d+)\s*\)?/g, function (_, inner, exp) {
+    return '(' + inner + ')' + toSup(exp);
+  });
+  t = t.replace(/\(\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*\)\s*\^\{(\d+)\}/g, function (_, inner, exp) {
+    return '(' + inner + ')' + toSup(exp);
+  });
+  // Ulangan beruntun setelah perbaikan
+  t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\1)+/g, '$1');
+  // "(5²)² (5²)² (5²)²"
+  t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]*)+/g, '$1');
+  // Sisa "(5²)2" tanpa superscript
+  t = t.replace(/\((\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\)\s*(\d)\b/g, function (_, inner, exp) {
+    return '(' + inner + ')' + toSup(exp);
+  });
+  // Jika masih ada banyak salinan, ambil token pertama yang valid (base^exp)^exp
+  (function () {
+    const m = t.match(/Hasil\s+dari\s+(.+?)\s+adalah/i);
+    if (!m) return;
+    let body = m[1];
+    // Cari pola (d^sup)^sup atau (d^{n})^{m}
+    const good = body.match(/\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+/);
+    if (good && body.split(good[0]).length > 2) {
+      t = t.replace(body, good[0]);
+    }
+  })();
+
+  // ========== 4. Residual umum berulang ==========
+  for (let r = 0; r < 5; r++) {
+    const before = t;
+    t = t.replace(/(√\d+|√\(\d+\))\s+\d+\b/g, function (m) {
+      const num = (m.match(/\d+/) || [])[0];
+      const trail = m.replace(/^.*√\s*\(?\s*\d+\s*\)?\s*/, '').trim();
+      if (trail === num) return m.replace(/\s+\d+\s*$/, '');
+      return m;
+    });
+    // "√25 + √16 25 + 16 25 + 16"
+    t = t.replace(/(√\(?\d+\)?(?:\s*[+\-]\s*√\(?\d+\)?)+)(?:\s+\d+(?:\s*[+\-]\s*\d+)+)+/g, '$1');
+    // "4² × 4³ 4² × 4³"
+    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+(?:\s*[×xX*·]\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)*)(?:\s+\1)+/g, '$1');
+    // "(5²)² (5²)²"
+    t = t.replace(/(\(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\)[⁰¹²³⁴⁵⁶⁷⁸⁹]*)(?:\s+\1)+/g, '$1');
+    if (t === before) break;
+  }
+
+  // ========== 5. √ → \sqrt{} untuk KaTeX ==========
+  t = t.replace(/(\d*)\s*√\s*\(([^)]+)\)/g, function (_, c, inner) {
+    return (c || '') + '\\sqrt{' + inner + '}';
+  });
+  t = t.replace(/(\d*)\s*√\s*([0-9a-zA-Z]+)/g, function (_, c, inner) {
+    return (c || '') + '\\sqrt{' + inner + '}';
+  });
+  // Unicode superscript → latex (untuk plainMathToKatex)
+  t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, base, sups) {
+    const exp = sups.split('').map(function (c) { return supMap[c] || ''; }).join('');
+    return base + '^{' + exp + '}';
+  });
+  t = t.replace(/\((\d+\^\{\d+\})\)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, inner, sups) {
+    const exp = sups.split('').map(function (c) { return supMap[c] || ''; }).join('');
+    return '(' + inner + ')^{' + exp + '}';
+  });
+  // Setelah konversi, "(5^{2})²" mungkin jadi campur — rapikan
+  t = t.replace(/\((\d+\^\{\d+\})\)\^\{(\d+)\}/g, '($1)^{$2}');
+
+  // ========== 6. Spasi ==========
   t = t.replace(/\s*([+\-×÷:*/])\s*/g, ' $1 ');
   t = t.replace(/\s{2,}/g, ' ');
-  t = t.replace(/(\}|\)|\d)(?=adalah\b)/gi, '$1 ');
+  t = t.replace(/(\}|\)|\d|¹|²|³|⁴|⁵)(?=adalah\b)/gi, '$1 ');
   t = t.replace(/\s{2,}/g, ' ').trim();
   return t;
 }
