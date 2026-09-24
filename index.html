@@ -5491,30 +5491,8 @@ function initSoalRichEditor(containerId, initialHtml) {
 
           rapikan: function () {
             try {
-              const cleanFn = (typeof deepCleanSoalText === 'function')
-                ? deepCleanSoalText
-                : (typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText : (x) => x);
-              const range = quill.getSelection(true);
-              if (range && range.length > 0) {
-                const selected = quill.getText(range.index, range.length);
-                const cleaned = cleanFn(selected);
-                quill.deleteText(range.index, range.length, 'user');
-                quill.insertText(range.index, cleaned, 'user');
-                quill.setSelection(range.index + cleaned.length);
-                showBigPopup('success', 'Hapus residual', 'Angka residual pada teks terpilih sudah dihapus.');
-              } else {
-                const box = document.createElement('div');
-                box.innerHTML = quill.root.innerHTML;
-                const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
-                const nodes = [];
-                while (walker.nextNode()) nodes.push(walker.currentNode);
-                nodes.forEach(n => {
-                  const t = n.nodeValue || '';
-                  if (t.trim()) n.nodeValue = cleanFn(t);
-                });
-                quill.root.innerHTML = box.innerHTML;
-                showBigPopup('success', 'Hapus residual', 'Angka residual pada pertanyaan sudah dihapus. Cek hasil lalu simpan.');
-              }
+              applyResidualCleanToQuill(quill);
+              showBigPopup('success', 'Hapus residual', 'Angka residual pada akar/pangkat sudah dihapus. Cek hasil lalu simpan.');
             } catch (e) {
               console.warn(e);
               showBigPopup('danger', 'Hapus residual', 'Gagal menghapus residual.');
@@ -5599,36 +5577,56 @@ function hapusResidualDiEditorSoal() {
   const quill = activeSoalQuill;
   if (!quill) return showBigPopup('warning', 'Info', 'Editor soal belum aktif.');
   try {
-    const cleanFn = (typeof deepCleanSoalText === 'function')
-      ? deepCleanSoalText
-      : (typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText : (x) => x);
-    const range = quill.getSelection(true);
-    if (range && range.length > 0) {
-      const selected = quill.getText(range.index, range.length);
-      const cleaned = cleanFn(selected);
-      quill.deleteText(range.index, range.length, 'user');
-      quill.insertText(range.index, cleaned, 'user');
-      quill.setSelection(range.index + cleaned.length);
-    } else {
-      const box = document.createElement('div');
-      box.innerHTML = quill.root.innerHTML;
-      const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      let changed = false;
-      nodes.forEach(n => {
-        const t = n.nodeValue || '';
-        if (!t.trim()) return;
-        const c = cleanFn(t);
-        if (c !== t) { n.nodeValue = c; changed = true; }
-      });
-      quill.root.innerHTML = box.innerHTML;
-    }
-    showBigPopup('success', 'Hapus residual', 'Angka residual sudah dibersihkan. Periksa hasilnya lalu klik Simpan.');
+    applyResidualCleanToQuill(quill);
+    document.querySelectorAll('#fmSoalOpsiList .fm-opsi-row').forEach(row => {
+      if (row._quill) {
+        try { applyResidualCleanToQuill(row._quill, true); } catch (e) {}
+      }
+    });
+    showBigPopup('success', 'Hapus residual', 'Angka residual pada akar/pangkat sudah dibersihkan. Periksa hasilnya lalu klik Simpan.');
   } catch (e) {
     console.warn(e);
     showBigPopup('danger', 'Hapus residual', 'Gagal membersihkan teks.');
   }
+}
+
+/** Bersihkan residual di editor Quill — plain full-text agar konteks residual utuh */
+function applyResidualCleanToQuill(quill, isOpsi) {
+  if (!quill) return false;
+  const cleanFn = function (x) {
+    let t = String(x || '');
+    if (typeof repairCorruptedSqrtText === 'function') t = repairCorruptedSqrtText(t);
+    if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
+    if (typeof deepCleanSoalText === 'function' && !isOpsi) t = deepCleanSoalText(t);
+    else if (typeof repairOpsiMathText === 'function' && isOpsi) t = repairOpsiMathText(t);
+    return t.replace(/\s{2,}/g, ' ').trim();
+  };
+  const range = quill.getSelection(true);
+  if (range && range.length > 0) {
+    const selected = quill.getText(range.index, range.length);
+    const cleaned = cleanFn(selected);
+    if (cleaned !== selected) {
+      quill.deleteText(range.index, range.length, 'user');
+      quill.insertText(range.index, cleaned, 'user');
+      quill.setSelection(range.index + cleaned.length);
+    }
+    return cleaned !== selected;
+  }
+  let plain = '';
+  try {
+    if (typeof formulaHtmlToEditableText === 'function') {
+      plain = formulaHtmlToEditableText(quill.root.innerHTML || '');
+    } else {
+      plain = (quill.getText() || '').replace(/\n$/, '');
+    }
+  } catch (e) {
+    plain = (quill.getText() || '').replace(/\n$/, '');
+  }
+  const cleaned = cleanFn(plain);
+  const len = quill.getLength();
+  quill.deleteText(0, Math.max(0, len - 1), 'user');
+  if (cleaned) quill.insertText(0, cleaned, 'user');
+  return cleaned !== plain;
 }
 
 function getSoalRichHtml() {
@@ -5969,7 +5967,10 @@ async function rapikanSemuaSoalUjian() {
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
     try {
-      let pertanyaan = deepCleanSoalText(String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+      let pertanyaan = String(s.pertanyaan || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (typeof repairCorruptedSqrtText === 'function') pertanyaan = repairCorruptedSqrtText(pertanyaan);
+      if (typeof stripResidualDigitsAroundMath === 'function') pertanyaan = stripResidualDigitsAroundMath(pertanyaan);
+      pertanyaan = deepCleanSoalText(pertanyaan);
       // jika hasil masih jelek tapi ada nested, biarkan deepClean
       if (typeof plainMathToKatexHtml === 'function' && /\\sqrt|√|\^\{/.test(pertanyaan)) {
         const k = plainMathToKatexHtml(pertanyaan);
@@ -7190,46 +7191,46 @@ function resplitMergedOpsi(opsiList) {
   return final.length ? final : opsiList;
 }
 
-/** Bersihkan residual ekstrem pada soal esai/akar (Hitunglah / Sederhanakan) */
+/** Bersihkan residual ekstrem pada soal esai/akar + residual digit umum */
 function deepCleanSoalText(s) {
   if (s == null || s === '') return s;
   let t = String(s);
-  // Buang tanda ! residual di akhir (sering dari Word/OCR)
   t = t.replace(/\s*!\s*$/g, '').trim();
-  t = repairCorruptedSqrtText(t);
+  if (typeof repairCorruptedSqrtText === 'function') t = repairCorruptedSqrtText(t);
+  if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
   t = t.replace(/\s{2,}/g, ' ').trim();
 
-  // --- Ekstrak token math yang valid, susun ulang soal Hitunglah/Sederhanakan ---
   (function rebuildFromTokens() {
-    const headMatch = t.match(/^((?:Hitunglah(?:\s+nilai\s+dari)?|Sederhanakan(?:\s+dan\s+hitunglah)?|Sederhanakan\s+bentuk)\s+)(.+)$/i);
+    const headMatch = t.match(/^((?:Hitunglah(?:\s+nilai\s+dari)?|Sederhanakan(?:\s+dan\s+hitunglah)?|Sederhanakan\s+bentuk|Hasil\s+dari|Nilai\s+dari|Bentuk\s+sederhana\s+dari)\s+)(.+)$/i);
     if (!headMatch) return;
     const head = headMatch[1];
     let body = headMatch[2].replace(/\s*!\s*$/g, '').trim();
+    const tailMatch = body.match(/^(.*?)(\s+adalah\b.*)$/i);
+    let tail = '';
+    if (tailMatch) { body = tailMatch[1].trim(); tail = tailMatch[2]; }
 
-    // Token bagus: 2⁴ 3^{2} √18 2√3 \sqrt{18} 2\sqrt{5} (√8)^{4} × : + -
-    const tokenRe = /(\(\s*\\sqrt\{\d+\}\s*\)\s*\^\{\d+\}|\(\s*√\d+\s*\)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+\^\{\d+\}|\d*\\sqrt\{\d+\}|\d*√\d+|\\sqrt\{\d+\}|√\d+|[×÷:+\-])/g;
+    const tokenRe = /(\(\s*\\sqrt\{\d+\}\s*\)\s*\^\{\d+\}|\(\s*√\d+\s*\)\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+\^\{\d+\}|\(\d+\^\{\d+\}\)\^\{\d+\}|\d*\\sqrt\{\d+\}|\d*√\d+|\\sqrt\{\d+\}|√\d+|[×÷:+\-])/g;
     const raw = [];
     let m;
     while ((m = tokenRe.exec(body)) !== null) raw.push(m[1].replace(/\s+/g, ''));
     if (raw.length < 1) return;
 
-    // Normalisasi token
     const norm = raw.map(function (x) {
       if (/^[×÷:+\-]$/.test(x)) return x;
       x = x.replace(/√(\d+)/g, '\\sqrt{$1}');
       x = x.replace(/(\d+)√(\d+)/g, '$1\\sqrt{$2}');
-      // unicode sup → latex
       const map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
       x = x.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b, s) {
         return b + '^{' + s.split('').map(function (c) { return map[c] || ''; }).join('') + '}';
       });
+      x = x.replace(/\((\d+\^\{\d+\})\)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, inner, s) {
+        return '(' + inner + ')^{' + s.split('').map(function (c) { return map[c] || ''; }).join('') + '}';
+      });
       return x;
     });
 
-    // Susun: angka/rumus diselingi operator; buang operator dobel & residual berulang
     const out = [];
     let lastWasOp = true;
-    const seenSeq = {};
     for (let i = 0; i < norm.length; i++) {
       const tok = norm[i];
       const isOp = /^[×÷:+\-]$/.test(tok);
@@ -7238,7 +7239,6 @@ function deepCleanSoalText(s) {
         out.push(tok);
         lastWasOp = true;
       } else {
-        // skip jika token sama dengan 2 sebelumnya (residual loop)
         if (out.length >= 1 && out[out.length - 1] === tok) continue;
         out.push(tok);
         lastWasOp = false;
@@ -7247,11 +7247,8 @@ function deepCleanSoalText(s) {
     while (out.length && /^[×÷:+\-]$/.test(out[out.length - 1])) out.pop();
     if (!out.length) return;
 
-    // Jika masih terlalu panjang (> 8 token) kemungkinan residual — ambil pola unik pertama
     let final = out;
     if (out.length > 8) {
-      // Cari subsequence unik: potong saat sequence mulai berulang
-      const key = out.join(' ');
       const half = Math.floor(out.length / 2);
       for (let len = Math.min(half, 6); len >= 3; len--) {
         const left = out.slice(0, len).join(' ');
@@ -7264,17 +7261,186 @@ function deepCleanSoalText(s) {
       if (final.length > 7) final = out.slice(0, 7);
     }
 
-    // Format tampilan: spasi di sekitar operator
-    const pretty = final.map(function (x, i) {
+    const pretty = final.map(function (x) {
       if (/^[×÷:+\-]$/.test(x)) return ' ' + x + ' ';
       return x;
     }).join('').replace(/\s{2,}/g, ' ').trim();
 
-    if (pretty.length >= 2) t = head + pretty;
+    if (pretty.length >= 2) t = head + pretty + (tail || '');
   })();
 
+  if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
   t = t.replace(/\s*!\s*$/g, '').trim();
   return t.replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * Hapus angka residu di sekitar token akar/pangkat.
+ * "2√3 2 3" → "2√3", "√18 18" → "√18", "4² 4 2" → "4²",
+ * "4² × 4³ 4 2 4 3" → "4² × 4³", "(5²)² (5²)2" → "(5²)²"
+ */
+function stripResidualDigitsAroundMath(s) {
+  if (s == null || s === '') return s;
+  let t = String(s);
+  const supMap = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+  const toSup = function (n) {
+    const m = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
+    return String(n).split('').map(function (d) { return m[d] || d; }).join('');
+  };
+
+  for (let r = 0; r < 8; r++) {
+    const before = t;
+
+    // coef√rad + residual digits
+    t = t.replace(/(\d+)\s*√\s*(\d+)((?:\s+\d+){1,16})/g, function (full, coef, rad, rest) {
+      const coreDigs = coef + rad;
+      const nums = rest.trim().split(/\s+/).filter(Boolean);
+      if (!nums.length) return full;
+      if (nums.every(function (n) {
+        return n === coef || n === rad || n === coreDigs ||
+          (n.length <= coreDigs.length && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
+      })) return coef + '√' + rad;
+      let i = 0;
+      while (i < nums.length && (nums[i] === coef || nums[i] === rad || nums[i] === coreDigs)) i++;
+      if (i > 0) return coef + '√' + rad + (i < nums.length ? ' ' + nums.slice(i).join(' ') : '');
+      return full;
+    });
+    t = t.replace(/(\d*)\\sqrt\{(\d+)\}((?:\s+\d+){1,16})/g, function (full, coef, rad, rest) {
+      const c = coef || '';
+      const coreDigs = c + rad;
+      const nums = rest.trim().split(/\s+/).filter(Boolean);
+      if (!nums.length) return full;
+      if (nums.every(function (n) {
+        return n === c || n === rad || n === coreDigs ||
+          (n.length <= Math.max(coreDigs.length, 1) && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
+      })) return (c ? c : '') + '\\sqrt{' + rad + '}';
+      return full;
+    });
+    // √18 18
+    t = t.replace(/√\s*\(?\s*(\d+)\s*\)?((?:\s+\1)+)/g, '√$1');
+    t = t.replace(/\\sqrt\{(\d+)\}((?:\s+\1)+)/g, '\\sqrt{$1}');
+    // leading residual: 2 3 2√3
+    t = t.replace(/((?:\d+\s+){1,10})(\d+)\s*√\s*(\d+)/g, function (full, lead, coef, rad) {
+      const coreDigs = coef + rad;
+      const nums = lead.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function (n) {
+        return n === coef || n === rad || n === coreDigs ||
+          [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; });
+      })) return coef + '√' + rad;
+      return full;
+    });
+    t = t.replace(/((?:\d+\s+){1,10})(\d*)\\sqrt\{(\d+)\}/g, function (full, lead, coef, rad) {
+      const c = coef || '';
+      const coreDigs = c + rad;
+      const nums = lead.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function (n) {
+        return n === c || n === rad || n === coreDigs ||
+          (coreDigs && [...n].every(function (d) { return coreDigs.indexOf(d) >= 0; }));
+      })) return (c ? c : '') + '\\sqrt{' + rad + '}';
+      return full;
+    });
+    // 18√18 → √18
+    t = t.replace(/\b(\d+)\s*√\s*\1\b/g, '√$1');
+    t = t.replace(/\b(\d+)\\sqrt\{\1\}/g, '\\sqrt{$1}');
+
+    // power unicode residual: 2⁵ 2 5
+    t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,16})/g, function (full, base, sup, rest) {
+      const exp = [...sup].map(function (c) { return supMap[c] || ''; }).join('');
+      const nums = rest.trim().split(/\s+/).filter(Boolean);
+      if (!nums.length) return full;
+      if (nums.every(function (n) {
+        return n === base || n === exp || n === (base + exp) ||
+          [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
+      })) return base + sup;
+      let i = 0;
+      while (i < nums.length && (nums[i] === base || nums[i] === exp || nums[i] === (base + exp))) i++;
+      if (i > 0) return base + sup + (i < nums.length ? ' ' + nums.slice(i).join(' ') : '');
+      return full;
+    });
+    t = t.replace(/(\d+)\^\{(\d+)\}((?:\s+\d+){1,16})/g, function (full, base, exp, rest) {
+      const nums = rest.trim().split(/\s+/).filter(Boolean);
+      if (!nums.length) return full;
+      if (nums.every(function (n) {
+        return n === base || n === exp || n === (base + exp) ||
+          [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
+      })) return base + '^{' + exp + '}';
+      return full;
+    });
+    // leading before power
+    t = t.replace(/((?:\d+\s+){1,10})(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (full, lead, base, sup) {
+      const exp = [...sup].map(function (c) { return supMap[c] || ''; }).join('');
+      const nums = lead.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function (n) {
+        return n === base || n === exp || n === (base + exp) ||
+          [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
+      })) return base + sup;
+      return full;
+    });
+    t = t.replace(/((?:\d+\s+){1,10})(\d+)\^\{(\d+)\}/g, function (full, lead, base, exp) {
+      const nums = lead.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function (n) {
+        return n === base || n === exp || n === (base + exp) ||
+          [...n].every(function (d) { return (base + exp).indexOf(d) >= 0; });
+      })) return base + '^{' + exp + '}';
+      return full;
+    });
+
+    // nested power
+    t = t.replace(/(\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)\s*\d*)+/g, '$1');
+    t = t.replace(/(\(\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*\)[⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?:\s+\1)+/g, '$1');
+    t = t.replace(/\((\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\)\s*(\d)\b(?:\s+\(\1\)\s*\2)*/g, function (_, inner, exp) {
+      return '(' + inner + ')' + toSup(exp);
+    });
+
+    // √25 + √16 25 + 16
+    t = t.replace(/(√\s*\d+(?:\s*[+\-]\s*√\s*\d+)+)(?:\s+\d+(?:\s*[+\-]\s*\d+)+)+/g, '$1');
+    t = t.replace(/(\\sqrt\{\d+\}(?:\s*[+\-]\s*\\sqrt\{\d+\})+)(?:\s+\d+(?:\s*[+\-]\s*\d+)+)+/g, '$1');
+
+    // residual after A × B powers
+    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*([×xX*·+\-÷:])\s*(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)((?:\s+\d+){1,12})/g, function (full, a, op, b, rest) {
+      var sa = a.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
+      var sb = b.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
+      var map = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+      var ea = [...a].filter(function(c){return map[c];}).map(function(c){return map[c];}).join('');
+      var eb = [...b].filter(function(c){return map[c];}).map(function(c){return map[c];}).join('');
+      var core = sa + ea + sb + eb;
+      var nums = rest.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function(n){ return [...n].every(function(d){ return core.indexOf(d)>=0; }); })) {
+        return a + ' ' + op + ' ' + b;
+      }
+      return full;
+    });
+
+    // duplicate tokens
+    t = t.replace(/(\d+\s*√\s*\d+)(?:\s+\1)+/g, '$1');
+    t = t.replace(/(\d*\\sqrt\{\d+\})(?:\s+\1)+/g, '$1');
+    t = t.replace(/(\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+(?:\s*[×xX*·+\-÷:]\s*\d+[⁰¹²³⁴⁵⁶⁷⁸⁹]+)*)(?:\s+\1)+/g, '$1');
+    t = t.replace(/(\d+\^\{\d+\}(?:\s*[×xX*·+\-÷:]\s*\d+\^\{\d+\})*)(?:\s+\1)+/g, '$1');
+
+    // between operator residual
+    t = t.replace(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s+\1\s+(\d)\s*([×xX*·+\-÷:])\s*(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (_, b1, s1, dig, op, b2, s2) {
+      const exp1 = [...s1].map(function (c) { return supMap[c] || ''; }).join('');
+      if (dig === exp1 || dig === b1) return b1 + s1 + ' ' + op + ' ' + b2 + s2;
+      return b1 + s1 + ' ' + b1 + ' ' + dig + ' ' + op + ' ' + b2 + s2;
+    });
+    t = t.replace(/(\d+)\s*√\s*(\d+)\s*([×xX*·+\-÷:])\s*(\d+)\s*√\s*(\d+)(?:\s+\d+){1,10}/g, function (full, c1, r1, op, c2, r2) {
+      const core = c1 + r1 + c2 + r2;
+      const base = c1 + '√' + r1 + ' ' + op + ' ' + c2 + '√' + r2;
+      const trail = full.slice(base.length);
+      const nums = trail.trim().split(/\s+/).filter(Boolean);
+      if (nums.length && nums.every(function (n) {
+        return [...n].every(function (d) { return core.indexOf(d) >= 0; });
+      })) return base;
+      return full;
+    });
+
+    if (t === before) break;
+  }
+
+  t = t.replace(/dari√/gi, 'dari √');
+  t = t.replace(/dari\\sqrt/gi, 'dari \\sqrt');
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t;
 }
 
 function repairCorruptedSqrtText(s) {
@@ -7637,6 +7803,7 @@ function repairOpsiMathText(s) {
   if (/^\d+([.,]\d+)?$/.test(t)) return t;
 
   t = repairCorruptedSqrtText(t);
+  if (typeof stripResidualDigitsAroundMath === 'function') t = stripResidualDigitsAroundMath(t);
   t = t.replace(/\s{2,}/g, ' ').trim();
 
   // Core: coef√radicand di tengah tumpukan digit
