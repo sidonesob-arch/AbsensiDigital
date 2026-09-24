@@ -2401,6 +2401,7 @@ function loadEditKehadiran() {
       role: role,
       peran: r.peran || (role === 'guru' ? 'GURU' : 'SISWA'),
       row_id: r.row_id || r.rowId || r._id || r.uuid || null,
+      sumber: r.sumber || '',
       is_placeholder: !!r.is_placeholder,
       raw: r
     }));
@@ -2456,7 +2457,7 @@ function loadEditKehadiran() {
       if (r.is_placeholder || (!r.row_id && !r.sesi)) {
         statusText = 'Belum ada catatan — klik ➕ untuk menambah';
       }
-      const isPh = r.is_placeholder || !r.row_id;
+      const isPh = !!r.is_placeholder;
       return `<tr>
         <td style="font-size:12px;white-space:nowrap;">${escHtmlEdit(waktu)}</td>
         <td>${escHtmlEdit(r.peran || (role === 'guru' ? 'GURU' : 'SISWA'))}</td>
@@ -2468,7 +2469,7 @@ function loadEditKehadiran() {
             onclick="openFormEditKehadiranBaruPrefill('${escHtmlEdit(r.id)}','${escHtmlEdit(r.nama)}','${escHtmlEdit(r.tanggal || tglMulai)}')">➕</button>
           <button class="btn-edit" title="Edit status"
             onclick="openFormEditKehadiran(${r._idx})">✏️</button>
-          ${isPh ? '' : `<button class="btn-danger" title="Hapus catatan" onclick="hapusKehadiranRow(${r._idx})">🗑️</button>`}
+          ${r.is_placeholder ? '' : `<button class="btn-danger" title="Hapus catatan" onclick="hapusKehadiranRow(${r._idx})">🗑️</button>`}
         </td>
       </tr>`;
     }).join('');
@@ -2539,7 +2540,7 @@ function openFormEditKehadiran(idx) {
   const r = editHadirFlatCache.find(x => x._idx === idx) || editHadirCache.find(x => x._idx === idx);
   if (!r) return showBigPopup('warning', 'Info', 'Data tidak ditemukan. Muat ulang daftar.');
   const role = r.role || $('editHadirRole')?.value || 'siswa';
-  const isNew = !!r.is_placeholder || !r.row_id;
+  const isNew = !!r.is_placeholder;
   let curStatus = r.status || 'TW';
   if (String(curStatus).includes(' - ')) curStatus = String(curStatus).split(' - ').pop().trim();
   if (/belum/i.test(curStatus)) curStatus = 'TW';
@@ -2551,7 +2552,8 @@ function openFormEditKehadiran(idx) {
     </div>
     <input type="hidden" id="fmEditHadirRole" value="${escHtmlEdit(role)}">
     <input type="hidden" id="fmEditHadirId" value="${escHtmlEdit(r.id)}">
-    <input type="hidden" id="fmEditHadirRowId" value="${escHtmlEdit(r.row_id || '')}">
+    <input type="hidden" id="fmEditHadirRowId" value="">
+    <input type="hidden" id="fmEditHadirSumber" value="${escHtmlEdit(r.sumber || '')}">
     <div class="form-group">
       <label>Tanggal:</label>
       <input type="date" id="fmEditHadirTgl" value="${escHtmlEdit(r.tanggal || '')}">
@@ -2731,11 +2733,13 @@ function submitEditKehadiran() {
   if (!tanggal) return showBigPopup('warning', 'Peringatan', 'Tanggal wajib diisi.');
   if (!status) return showBigPopup('warning', 'Peringatan', 'Status wajib dipilih.');
 
+  const sumberEl = document.getElementById('fmEditHadirSumber');
+  const sumber = (sumberEl && sumberEl.value) ? sumberEl.value : '';
   const payload = {
     action: 'edit_kehadiran',
     role, id, tanggal, sesi, status, jam, keterangan,
-    row_id: row_id || null,
-    // Jika sesi kosong (tombol "Hari") → propagasi ke semua sesi (terutama Sakit/Izin)
+    sumber: sumber || null,
+    row_id: null,
     propagate: !sesi
   };
   showBigPopup('info', 'Menyimpan', '⏳ Menyimpan perubahan status...', 0);
@@ -2780,7 +2784,8 @@ function hapusKehadiranRow(idx) {
     action: 'hapus_kehadiran',
     role: r.role, id: r.id, tanggal: r.tanggal,
     sesi: r.sesi || '', status: r.status,
-    row_id: r.row_id || null
+    sumber: r.sumber || '',
+    row_id: null
   };
   showBigPopup('info', 'Menghapus', '⏳ Menghapus catatan...', 0);
   sendRequest(payload, res => {
