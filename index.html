@@ -3490,9 +3490,23 @@ function simpanDataNilai() {
       msg += '<br><small style="color:#991b1b;">Cek koneksi & pastikan login sebagai Guru. Jenis nilai: <b>' + jenisNilai + '</b>, Mapel: <b>' + mapel + '</b></small>';
     }
     showBigPopup(ok ? ((res.failed > 0) ? 'warning' : 'success') : 'danger', ok ? 'Hasil Simpan' : 'Gagal Simpan', msg);
-    if (res && res.status === 'success') {
-      // kosongkan hanya yang berhasil terkirim
+    if (res && (res.status === 'success' || res.status === 'warning') && (res.saved > 0 || res.inserted > 0 || res.updated > 0 || res.verified > 0)) {
+      // kosongkan input yang sudah tersimpan
       document.querySelectorAll('#tableInputNilaiBody input.input-nilai-sm').forEach(el => { el.value = ''; });
+      // Auto-refresh Daftar Nilai agar langsung terlihat tanpa buka menu ulang
+      try {
+        if (typeof loadFilterDaftarNilaiWithGuru === 'function') {
+          // sinkronkan filter daftar dengan mapel yang baru disimpan
+          const selMapel = $('filterDaftarNilaiMapel');
+          if (selMapel && mapel) {
+            const opt = Array.from(selMapel.options).find(o => o.value === mapel);
+            if (opt) selMapel.value = mapel;
+          }
+        }
+        if (typeof loadDaftarNilaiData === 'function') {
+          setTimeout(() => loadDaftarNilaiData(), 400);
+        }
+      } catch (e) { console.warn('refresh daftar nilai', e); }
     }
   });
 }
