@@ -2429,9 +2429,16 @@ function loadEditKehadiran() {
     }
 
     if (!flat.length) {
-      const hint = keyword
-        ? `Tidak ada data untuk "<b>${escHtmlEdit(keyword)}</b>" pada periode ini. Gunakan <b>➕ Tambah / Ubah Manual</b>.`
-        : 'Tidak ada data pada filter ini.';
+      const mu = res.matched_users;
+      let hint;
+      if (keyword && mu === 1) {
+        hint = `Siswa/guru "<b>${escHtmlEdit(keyword)}</b>" ditemukan, tetapi <b>tidak ada baris absensi</b> untuk filter tanggal ini.<br>
+          <span style="font-size:11px;color:#666;">Coba kosongkan tanggal, atau samakan rentang dengan menu Cari Data. Pastikan backend terbaru sudah di-deploy.</span>`;
+      } else if (keyword) {
+        hint = `Tidak ada data untuk "<b>${escHtmlEdit(keyword)}</b>" pada filter ini. Gunakan <b>➕ Tambah / Ubah Manual</b>.`;
+      } else {
+        hint = 'Tidak ada data pada filter ini.';
+      }
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:16px;">${hint}</td></tr>`;
       return;
     }
