@@ -102,11 +102,17 @@
     font-size: 13px;
     color: #0f172a;
   }
+  .ql-snow .ql-toolbar button.ql-rapikan {
+    background: #ccfbf1 !important;
+    border: 1px solid #0d9488 !important;
+    border-radius: 4px !important;
+    margin-left: 4px !important;
+  }
   .ql-snow .ql-toolbar button.ql-sqrt::before { content: "√"; font-size: 16px; }
   .ql-snow .ql-toolbar button.ql-power::before { content: "xⁿ"; font-size: 13px; }
   .ql-snow .ql-toolbar button.ql-sub::before { content: "xₙ"; font-size: 13px; }
   .ql-snow .ql-toolbar button.ql-frac::before { content: "a/b"; font-size: 12px; }
-  .ql-snow .ql-toolbar button.ql-rapikan::before { content: "✦"; font-size: 14px; color: #0d9488; }
+  .ql-snow .ql-toolbar button.ql-rapikan::before { content: "Hapus residual"; font-size: 11px; color: #0d9488; font-weight: 800; }
 
 
   .ql-snow .ql-toolbar button.ql-table::before,
@@ -1315,7 +1321,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <div><b id="ujianSoalJudul">-</b> <span id="ujianSoalMapel" style="color:#666; font-size:12px;"></span></div>
         <div style="display:flex; gap:6px;">
           <button class="btn-add btn-sm" onclick="openFormSoalBaru()">➕ Tambah Soal</button>
-          <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:6px 10px;" onclick="rapikanSemuaSoalUjian()" title="Bersihkan residual akar/pangkat di semua soal lalu simpan">✦ Rapikan semua rumus</button>
+          <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:6px 10px;" onclick="rapikanSemuaSoalUjian()" title="Bersihkan residual akar/pangkat di semua soal lalu simpan">Hapus residual semua soal</button>
           <button class="btn-sm" style="background:#1d6f42;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="openImportSoalModal()">📥 Import Word</button>
           <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="downloadTemplateSoal()">📄 Template Soal</button>
           <button class="btn-primary btn-sm" onclick="switchMenu('ujian-kelola', document.querySelector('[data-menu=ujian-kelola]'))">← Kembali</button>
@@ -5394,16 +5400,18 @@ function initSoalRichEditor(containerId, initialHtml) {
 
           rapikan: function () {
             try {
+              const cleanFn = (typeof deepCleanSoalText === 'function')
+                ? deepCleanSoalText
+                : (typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText : (x) => x);
               const range = quill.getSelection(true);
               if (range && range.length > 0) {
                 const selected = quill.getText(range.index, range.length);
-                const cleaned = repairCorruptedSqrtText(selected);
+                const cleaned = cleanFn(selected);
                 quill.deleteText(range.index, range.length, 'user');
                 quill.insertText(range.index, cleaned, 'user');
                 quill.setSelection(range.index + cleaned.length);
-                showBigPopup('success', 'Rapikan', 'Teks terpilih sudah dibersihkan dari residual.');
+                showBigPopup('success', 'Hapus residual', 'Angka residual pada teks terpilih sudah dihapus.');
               } else {
-                // Bersihkan seluruh isi editor (teks saja, pertahankan media)
                 const box = document.createElement('div');
                 box.innerHTML = quill.root.innerHTML;
                 const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
@@ -5411,14 +5419,14 @@ function initSoalRichEditor(containerId, initialHtml) {
                 while (walker.nextNode()) nodes.push(walker.currentNode);
                 nodes.forEach(n => {
                   const t = n.nodeValue || '';
-                  if (t.trim()) n.nodeValue = repairCorruptedSqrtText(t);
+                  if (t.trim()) n.nodeValue = cleanFn(t);
                 });
                 quill.root.innerHTML = box.innerHTML;
-                showBigPopup('success', 'Rapikan', 'Seluruh pertanyaan dibersihkan dari angka residual.');
+                showBigPopup('success', 'Hapus residual', 'Angka residual pada pertanyaan sudah dihapus. Cek hasil lalu simpan.');
               }
             } catch (e) {
               console.warn(e);
-              showBigPopup('danger', 'Rapikan', 'Gagal merapikan teks.');
+              showBigPopup('danger', 'Hapus residual', 'Gagal menghapus residual.');
             }
           }
         }
@@ -5477,10 +5485,10 @@ function initSoalRichEditor(containerId, initialHtml) {
         'ql-power': 'Sisip pangkat xⁿ',
         'ql-sub': 'Sisip subscript xₙ',
         'ql-frac': 'Sisip pecahan a/b',
-        'ql-rapikan': 'Bersihkan angka residual di teks'
+        'ql-rapikan': 'Hapus angka residual di teks pertanyaan'
       };
       // Pastikan label tombol terlihat (beberapa browser tidak render ::before)
-      const labels = { 'ql-sqrt': '√', 'ql-power': 'xⁿ', 'ql-sub': 'xₙ', 'ql-frac': 'a/b', 'ql-rapikan': '✦' };
+      const labels = { 'ql-sqrt': '√', 'ql-power': 'xⁿ', 'ql-sub': 'xₙ', 'ql-frac': 'a/b', 'ql-rapikan': 'Hapus residual' };
       Object.keys(labels).forEach(cls => {
         const btn = bar.querySelector('button.' + cls);
         if (btn && !(btn.textContent || '').trim()) btn.textContent = labels[cls];
@@ -5493,6 +5501,43 @@ function initSoalRichEditor(containerId, initialHtml) {
   } catch (e) {}
   activeSoalQuill = quill;
   return quill;
+}
+
+
+function hapusResidualDiEditorSoal() {
+  const quill = activeSoalQuill;
+  if (!quill) return showBigPopup('warning', 'Info', 'Editor soal belum aktif.');
+  try {
+    const cleanFn = (typeof deepCleanSoalText === 'function')
+      ? deepCleanSoalText
+      : (typeof repairCorruptedSqrtText === 'function' ? repairCorruptedSqrtText : (x) => x);
+    const range = quill.getSelection(true);
+    if (range && range.length > 0) {
+      const selected = quill.getText(range.index, range.length);
+      const cleaned = cleanFn(selected);
+      quill.deleteText(range.index, range.length, 'user');
+      quill.insertText(range.index, cleaned, 'user');
+      quill.setSelection(range.index + cleaned.length);
+    } else {
+      const box = document.createElement('div');
+      box.innerHTML = quill.root.innerHTML;
+      const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      let changed = false;
+      nodes.forEach(n => {
+        const t = n.nodeValue || '';
+        if (!t.trim()) return;
+        const c = cleanFn(t);
+        if (c !== t) { n.nodeValue = c; changed = true; }
+      });
+      quill.root.innerHTML = box.innerHTML;
+    }
+    showBigPopup('success', 'Hapus residual', 'Angka residual sudah dibersihkan. Periksa hasilnya lalu klik Simpan.');
+  } catch (e) {
+    console.warn(e);
+    showBigPopup('danger', 'Hapus residual', 'Gagal membersihkan teks.');
+  }
 }
 
 function getSoalRichHtml() {
@@ -8345,7 +8390,9 @@ function openFormSoalEdit(s) {
         <option value="esai">Esai</option>
       </select>
     </div>
-    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span></label>
+    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span>
+      <button type="button" onclick="hapusResidualDiEditorSoal()" style="margin-left:8px;padding:3px 10px;font-size:11px;font-weight:700;background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;">Hapus residual</button>
+    </label>
       <div id="fmSoalTanyaEditor" style="background:#fff;"></div>
     </div>
     <div class="form-group"><label>Poin:</label><input type="number" id="fmSoalPoin" value="1" min="0.5" step="0.5" style="width:100px;"></div>
@@ -8431,7 +8478,9 @@ function openFormSoalBaru() {
         <option value="esai">Esai</option>
       </select>
     </div>
-    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span></label>
+    <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span>
+      <button type="button" onclick="hapusResidualDiEditorSoal()" style="margin-left:8px;padding:3px 10px;font-size:11px;font-weight:700;background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;">Hapus residual</button>
+    </label>
       <div id="fmSoalTanyaEditor" style="background:#fff;"></div>
     </div>
     <div class="form-group"><label>Poin:</label><input type="number" id="fmSoalPoin" value="1" min="0.5" step="0.5" style="width:100px;"></div>
