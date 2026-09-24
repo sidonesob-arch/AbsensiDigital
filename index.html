@@ -2364,6 +2364,7 @@ function loadEditKehadiran() {
       keterangan: r.keterangan || r.ket || r.note || '',
       role: role,
       row_id: r.row_id || r.rowId || r._id || r.uuid || null,
+      is_placeholder: !!r.is_placeholder,
       raw: r
     }));
     // Filter lokal tambahan (aman jika backend belum filter keyword)
@@ -2377,8 +2378,10 @@ function loadEditKehadiran() {
     editHadirCache = data;
     if (summary) {
       summary.style.display = 'block';
+      const mu = res.matched_users != null ? ` • Siswa/Guru cocok: <b>${res.matched_users}</b>` : '';
+      const wr = res.with_record != null ? ` • Sudah punya absensi: <b>${res.with_record}</b>` : '';
       summary.innerHTML = `📊 Tipe: <b>${role.toUpperCase()}</b>${role === 'siswa' ? ' • Kelas: <b>' + (kelas || 'Semua') + '</b>' : ''} • Periode: <b>${tglMulai}</b> s/d <b>${tglSelesai}</b> • Tampil: <b>${data.length}</b> baris` +
-        (keyword ? ` • Cari: <b>${escHtmlEdit(keyword)}</b>` : '');
+        (keyword ? ` • Cari: <b>${escHtmlEdit(keyword)}</b>` : '') + mu + wr;
     }
     if (!data.length) {
       const hint = keyword
@@ -2398,8 +2401,8 @@ function loadEditKehadiran() {
       <td><b>${escHtmlEdit(r.status)}</b></td>
       <td style="font-size:10px;color:#666;">${escHtmlEdit(r.keterangan || '-')}</td>
       <td style="text-align:center;">
-        <button class="btn-edit" title="Ubah status" onclick="openFormEditKehadiran(${r._idx})">✏️</button>
-        <button class="btn-danger" title="Hapus catatan" onclick="hapusKehadiranRow(${r._idx})">🗑️</button>
+        <button class="btn-edit" title="Ubah / isi status" onclick="openFormEditKehadiran(${r._idx})">✏️</button>
+        ${r.is_placeholder || !r.row_id ? '' : `<button class="btn-danger" title="Hapus catatan" onclick="hapusKehadiranRow(${r._idx})">🗑️</button>`}
       </td>
     </tr>`).join('');
   });
@@ -2420,20 +2423,29 @@ function openFormEditKehadiran(idx) {
   if (!assertSuperAdminEditHadir()) return;
   const r = editHadirCache.find(x => x._idx === idx);
   if (!r) return showBigPopup('warning', 'Info', 'Data tidak ditemukan. Muat ulang daftar.');
+  const isNew = !!r.is_placeholder || !r.row_id;
+  const statusSel = isNew ? 'Izin' : r.status;
   const formHtml = `
     <div style="background:var(--primary-lighter);padding:10px;border-radius:8px;margin-bottom:12px;font-size:12px;">
       <b>${escHtmlEdit(r.nama)}</b> (${escHtmlEdit(r.id)}) · ${escHtmlEdit(r.unit)}<br>
+      ${isNew ? '<span style="color:#b45309;">Belum ada catatan absensi — mengisi status baru</span><br>' : ''}
       Tanggal: <b>${escHtmlEdit(r.tanggal)}</b> · Jam: ${escHtmlEdit(r.jam || '-')} · Sesi: ${escHtmlEdit(r.sesi || '-')}
     </div>
     <input type="hidden" id="fmEditHadirIdx" value="${r._idx}">
     <input type="hidden" id="fmEditHadirRole" value="${escHtmlEdit(r.role)}">
     <input type="hidden" id="fmEditHadirId" value="${escHtmlEdit(r.id)}">
-    <input type="hidden" id="fmEditHadirTgl" value="${escHtmlEdit(r.tanggal)}">
-    <input type="hidden" id="fmEditHadirSesi" value="${escHtmlEdit(r.sesi || '')}">
+    <div class="form-group">
+      <label>Tanggal:</label>
+      <input type="date" id="fmEditHadirTgl" value="${escHtmlEdit(r.tanggal)}">
+    </div>
+    <div class="form-group">
+      <label>Sesi (kosongkan = Sesi 1 / semua sesi untuk Sakit-Izin):</label>
+      <input type="text" id="fmEditHadirSesi" value="${escHtmlEdit(r.sesi || '')}" placeholder="Sesi 1">
+    </div>
     <input type="hidden" id="fmEditHadirRowId" value="${escHtmlEdit(r.row_id || '')}">
     <div class="form-group">
       <label>Status Baru:</label>
-      <select id="fmEditHadirStatus">${statusOptionsHtml(r.status)}</select>
+      <select id="fmEditHadirStatus">${statusOptionsHtml(statusSel)}</select>
     </div>
     <div class="form-group">
       <label>Jam (opsional, HH:MM atau HH:MM:SS):</label>
