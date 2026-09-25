@@ -2934,7 +2934,9 @@ function loadRekap() {
       tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:red;">${res.message || 'Gagal memuat data'}</td></tr>`;
       return;
     }
-    setText('labelTotalHari', `Total Sesi Efektif: ${res.totalSesiEfektif} • Periode: ${tglMulai || 'semua'} s/d ${tglSelesai || 'semua'}`);
+    const nHari = res.totalHari || 0;
+    const detailSesi = nHari ? ` (${nHari} hari sekolah, sesi bervariasi per hari)` : '';
+    setText('labelTotalHari', `Total Sesi Efektif (akumulasi real): ${res.totalSesiEfektif}${detailSesi} • Periode: ${tglMulai || 'semua'} s/d ${tglSelesai || 'semua'}`);
     if (!res.data || !res.data.length) {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Tidak ada data.</td></tr>';
       return;
@@ -3099,6 +3101,7 @@ function renderSyaratResult(d) {
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px;">
         <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Sekolah Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
         <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>🕐 Akumulasi Sesi Efektif</span><b>${d.totalSesiEfektif} sesi</b></div>
+        <div style="font-size:10px; color:#64748b; padding:0 0 4px;">(akumulasi unik tanggal+sesi dari data kehadiran & historis; jumlah sesi per hari bisa berbeda)</div>
       </div>
       <ul class="syarat-list">
         <li><span>Tepat Waktu (TW)</span><b>${d.tw}</b></li>
