@@ -9740,6 +9740,60 @@ function loadUjianTersediaSiswa() {
   });
 }
 
+function ujianLocalKey(pengerjaanId) {
+  return 'ujian_jawaban_' + (pengerjaanId || 'x');
+}
+function saveUjianLocalBackup(pengerjaanId, jawaban) {
+  try {
+    localStorage.setItem(ujianLocalKey(pengerjaanId), JSON.stringify({ at: Date.now(), jawaban: jawaban || [] }));
+  } catch (e) {}
+}
+function loadUjianLocalBackup(pengerjaanId) {
+  try {
+    const raw = localStorage.getItem(ujianLocalKey(pengerjaanId));
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return o && o.jawaban ? o.jawaban : null;
+  } catch (e) { return null; }
+}
+function clearUjianLocalBackup(pengerjaanId) {
+  try { localStorage.removeItem(ujianLocalKey(pengerjaanId)); } catch (e) {}
+}
+let ujianAutosaveTimer = null;
+let ujianSubmitInFlight = false;
+function stopUjianAutosave() {
+  if (ujianAutosaveTimer) { clearInterval(ujianAutosaveTimer); ujianAutosaveTimer = null; }
+}
+function startUjianAutosave() {
+  stopUjianAutosave();
+  ujianAutosaveTimer = setInterval(() => {
+    if (!ujianKerjaState || !ujianKerjaState.pengerjaan_id) return;
+    const jawaban = collectJawabanUjian();
+    saveUjianLocalBackup(ujianKerjaState.pengerjaan_id, jawaban);
+    sendRequest({
+      action: 'ujian_autosave',
+      pengerjaan_id: ujianKerjaState.pengerjaan_id,
+      jawaban,
+    }, res => {
+      if (res && res.status === 'success') {
+        const el = $('ujiKerjaAutosaveHint');
+        if (el) {
+          const t = new Date();
+          el.textContent = 'Tersimpan ' + String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0') + ':' + String(t.getSeconds()).padStart(2,'0');
+        }
+      }
+    });
+  }, 45000);
+}
+function mergeJawabanMap(serverMap, localList) {
+  const map = Object.assign({}, serverMap || {});
+  (localList || []).forEach(j => {
+    if (!j || !j.soal_id) return;
+    map[j.soal_id] = { teks: j.teks || '', opsi: j.opsi_ids || [] };
+  });
+  return map;
+}
+
 function mulaiUjianSiswa(ujianId) {
   if (!siswaUserData) return;
   showBigPopup('info', 'Memuat', '⏳ Menyiapkan ujian...', 0);
@@ -9750,12 +9804,31 @@ function mulaiUjianSiswa(ujianId) {
     closeBigPopup();
     if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message);
     ujianKerjaState = res;
+    ujianSubmitInFlight = false;
     $('ujianSiswaList').innerHTML = '';
     $('ujianKerjaArea').style.display = 'block';
     setText('ujiKerjaJudul', res.ujian.judul);
     setText('ujiKerjaMapel', res.ujian.mapel + (res.ujian.petunjuk ? ' · ' + res.ujian.petunjuk : ''));
-    renderSoalUjianKerja(res.soal, res.jawaban_tersimpan || {});
+    const local = loadUjianLocalBackup(res.pengerjaan_id);
+    const merged = mergeJawabanMap(res.jawaban_tersimpan || {}, local);
+    renderSoalUjianKerja(res.soal, merged);
     startUjianTimer(res.batas_at);
+    startUjianAutosave();
+    let hint = $('ujiKerjaAutosaveHint');
+    if (!hint) {
+      const area = $('ujianKerjaArea');
+      if (area) {
+        hint = document.createElement('div');
+        hint.id = 'ujiKerjaAutosaveHint';
+        hint.style.cssText = 'font-size:11px;color:#64748b;text-align:right;margin:4px 0 8px;';
+        hint.textContent = 'Autosave aktif (setiap 45 dtk)';
+        const first = area.querySelector('#ujiKerjaSoal') || area.firstChild;
+        if (first) area.insertBefore(hint, first);
+        else area.appendChild(hint);
+      }
+    } else {
+      hint.textContent = 'Autosave aktif (setiap 45 dtk)';
+    }
   });
 }
 
@@ -9819,8 +9892,11 @@ function startUjianTimer(batasAt) {
     if (sisa <= 0) {
       setText('ujiKerjaTimer', '00:00');
       clearInterval(ujianTimerInterval);
-      showBigPopup('warning', 'Waktu Habis', 'Waktu ujian habis. Jawaban akan diserahkan otomatis.', 2000);
-      setTimeout(() => submitUjianSiswa(true), 1500);
+      stopUjianAutosave();
+      showBigPopup('warning', 'Waktu Habis', 'Waktu ujian habis. Jawaban akan diserahkan otomatis.', 2500);
+      // Stagger 0.5–4 dtk agar 300 siswa tidak submit detik yang sama
+      const delay = 500 + Math.floor(Math.random() * 3500);
+      setTimeout(() => submitUjianSiswa(true), delay);
       return;
     }
     const m = Math.floor(sisa / 60000);
@@ -9831,23 +9907,49 @@ function startUjianTimer(batasAt) {
   ujianTimerInterval = setInterval(tick, 1000);
 }
 
-function submitUjianSiswa(isTimeout) {
+function submitUjianSiswa(isTimeout, retryCount) {
   if (!ujianKerjaState) return;
-  if (!isTimeout && !confirm('Serahkan jawaban sekarang?')) return;
+  if (ujianSubmitInFlight) return;
+  retryCount = retryCount || 0;
+  if (!isTimeout && retryCount === 0 && !confirm('Serahkan jawaban sekarang?')) return;
   if (ujianTimerInterval) clearInterval(ujianTimerInterval);
+  stopUjianAutosave();
   const jawaban = collectJawabanUjian();
-  showBigPopup('info', 'Mengirim', '⏳ Menyerahkan jawaban...', 0);
+  const pid = ujianKerjaState.pengerjaan_id;
+  saveUjianLocalBackup(pid, jawaban);
+  ujianSubmitInFlight = true;
+  showBigPopup('info', 'Mengirim', '⏳ Menyerahkan jawaban' + (retryCount ? ' (ulang ' + retryCount + ')...' : '...'), 0);
   sendRequest({
     action: 'ujian_submit',
-    pengerjaan_id: ujianKerjaState.pengerjaan_id,
+    pengerjaan_id: pid,
     jawaban,
     timeout: !!isTimeout,
   }, res => {
+    if (res.status === 'success') {
+      closeBigPopup();
+      clearUjianLocalBackup(pid);
+      ujianSubmitInFlight = false;
+      ujianKerjaState = null;
+      $('ujianKerjaArea').style.display = 'none';
+      showBigPopup('success', 'Hasil', res.message || 'Selesai');
+      loadUjianTersediaSiswa();
+      return;
+    }
+    // Gagal: jangan hapus state — coba ulang otomatis s/d 3x
+    if (retryCount < 3) {
+      ujianSubmitInFlight = false;
+      setTimeout(() => submitUjianSiswa(!!isTimeout, retryCount + 1), 2000 + retryCount * 1500);
+      return;
+    }
+    ujianSubmitInFlight = false;
     closeBigPopup();
-    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hasil', res.message || 'Selesai');
-    ujianKerjaState = null;
-    $('ujianKerjaArea').style.display = 'none';
-    loadUjianTersediaSiswa();
+    showBigPopup('danger', 'Gagal Kirim',
+      (res.message || 'Koneksi gagal') +
+      '<br><br>Jawaban masih di perangkat. Ketuk <b>Serahkan Jawaban</b> lagi atau pastikan sinyal stabil.');
+    // Restart timer display only if still ongoing session object
+    if (ujianKerjaState && ujianKerjaState.batas_at) {
+      startUjianAutosave();
+    }
   });
 }
 
