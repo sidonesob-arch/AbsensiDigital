@@ -1700,6 +1700,7 @@ function updateClock() {
   const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agus','Sep','Okt','Nov','Des'][now.getMonth()];
   const pad = n => String(n).padStart(2, '0');
   setText('topbarClock', `${hari}, ${pad(now.getDate())} ${bulan} ${now.getFullYear()} | ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} WIB`);
+  updateRealtimeSesi();
 }
 
 function toggleSidebar() {
@@ -2036,16 +2037,40 @@ function preloadPinConfig() {
   });
 }
 function updateRealtimeSesi(dataList) {
-  const list = dataList || cachedPinConfig;
-  if (!list) return;
+  const list = (dataList || cachedPinConfig || []).filter(p => p.sesi && String(p.sesi).toLowerCase().startsWith('sesi'));
+  if (!list.length) return;
   const now = new Date();
   const curMin = now.getHours() * 60 + now.getMinutes();
   currentActiveSesiName = '';
-  list.forEach(p => {
-    if (p.sesi && p.sesi.toLowerCase().startsWith('sesi')) {
-      if (curMin >= parseJamToMin(p.mulai) && curMin <= parseJamToMin(p.tutup)) currentActiveSesiName = p.sesi;
+  // urutkan by mulai
+  const sorted = list.slice().sort((a, b) => parseJamToMin(a.mulai) - parseJamToMin(b.mulai));
+  let active = null;
+  let next = null;
+  for (const p of sorted) {
+    const m = parseJamToMin(p.mulai);
+    const t = parseJamToMin(p.tutup);
+    if (curMin >= m && curMin <= t) {
+      active = p;
+      currentActiveSesiName = p.sesi;
+      break;
     }
-  });
+    if (curMin < m && !next) next = p;
+  }
+  const el = $('realtimeActiveSesi');
+  if (!el) return;
+  // Jangan timpa pesan hari libur
+  const curText = (el.innerText || '').toUpperCase();
+  if (curText.includes('HARI LIBUR')) return;
+  if (active) {
+    el.innerText = `Sesi Aktif: ${active.sesi} (${active.mulai || '-'} – ${active.tutup || '-'})`;
+  } else if (next) {
+    el.innerText = `${next.sesi} akan berlangsung dari jam ${next.mulai || '-'} – ${next.tutup || '-'}`;
+  } else if (sorted.length && curMin > parseJamToMin(sorted[sorted.length - 1].tutup)) {
+    el.innerText = 'Sesi Scan Hari Ini Sudah Berakhir';
+  } else if (sorted.length && curMin < parseJamToMin(sorted[0].mulai)) {
+    const f = sorted[0];
+    el.innerText = `${f.sesi} akan berlangsung dari jam ${f.mulai || '-'} – ${f.tutup || '-'}`;
+  }
 }
 function parseJamToMin(s) {
   if (!s || !s.includes(":")) return 0;
@@ -3411,6 +3436,17 @@ function loadPengumumanKelulusan() {
     const teks = $('kelulusanSuratTeks');
     if (teks) {
       const nomor = (d.nomor && String(d.nomor).trim()) ? d.nomor : '................';
+      const ta = d.tahun_ajaran || '.....';
+      let statusPenutup = '';
+      if (status === 'LULUS') {
+        statusPenutup = `Dari SMP NEGERI 1 SOBANG Tahun Ajaran ${ta}`;
+      } else if (status === 'DITANGGUHKAN') {
+        statusPenutup = 'Beberapa Syarat Kelulusan Belum Tercapai, Jika dalam rentang waktu tertentu belum dipenuhi maka statusmu menjadi TIDAK LULUS Permanen.';
+      } else if (status === 'TIDAK LULUS') {
+        statusPenutup = 'Lebih dari 50% Syarat Kelulusan Tidak Tercapai.';
+      } else {
+        statusPenutup = `Dari SMP NEGERI 1 SOBANG Tahun Ajaran ${ta}`;
+      }
       teks.innerHTML = `
         <div style="text-align:center; font-family: 'Times New Roman', Times, serif;">
           <div style="font-size:20px; font-weight:700; color:#000; letter-spacing:1px; margin-bottom:8px;">PENGUMUMAN KELULUSAN</div>
@@ -3421,8 +3457,8 @@ function loadPengumumanKelulusan() {
             <div><span style="display:inline-block; width:90px;">Nama</span>: ${d.nama || '-'}</div>
           </div>
           <div style="text-align:left; font-size:14px; color:#000; margin-bottom:8px;">Dinyatakan &nbsp;&nbsp;:</div>
-          <div style="text-align:center; font-size:28px; font-weight:700; color:#000; letter-spacing:2px; margin:12px 0 20px;">${status}</div>
-          <p style="margin:0; text-align:left; font-size:14px; color:#000;">Dari SMP NEGERI 1 SOBANG Tahun Ajaran ${d.tahun_ajaran || '.....'}</p>
+          <div style="text-align:center; font-size:28px; font-weight:700; color:${statusColor}; letter-spacing:2px; margin:12px 0 16px;">${status}</div>
+          <p style="margin:0; text-align:justify; font-size:14px; line-height:1.6; color:#000;">${statusPenutup}</p>
         </div>
       `;
     }
