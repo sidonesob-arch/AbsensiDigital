@@ -9643,6 +9643,9 @@ function loadHasilUjianData(ujianId) {
       }
       const skor = (r.skor != null ? r.skor : '-') + '/' + (r.skor_max != null ? r.skor_max : '-');
       let aksi = `<button class="btn-edit" title="Detail" onclick="lihatDetailHasil('${r.id}')">👁️</button> `;
+      if (r.status === 'berlangsung' || r.status === 'timeout') {
+        aksi += `<button class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Selesaikan / kirim jawaban tersimpan" onclick="paksaSelesaiUjianSiswa('${r.id}','${(r.nama||r.nisn||'').replace(/'/g,"\'")}')">✅</button> `;
+      }
       if (r.status === 'berlangsung') {
         aksi += `<button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Perpanjang waktu" onclick="perpanjangUjianSiswa('${r.id}')">⏱️+</button> `;
       }
@@ -9661,6 +9664,16 @@ function loadHasilUjianData(ujianId) {
         <td style="white-space:nowrap;">${aksi}</td>
       </tr>`;
     }).join('');
+  });
+}
+
+function paksaSelesaiUjianSiswa(pengerjaanId, nama) {
+  if (!confirm('Selesaikan ujian atas nama\n' + (nama || '') + '?\n\nJawaban yang sudah tersimpan di server akan dinilai dan sesi ditutup.')) return;
+  showBigPopup('info', 'Memproses', '⏳ Menyelesaikan sesi...', 0);
+  sendRequest({ action: 'ujian_paksa_selesai', pengerjaan_id: pengerjaanId }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Selesaikan Ujian', res.message || 'Selesai');
+    if (res.status === 'success') refreshHasilUjian();
   });
 }
 
