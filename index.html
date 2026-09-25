@@ -9605,13 +9605,15 @@ function loadHasilUjianData(ujianId) {
       return;
     }
     const rows = res.data || [];
-    const s = res.summary || {};
+    const s = res.summary || res.stats || {};
     if (sum) {
+      const autoC = s.auto_closed || 0;
       sum.innerHTML = `
         <span style="background:#dbeafe;color:#1e40af;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">👥 Total: ${s.total||rows.length}</span>
         <span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">⏳ Sedang: ${s.berlangsung||0}</span>
         <span style="background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">⏰ Timeout: ${s.timeout||0}</span>
-        <span style="background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">✅ Selesai: ${s.selesai||0}</span>`;
+        <span style="background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">✅ Selesai: ${s.selesai||0}</span>
+        ${autoC ? `<span style="background:#ffedd5;color:#9a3412;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">🔄 Auto-tutup: ${autoC}</span>` : ''}`;
     }
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>';
