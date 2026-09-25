@@ -1062,6 +1062,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="pengaturan-tab-btn" data-tab="hari-libur" onclick="togglePengaturanPanel('hari-libur')"><span class="tab-icon">🎉</span>Hari Libur</button>
         <button class="pengaturan-tab-btn" data-tab="historis" onclick="togglePengaturanPanel('historis')"><span class="tab-icon">📦</span>Historis</button>
         <button class="pengaturan-tab-btn" data-tab="edit-kehadiran" onclick="togglePengaturanPanel('edit-kehadiran')"><span class="tab-icon">✏️</span>Edit Kehadiran</button>
+        <button class="pengaturan-tab-btn" data-tab="kelulusan" onclick="togglePengaturanPanel('kelulusan')"><span class="tab-icon">🎓</span>Kelulusan</button>
       </div>
 
       <!-- PANEL: SESI -->
@@ -1254,6 +1255,68 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           </table>
         </div>
       </div>
+
+      <!-- PANEL: KELULUSAN (Super Admin) -->
+      <div class="pengaturan-panel" id="panel-kelulusan">
+        <h4 class="panel-title">🎓 Pengaturan Kelulusan</h4>
+        <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; border-left:4px solid var(--primary); margin-bottom:12px; font-size:12px; color:var(--primary);">
+          Atur status kelulusan siswa <b>kelas 9</b>: <b>LULUS</b>, <b>DITANGGUHKAN</b>, atau <b>TIDAK LULUS</b>. Tentukan juga tanggal &amp; jam pengumuman serta tahun ajaran.
+        </div>
+        <div class="download-filter" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Tanggal Pengumuman:</label>
+            <input type="date" id="kelulusanTgl">
+          </div>
+          <div class="form-group">
+            <label>Jam Pengumuman:</label>
+            <input type="time" id="kelulusanJam">
+          </div>
+          <div class="form-group">
+            <label>Tahun Ajaran:</label>
+            <input type="text" id="kelulusanTahunAjaran" placeholder="contoh: 2025/2026">
+          </div>
+        </div>
+        <div class="master-toolbar" style="margin-bottom:10px;">
+          <div class="form-group" style="flex:1; min-width:120px;">
+            <label>Filter / Cari:</label>
+            <input type="text" id="kelulusanSearch" placeholder="NISN / Nama..." oninput="filterKelulusanList()">
+          </div>
+          <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+            <label>Set semua tampil:</label>
+            <select id="kelulusanBulkStatus" onchange="bulkSetKelulusanStatus(this.value)" style="width:auto; min-width:140px;">
+              <option value="">— Pilih —</option>
+              <option value="LULUS">LULUS</option>
+              <option value="DITANGGUHKAN">DITANGGUHKAN</option>
+              <option value="TIDAK LULUS">TIDAK LULUS</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+            <label>&nbsp;</label>
+            <button class="btn-primary" style="width:auto; padding:8px 16px;" onclick="loadKelulusanSetting()">🔄 Muat Ulang</button>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;">No</th>
+                <th>NISN</th>
+                <th>Nama</th>
+                <th>Kelas</th>
+                <th style="min-width:150px;">Status Kelulusan</th>
+              </tr>
+            </thead>
+            <tbody id="tableKelulusanSettingBody">
+              <tr><td colspan="5" style="text-align:center;">Buka tab ini untuk memuat data kelas 9...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn-primary" style="width:auto; padding:10px 24px;" onclick="simpanKelulusanSetting()">💾 Simpan Pengaturan Kelulusan</button>
+        </div>
+        <p style="font-size:11px; color:#64748b; margin-top:8px;">Jika error tabel belum ada, jalankan SQL CREATE TABLE di Supabase (pesan error berisi skripnya).</p>
+      </div>
+
     </div>
 
     <!-- JADWAL MAPEL -->
@@ -1455,8 +1518,39 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- KELULUSAN -->
     <div id="menu-kelulusan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">🎓 Pengumuman Kelulusan</h3>
-      <div style="background:var(--primary-light); padding:20px; border-radius:8px; border-left:5px solid var(--primary); text-align:center;">
-        <h4 style="color:var(--primary); margin:0; font-size:15px; font-weight:700;">PENGUMUMAN KELULUSAN 7 JULI 2027</h4>
+      <div id="kelulusanAccessDenied" style="display:none;">
+        <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:10px; padding:18px; text-align:center;">
+          <div style="font-size:40px; margin-bottom:8px;">🚫</div>
+          <div style="font-weight:800; font-size:15px;" id="kelulusanDeniedTitle">Akses Ditolak</div>
+          <div style="font-size:13px; margin-top:6px;" id="kelulusanDeniedMsg">Menu ini hanya untuk siswa kelas 9 (setelah login), atau staf (Guru/Admin/Super Admin).</div>
+        </div>
+      </div>
+      <div id="kelulusanLocked" style="display:none;">
+        <div style="background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:10px; padding:18px; text-align:center;">
+          <div style="font-size:36px; margin-bottom:8px;">🔒</div>
+          <div style="font-weight:800;">Pengumuman belum dibuka</div>
+          <div style="font-size:13px; margin-top:8px;" id="kelulusanLockedInfo">Pengumuman kelulusan akan tersedia pada waktu yang ditentukan admin.</div>
+        </div>
+      </div>
+      <div id="kelulusanStaffView" style="display:none;">
+        <div class="download-card">
+          <div style="font-size:13px; color:var(--primary); font-weight:700; margin-bottom:8px;">Ringkasan Pengaturan Kelulusan</div>
+          <div id="kelulusanStaffMeta" style="font-size:12px; line-height:1.6; color:#334155;">Memuat...</div>
+          <div class="table-responsive" style="margin-top:12px; max-height:360px; overflow-y:auto;">
+            <table>
+              <thead><tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Status</th></tr></thead>
+              <tbody id="kelulusanStaffBody"><tr><td colspan="5" style="text-align:center;">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="kelulusanSiswaView" style="display:none;">
+        <div id="kelulusanSurat" style="background:#fff; border-radius:14px; padding:22px 18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); border-top:6px solid var(--primary); max-width:520px; margin:0 auto; text-align:center;">
+          <div style="font-size:12px; color:var(--muted); letter-spacing:0.5px; text-transform:uppercase; font-weight:700;">SMP Negeri 1 Sobang</div>
+          <div style="font-size:16px; font-weight:900; color:var(--primary); margin:8px 0 14px;">PENGUMUMAN KELULUSAN</div>
+          <div id="kelulusanSuratWaktu" style="font-size:11px; color:#64748b; margin-bottom:14px;"></div>
+          <div id="kelulusanSuratTeks" style="font-size:14px; line-height:1.7; color:#1e293b; text-align:left;"></div>
+        </div>
       </div>
     </div>
 
@@ -2149,6 +2243,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'lihat-nilai-saya') loadNilaiSaya();
+  if (menuName === 'kelulusan') loadPengumumanKelulusan();
   if (menuName === 'download-absensi') initDownloadAbsensi();
   if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
   if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
@@ -3124,6 +3219,194 @@ function renderSyaratResult(d) {
   `;
 }
 
+
+// ===================== KELULUSAN =====================
+let _kelulusanSiswaCache = [];
+
+function isKelas9(kelas) {
+  const k = String(kelas || '').trim();
+  return /^9([\s.\-_]|$)/.test(k) || k.startsWith('9');
+}
+
+function loadKelulusanSetting() {
+  const tbody = $('tableKelulusanSettingBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">⏳ Memuat siswa kelas 9...</td></tr>';
+  sendRequest({ action: 'get_kelulusan_setting' }, res => {
+    if (res.status !== 'success') {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
+      return;
+    }
+    if (res.warning) console.warn(res.warning);
+    if ($('kelulusanTgl')) $('kelulusanTgl').value = res.tanggal || '';
+    if ($('kelulusanJam')) $('kelulusanJam').value = res.jam || '';
+    if ($('kelulusanTahunAjaran')) $('kelulusanTahunAjaran').value = res.tahun_ajaran || '';
+    _kelulusanSiswaCache = res.data || [];
+    renderKelulusanSettingTable(_kelulusanSiswaCache);
+  });
+}
+
+function renderKelulusanSettingTable(list) {
+  const tbody = $('tableKelulusanSettingBody');
+  if (!tbody) return;
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Tidak ada siswa kelas 9.</td></tr>';
+    return;
+  }
+  const opts = ['', 'LULUS', 'DITANGGUHKAN', 'TIDAK LULUS'];
+  tbody.innerHTML = list.map((s, i) => {
+    const st = s.status || '';
+    const options = opts.map(o => `<option value="${o}" ${st === o ? 'selected' : ''}>${o || '— Belum diatur —'}</option>`).join('');
+    return `<tr data-nisn="${s.nisn}">
+      <td>${i + 1}</td>
+      <td>${s.nisn}</td>
+      <td><b>${s.nama || '-'}</b></td>
+      <td>${s.kelas || '-'}</td>
+      <td>
+        <select class="kelulusan-status-select" data-nisn="${s.nisn}" style="font-size:12px; padding:6px;">
+          ${options}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterKelulusanList() {
+  const q = String($('kelulusanSearch')?.value || '').toLowerCase().trim();
+  if (!q) return renderKelulusanSettingTable(_kelulusanSiswaCache);
+  const filtered = _kelulusanSiswaCache.filter(s =>
+    String(s.nisn).toLowerCase().includes(q) || String(s.nama || '').toLowerCase().includes(q) || String(s.kelas || '').toLowerCase().includes(q)
+  );
+  renderKelulusanSettingTable(filtered);
+}
+
+function bulkSetKelulusanStatus(val) {
+  document.querySelectorAll('.kelulusan-status-select').forEach(sel => { sel.value = val; });
+  if ($('kelulusanBulkStatus')) $('kelulusanBulkStatus').value = '';
+}
+
+function simpanKelulusanSetting() {
+  const tanggal = $('kelulusanTgl')?.value || '';
+  const jam = $('kelulusanJam')?.value || '';
+  const tahun_ajaran = $('kelulusanTahunAjaran')?.value || '';
+  if (!tanggal || !jam) return showBigPopup('warning', 'Peringatan', 'Tanggal dan jam pengumuman wajib diisi.');
+  if (!tahun_ajaran.trim()) return showBigPopup('warning', 'Peringatan', 'Tahun ajaran wajib diisi.');
+
+  const allItems = _kelulusanSiswaCache.map(s => ({
+    nisn: s.nisn, nama: s.nama || '', kelas: s.kelas || '', status: s.status || ''
+  }));
+  document.querySelectorAll('.kelulusan-status-select').forEach(sel => {
+    const nisn = sel.getAttribute('data-nisn');
+    const it = allItems.find(x => String(x.nisn) === String(nisn));
+    if (it) it.status = sel.value || '';
+  });
+
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan pengaturan kelulusan...', 0);
+  sendRequest({
+    action: 'save_kelulusan_setting',
+    tanggal, jam, tahun_ajaran: tahun_ajaran.trim(),
+    items: allItems,
+  }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Kelulusan', res.message || 'Selesai');
+    if (res.status === 'success') loadKelulusanSetting();
+  });
+}
+
+function loadPengumumanKelulusan() {
+  const denied = $('kelulusanAccessDenied');
+  const locked = $('kelulusanLocked');
+  const staff = $('kelulusanStaffView');
+  const siswa = $('kelulusanSiswaView');
+  [denied, locked, staff, siswa].forEach(el => { if (el) el.style.display = 'none'; });
+
+  const isStaff = userRole === 'guru' || userRole === 'admin' || userRole === 'super_admin';
+  if (isStaff) {
+    if (staff) staff.style.display = 'block';
+    sendRequest({ action: 'get_kelulusan_setting' }, res => {
+      const meta = $('kelulusanStaffMeta');
+      const body = $('kelulusanStaffBody');
+      if (res.status !== 'success') {
+        if (meta) meta.innerHTML = `<span style="color:#b91c1c;">${res.message || 'Gagal memuat'}</span>`;
+        return;
+      }
+      const tgl = res.tanggal || '—';
+      const jam = res.jam || '—';
+      const ta = res.tahun_ajaran || '—';
+      const list = (res.data || []).filter(s => s.status);
+      const cnt = { LULUS: 0, DITANGGUHKAN: 0, 'TIDAK LULUS': 0 };
+      list.forEach(s => { if (cnt[s.status] != null) cnt[s.status]++; });
+      if (meta) meta.innerHTML = `Tanggal: <b>${tgl}</b> · Jam: <b>${jam}</b> · Tahun Ajaran: <b>${ta}</b><br>
+        Lulus: <b style="color:#16a34a">${cnt.LULUS}</b> · Ditangguhkan: <b style="color:#b45309">${cnt.DITANGGUHKAN}</b> · Tidak Lulus: <b style="color:#dc2626">${cnt['TIDAK LULUS']}</b> · Belum diatur: <b>${(res.data||[]).length - list.length}</b>`;
+      if (body) {
+        if (!list.length) body.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada status yang diatur.</td></tr>';
+        else body.innerHTML = list.map((s, i) => {
+          let color = '#334155';
+          if (s.status === 'LULUS') color = '#16a34a';
+          else if (s.status === 'DITANGGUHKAN') color = '#b45309';
+          else if (s.status === 'TIDAK LULUS') color = '#dc2626';
+          return `<tr><td>${i+1}</td><td>${s.nisn}</td><td>${s.nama||'-'}</td><td>${s.kelas||'-'}</td><td style="font-weight:800;color:${color}">${s.status}</td></tr>`;
+        }).join('');
+      }
+    });
+    return;
+  }
+
+  if (!siswaUserData || !siswaUserData.nisn) {
+    if (denied) denied.style.display = 'block';
+    setText('kelulusanDeniedTitle', 'Login Diperlukan');
+    setText('kelulusanDeniedMsg', 'Silakan login sebagai Siswa kelas 9 untuk melihat pengumuman kelulusan.');
+    return;
+  }
+  if (!isKelas9(siswaUserData.kelas)) {
+    if (denied) denied.style.display = 'block';
+    setText('kelulusanDeniedTitle', 'Akses Ditolak');
+    setText('kelulusanDeniedMsg', 'Menu Kelulusan hanya untuk siswa kelas 9. Kelas Anda: ' + (siswaUserData.kelas || '-'));
+    return;
+  }
+
+  sendRequest({ action: 'get_kelulusan_pengumuman', nisn: siswaUserData.nisn }, res => {
+    if (res.status === 'denied') {
+      if (denied) denied.style.display = 'block';
+      setText('kelulusanDeniedTitle', 'Akses Ditolak');
+      setText('kelulusanDeniedMsg', res.message || 'Akses ditolak.');
+      return;
+    }
+    if (res.status === 'locked') {
+      if (locked) locked.style.display = 'block';
+      setText('kelulusanLockedInfo', res.message || 'Pengumuman belum dibuka.');
+      return;
+    }
+    if (res.status !== 'success') {
+      if (denied) denied.style.display = 'block';
+      setText('kelulusanDeniedTitle', 'Informasi');
+      setText('kelulusanDeniedMsg', res.message || 'Belum tersedia.');
+      return;
+    }
+    if (siswa) siswa.style.display = 'block';
+    const d = res.data || {};
+    const status = d.status || '—';
+    let statusColor = 'var(--primary)';
+    if (status === 'LULUS') statusColor = '#16a34a';
+    else if (status === 'DITANGGUHKAN') statusColor = '#b45309';
+    else if (status === 'TIDAK LULUS') statusColor = '#dc2626';
+
+    setText('kelulusanSuratWaktu', (d.tanggal_display || d.tanggal || '') + (d.jam ? ' · Pukul ' + d.jam + ' WIB' : ''));
+    const teks = $('kelulusanSuratTeks');
+    if (teks) {
+      teks.innerHTML = `
+        <p style="margin:0 0 12px; text-align:justify;">Berdasarkan Hasil Penilaian Semester 1 s.d Semester 6, Hasil Ujian Sekolah, dan Syarat Kelulusan, Siswa dengan :</p>
+        <p style="margin:0; font-weight:700;">NISN</p>
+        <p style="margin:0 0 8px; font-size:15px;">${d.nisn || '-'}</p>
+        <p style="margin:0; font-weight:700;">Nama</p>
+        <p style="margin:0 0 8px; font-size:15px;">${d.nama || '-'}</p>
+        <p style="margin:0; font-weight:700;">dinyatakan :</p>
+        <p style="margin:6px 0 12px; font-size:22px; font-weight:900; color:${statusColor}; letter-spacing:1px;">${status}</p>
+        <p style="margin:0; text-align:justify;">Dari SMP Negeri 1 Sobang Tahun Ajaran <b>${d.tahun_ajaran || '—'}</b>.</p>
+      `;
+    }
+  });
+}
+
 function togglePengaturanPanel(tab) {
   const panels = $$('.pengaturan-panel');
   const buttons = $$('.pengaturan-tab-btn');
@@ -3147,6 +3430,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'historis') loadHistorisInfo();
   if (tab === 'izin') loadAllowedUsers();
   if (tab === 'edit-kehadiran') initEditKehadiran();
+  if (tab === 'kelulusan') loadKelulusanSetting();
 }
 
 function renderSesiConfig(dataList) {
