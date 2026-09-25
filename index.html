@@ -860,13 +860,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <tr>
                 <th style="width:36px;">No</th>
                 <th>Mata Pelajaran</th>
-                <th style="width:70px;">Kode</th>
-                <th style="width:90px; text-align:center;">Rata-rata</th>
-                <th style="width:70px; text-align:center;">Jumlah</th>
+                <th style="width:100px; text-align:center;">Rata-rata</th>
+                <th style="width:80px; text-align:center;">Jumlah Nilai</th>
               </tr>
             </thead>
             <tbody id="tableNilaiSayaBody">
-              <tr><td colspan="5" style="text-align:center; color:#666;">Memuat...</td></tr>
+              <tr><td colspan="4" style="text-align:center; color:#666;">Memuat...</td></tr>
             </tbody>
           </table>
         </div>
@@ -3007,22 +3006,49 @@ function loadNilaiSaya() {
   setText('nilaiSayaHeaderNama', siswaUserData.nama || 'Siswa');
   setText('nilaiSayaHeaderMeta', 'NISN: ' + (siswaUserData.nisn || '-') + ' · Kelas: ' + (siswaUserData.kelas || '-'));
   const tbody = $('tableNilaiSayaBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666;">⏳ Memuat nilai...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">⏳ Memuat nilai...</td></tr>';
   sendRequest({ action: 'get_nilai_siswa', nisn: siswaUserData.nisn }, res => {
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#b91c1c;">${res.message || 'Gagal memuat nilai'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#b91c1c;">${res.message || 'Gagal memuat nilai'}</td></tr>`;
       return;
     }
-    const rows = res.data || [];
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666;">Belum ada nilai tercatat.</td></tr>';
-      return;
-    }
+    // Map data dari server by code / label
+    const serverRows = res.data || [];
+    const byCode = {};
+    const byLabel = {};
+    serverRows.forEach(r => {
+      if (r.code) byCode[String(r.code).toUpperCase()] = r;
+      if (r.label) byLabel[String(r.label).toLowerCase()] = r;
+      if (r.mapel) byLabel[String(r.mapel).toLowerCase()] = r;
+    });
+
+    // Selalu tampilkan SEMUA mapel sesuai urutan, meski belum ada nilai
+    const rows = MAPEL_NILAI_ORDER.map(m => {
+      let found = byCode[m.code.toUpperCase()] || byLabel[m.label.toLowerCase()] || null;
+      if (!found) {
+        // coba match via aliases
+        for (const s of serverRows) {
+          const idx = matchMapelOrder(s.mapel || s.label || s.code || '');
+          if (idx >= 0 && MAPEL_NILAI_ORDER[idx].code === m.code) {
+            found = s;
+            break;
+          }
+        }
+      }
+      return {
+        label: m.label,
+        code: m.code,
+        rata_rata: found && found.rata_rata != null ? found.rata_rata : null,
+        jumlah: found ? (found.jumlah || 0) : 0,
+      };
+    });
+
     tbody.innerHTML = rows.map((r, i) => {
-      const avg = r.rata_rata != null ? Number(r.rata_rata).toFixed(2) : '-';
-      const avgNum = parseFloat(avg);
-      let color = 'var(--primary)';
+      const hasNilai = r.rata_rata != null && r.jumlah > 0;
+      const avg = hasNilai ? Number(r.rata_rata).toFixed(2) : '—';
+      const avgNum = hasNilai ? parseFloat(r.rata_rata) : NaN;
+      let color = '#94a3b8';
       if (!isNaN(avgNum)) {
         if (avgNum >= 80) color = '#16a34a';
         else if (avgNum >= 70) color = '#0d9488';
@@ -3031,14 +3057,14 @@ function loadNilaiSaya() {
       }
       return `<tr>
         <td>${i + 1}</td>
-        <td><b>${r.label || r.mapel || '-'}</b></td>
-        <td><span class="tag-mini">${r.code || '-'}</span></td>
+        <td><b>${r.label}</b></td>
         <td style="text-align:center; font-weight:800; font-size:14px; color:${color};">${avg}</td>
-        <td style="text-align:center;">${r.jumlah || 0}</td>
+        <td style="text-align:center; color:${hasNilai ? 'inherit' : '#94a3b8'};">${r.jumlah || 0}</td>
       </tr>`;
     }).join('');
   });
 }
+
 
 function loadCekSyarat() {
   updateSyaratAccessUI();
