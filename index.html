@@ -1275,6 +1275,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             <label>Tahun Ajaran:</label>
             <input type="text" id="kelulusanTahunAjaran" placeholder="contoh: 2025/2026">
           </div>
+          <div class="form-group">
+            <label>Nomor Surat:</label>
+            <input type="text" id="kelulusanNomor" placeholder="contoh: 421.3/012/SMPN1S/2026">
+          </div>
         </div>
         <div class="master-toolbar" style="margin-bottom:10px;">
           <div class="form-group" style="flex:1; min-width:120px;">
@@ -1526,10 +1530,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
       </div>
       <div id="kelulusanLocked" style="display:none;">
-        <div style="background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:10px; padding:18px; text-align:center;">
-          <div style="font-size:36px; margin-bottom:8px;">🔒</div>
-          <div style="font-weight:800;">Pengumuman belum dibuka</div>
-          <div style="font-size:13px; margin-top:8px;" id="kelulusanLockedInfo">Pengumuman kelulusan akan tersedia pada waktu yang ditentukan admin.</div>
+        <div style="background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:12px; padding:28px 18px; text-align:center;">
+          <div style="font-size:42px; margin-bottom:10px;">🔒</div>
+          <div style="font-weight:900; font-size:16px; color:var(--primary);">Pengumuman Kelulusan Belum Dibuka</div>
+          <div style="font-size:13px; margin-top:10px; color:#9a3412;" id="kelulusanLockedInfo">Silakan cek kembali pada tanggal dan jam yang telah ditentukan.</div>
         </div>
       </div>
       <div id="kelulusanStaffView" style="display:none;">
@@ -1545,11 +1549,8 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
       </div>
       <div id="kelulusanSiswaView" style="display:none;">
-        <div id="kelulusanSurat" style="background:#fff; border-radius:14px; padding:22px 18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); border-top:6px solid var(--primary); max-width:520px; margin:0 auto; text-align:center;">
-          <div style="font-size:12px; color:var(--muted); letter-spacing:0.5px; text-transform:uppercase; font-weight:700;">SMP Negeri 1 Sobang</div>
-          <div style="font-size:16px; font-weight:900; color:var(--primary); margin:8px 0 14px;">PENGUMUMAN KELULUSAN</div>
-          <div id="kelulusanSuratWaktu" style="font-size:11px; color:#64748b; margin-bottom:14px;"></div>
-          <div id="kelulusanSuratTeks" style="font-size:14px; line-height:1.7; color:#1e293b; text-align:left;"></div>
+        <div id="kelulusanSurat" style="background:#fff; border-radius:14px; padding:24px 20px; box-shadow:0 4px 20px rgba(0,0,0,0.08); border-top:6px solid var(--primary); max-width:560px; margin:0 auto;">
+          <div id="kelulusanSuratTeks" style="font-size:14px; line-height:1.75; color:#1e293b;"></div>
         </div>
       </div>
     </div>
@@ -3240,6 +3241,7 @@ function loadKelulusanSetting() {
     if ($('kelulusanTgl')) $('kelulusanTgl').value = res.tanggal || '';
     if ($('kelulusanJam')) $('kelulusanJam').value = res.jam || '';
     if ($('kelulusanTahunAjaran')) $('kelulusanTahunAjaran').value = res.tahun_ajaran || '';
+    if ($('kelulusanNomor')) $('kelulusanNomor').value = res.nomor || '';
     _kelulusanSiswaCache = res.data || [];
     renderKelulusanSettingTable(_kelulusanSiswaCache);
   });
@@ -3288,6 +3290,7 @@ function simpanKelulusanSetting() {
   const tanggal = $('kelulusanTgl')?.value || '';
   const jam = $('kelulusanJam')?.value || '';
   const tahun_ajaran = $('kelulusanTahunAjaran')?.value || '';
+  const nomor = $('kelulusanNomor')?.value || '';
   if (!tanggal || !jam) return showBigPopup('warning', 'Peringatan', 'Tanggal dan jam pengumuman wajib diisi.');
   if (!tahun_ajaran.trim()) return showBigPopup('warning', 'Peringatan', 'Tahun ajaran wajib diisi.');
 
@@ -3303,7 +3306,7 @@ function simpanKelulusanSetting() {
   showBigPopup('info', 'Menyimpan', '⏳ Menyimpan pengaturan kelulusan...', 0);
   sendRequest({
     action: 'save_kelulusan_setting',
-    tanggal, jam, tahun_ajaran: tahun_ajaran.trim(),
+    tanggal, jam, tahun_ajaran: tahun_ajaran.trim(), nomor: nomor.trim(),
     items: allItems,
   }, res => {
     closeBigPopup();
@@ -3373,7 +3376,7 @@ function loadPengumumanKelulusan() {
     }
     if (res.status === 'locked') {
       if (locked) locked.style.display = 'block';
-      setText('kelulusanLockedInfo', res.message || 'Pengumuman belum dibuka.');
+      setText('kelulusanLockedInfo', res.message || 'Silakan cek kembali pada tanggal dan jam yang telah ditentukan.');
       return;
     }
     if (res.status !== 'success') {
@@ -3385,23 +3388,23 @@ function loadPengumumanKelulusan() {
     if (siswa) siswa.style.display = 'block';
     const d = res.data || {};
     const status = d.status || '—';
-    let statusColor = 'var(--primary)';
+    let statusColor = '#05285e';
     if (status === 'LULUS') statusColor = '#16a34a';
     else if (status === 'DITANGGUHKAN') statusColor = '#b45309';
     else if (status === 'TIDAK LULUS') statusColor = '#dc2626';
 
-    setText('kelulusanSuratWaktu', (d.tanggal_display || d.tanggal || '') + (d.jam ? ' · Pukul ' + d.jam + ' WIB' : ''));
     const teks = $('kelulusanSuratTeks');
     if (teks) {
+      const nomor = d.nomor ? d.nomor : '................';
       teks.innerHTML = `
-        <p style="margin:0 0 12px; text-align:justify;">Berdasarkan Hasil Penilaian Semester 1 s.d Semester 6, Hasil Ujian Sekolah, dan Syarat Kelulusan, Siswa dengan :</p>
-        <p style="margin:0; font-weight:700;">NISN</p>
-        <p style="margin:0 0 8px; font-size:15px;">${d.nisn || '-'}</p>
-        <p style="margin:0; font-weight:700;">Nama</p>
-        <p style="margin:0 0 8px; font-size:15px;">${d.nama || '-'}</p>
-        <p style="margin:0; font-weight:700;">dinyatakan :</p>
-        <p style="margin:6px 0 12px; font-size:22px; font-weight:900; color:${statusColor}; letter-spacing:1px;">${status}</p>
-        <p style="margin:0; text-align:justify;">Dari SMP Negeri 1 Sobang Tahun Ajaran <b>${d.tahun_ajaran || '—'}</b>.</p>
+        <div style="text-align:center; font-size:18px; font-weight:900; color:#0f172a; letter-spacing:0.5px; margin-bottom:6px;">PENGUMUMAN KELULUSAN</div>
+        <div style="text-align:center; font-size:13px; margin-bottom:16px; color:#334155;">Nomor : <b>${nomor}</b></div>
+        <p style="margin:0 0 14px; text-align:justify; font-size:13.5px;">Berdasarkan Hasil Penilaian Semester 1 s.d Semester 6, Hasil Ujian Sekolah dan Syarat-Syarat Kelulusan, siswa dengan :</p>
+        <div style="margin:0 0 4px; font-size:14px;"><span style="display:inline-block; min-width:72px; font-weight:700;">NISN</span> : ${d.nisn || '-'}</div>
+        <div style="margin:0 0 16px; font-size:14px;"><span style="display:inline-block; min-width:72px; font-weight:700;">Nama</span> : ${d.nama || '-'}</div>
+        <div style="margin:0 0 6px; font-size:14px;"><span style="font-weight:700;">Dinyatakan</span> :</div>
+        <div style="text-align:center; font-size:26px; font-weight:900; color:${statusColor}; letter-spacing:2px; margin:10px 0 18px;">${status}</div>
+        <p style="margin:0; text-align:justify; font-size:13.5px;">Dari SMP NEGERI 1 SOBANG Tahun Ajaran <b>${d.tahun_ajaran || '.....'}</b></p>
       `;
     }
   });
