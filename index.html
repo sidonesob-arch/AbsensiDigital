@@ -3804,16 +3804,38 @@ function simpanPinGuru(userId) {
 }
 
 function loadHistorisInfo() {
-  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke sheet Historis.');
+  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke Historis. Tombol di atas: pindah manual, jalankan auto-absen, atau pasang preferensi jadwal 23:59.');
 }
 function moveToHistorisManual() {
-  sendRequest({ action: 'move_to_historis' }, res => { showBigPopup('success', 'Historis', res.message); });
+  if (!confirm('Pindahkan semua data kehadiran SEBELUM hari ini ke Historis?')) return;
+  showBigPopup('info', 'Historis', '⏳ Memindahkan data lama...', 0);
+  sendRequest({ action: 'move_to_historis' }, res => {
+    closeBigPopup();
+    const ok = res && res.status === 'success';
+    showBigPopup(ok ? 'success' : 'danger', 'Historis', (res && res.message) ? String(res.message).replace(/\n/g, '<br>') : (ok ? 'Selesai' : 'Gagal'));
+    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
+  });
 }
 function jalankanAutoAbsenManual() {
-  sendRequest({ action: 'manual_auto_absen' }, res => { showBigPopup('success', 'Auto Absen', res.message); fetchDashboardData(); });
+  if (!confirm('Jalankan Auto Absen sekarang untuk sesi hari ini?')) return;
+  showBigPopup('info', 'Auto Absen', '⏳ Memproses auto absen...', 0);
+  sendRequest({ action: 'manual_auto_absen' }, res => {
+    closeBigPopup();
+    const ok = res && res.status === 'success';
+    showBigPopup(ok ? 'success' : 'danger', 'Auto Absen', (res && res.message) || (ok ? 'Selesai' : 'Gagal'));
+    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
+  });
 }
 function setupTriggerHistoris() {
-  sendRequest({ action: 'setup_trigger' }, res => { showBigPopup('success', 'Trigger', res.message); });
+  if (!confirm('Simpan preferensi Trigger 23:59 dan jalankan verifikasi (auto-absen + pindah historis)?')) return;
+  showBigPopup('info', 'Trigger', '⏳ Memasang preferensi & verifikasi...', 0);
+  sendRequest({ action: 'setup_trigger' }, res => {
+    closeBigPopup();
+    const ok = res && res.status === 'success';
+    const msg = (res && res.message) ? String(res.message).replace(/\n/g, '<br>') : (ok ? 'Selesai' : 'Gagal — pastikan Edge Function sudah di-deploy ulang');
+    showBigPopup(ok ? 'success' : 'danger', 'Trigger 23:59', msg);
+    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
+  });
 }
 
 function loadJadwalMapel() {
@@ -9668,12 +9690,17 @@ function loadHasilUjianData(ujianId) {
 }
 
 function paksaSelesaiUjianSiswa(pengerjaanId, nama) {
-  if (!confirm('Selesaikan ujian atas nama\n' + (nama || '') + '?\n\nJawaban yang sudah tersimpan di server akan dinilai dan sesi ditutup.')) return;
-  showBigPopup('info', 'Memproses', '⏳ Menyelesaikan sesi...', 0);
+  if (!confirm('Kirim & selesaikan ujian atas nama\n' + (nama || '') + '?\n\nJawaban tersimpan akan dinilai.\nStatus TIMEOUT akan diubah menjadi SELESAI.')) return;
+  showBigPopup('info', 'Mengirim', '⏳ Mengirim data ke server...', 0);
   sendRequest({ action: 'ujian_paksa_selesai', pengerjaan_id: pengerjaanId }, res => {
     closeBigPopup();
-    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Selesaikan Ujian', res.message || 'Selesai');
-    if (res.status === 'success') refreshHasilUjian();
+    if (res && res.status === 'success') {
+      showBigPopup('success', 'Terkirim', res.message || 'Status diubah menjadi SELESAI.');
+      // paksa refresh daftar agar badge TIMEOUT hilang
+      setTimeout(function () { refreshHasilUjian(); }, 400);
+    } else {
+      showBigPopup('danger', 'Gagal Kirim', (res && res.message) || 'Gagal mengirim ke server. Deploy ulang Edge Function lalu coba lagi.');
+    }
   });
 }
 
