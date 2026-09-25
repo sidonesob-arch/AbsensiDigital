@@ -1097,14 +1097,32 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <!-- PANEL: IZIN SIDIK JARI -->
       <div class="pengaturan-panel" id="panel-izin">
         <h4 class="panel-title">👆 Izin Sidik Jari, Scan QR & Ujian</h4>
-        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-          <button class="btn-primary" style="width:auto; padding:6px 16px;" onclick="syncAllowedUsers()">🔄 Sinkronisasi</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllUsers()">✅ Izinkan Semua (Sidik Jari)</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="denyAllUsers()">❌ Tolak Semua (Sidik Jari)</button>
+        <div style="margin-bottom:10px;">
+          <button class="btn-primary" style="width:100%; max-width:280px; padding:8px 16px;" onclick="syncAllowedUsers()">🔄 Sinkronisasi Data</button>
         </div>
-        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--success);" onclick="allowAllGuruScan(true)">✅ Izinkan Semua Guru Scan QR</button>
-          <button class="btn-primary" style="width:auto; padding:6px 16px; background:var(--danger);" onclick="allowAllGuruScan(false)">❌ Tolak Semua Guru Scan QR</button>
+        <div class="izin-bulk-grid" style="display:grid; grid-template-columns:minmax(90px,1fr) 1fr 1fr; gap:8px; align-items:center; margin-bottom:12px; max-width:420px;">
+          <div style="font-size:12px; font-weight:700; color:var(--primary);">👆 Sidik Jari</div>
+          <button type="button" onclick="allowAllUsers()" title="Izinkan semua (Sidik Jari)"
+            style="background:#16a34a; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">✅</button>
+          <button type="button" onclick="denyAllUsers()" title="Tolak semua (Sidik Jari)"
+            style="background:#dc2626; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">❌</button>
+
+          <div style="font-size:12px; font-weight:700; color:var(--primary);">📷 Scan QR</div>
+          <button type="button" onclick="allowAllGuruScan(true)" title="Izinkan semua guru Scan QR"
+            style="background:#16a34a; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">✅</button>
+          <button type="button" onclick="allowAllGuruScan(false)" title="Tolak semua guru Scan QR"
+            style="background:#dc2626; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">❌</button>
+
+          <div style="font-size:12px; font-weight:700; color:var(--primary);">🖊️ Ujian</div>
+          <button type="button" onclick="bulkUpdateAllowedUjian(true)" title="Izinkan semua siswa ujian"
+            style="background:#16a34a; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">✅</button>
+          <button type="button" onclick="bulkUpdateAllowedUjian(false)" title="Blokir semua siswa ujian"
+            style="background:#dc2626; color:#fff; border:none; border-radius:8px; padding:10px 8px; font-weight:800; font-size:13px; cursor:pointer; width:100%;">❌</button>
+        </div>
+        <div style="display:flex; gap:12px; font-size:10px; color:#64748b; margin:-4px 0 10px; max-width:420px;">
+          <span style="flex:1;"></span>
+          <span style="flex:1; text-align:center;">Hijau = Izinkan</span>
+          <span style="flex:1; text-align:center;">Merah = Tolak</span>
         </div>
         <div class="table-responsive">
           <table>
@@ -1125,10 +1143,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <p style="font-size:11px; color:var(--muted); margin-top:10px;">
           ℹ️ <b>Izin Scan QR</b> hanya untuk guru. <b>Izin Ujian</b> hanya untuk siswa — nonaktifkan untuk memblokir siswa dari ujian (manual), terpisah dari status Alpa/Bolos otomatis.
         </p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-          <button class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="bulkUpdateAllowedUjian(true)">✅ Izinkan Semua Ujian (Siswa)</button>
-          <button class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;" onclick="bulkUpdateAllowedUjian(false)">🚫 Blokir Semua Ujian (Siswa)</button>
-        </div>
+
       </div>
 
       <!-- PANEL: RESET SIDIK JARI -->
