@@ -4351,6 +4351,7 @@ function renderTemplateDaftarHadir(data) {
             <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">S</th>
             <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">I</th>
             <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">A</th>
+            <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:22px;">B</th>
             <th rowspan="2" style="border:1px solid #000; padding:2px 4px; text-align:center; width:26px;">Jml</th>
           </tr>
           <tr>
@@ -4385,6 +4386,7 @@ function renderTemplateDaftarHadir(data) {
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalS || ''}</td>`;
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalI || ''}</td>`;
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalA || ''}</td>`;
+      html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center;">${b.totalB || ''}</td>`;
       html += `<td style="border:1px solid #000; padding:2px 4px; text-align:center; font-weight:bold;">${b.totalJml || ''}</td>`;
       html += `</tr>`;
     });
@@ -4464,8 +4466,8 @@ function downloadTemplateExcel() {
     alignment: { horizontal: 'center', vertical: 'center' },
   };
 
-  // Kolom: No | Nama | L/P | tgl1..tglN | S | I | A | Jml
-  const colCount = 3 + jumlahHari + 4;
+  // No | Nama | L/P | tgl... | S | I | A | B | Jml
+  const colCount = 3 + jumlahHari + 5;
   const aoa = [];
 
   aoa.push(['SMP NEGERI 1 SOBANG']);
@@ -4481,12 +4483,12 @@ function downloadTemplateExcel() {
   const h1 = ['No', isGuru ? 'Nama/NIP/Pangkat Gol' : 'Nama Siswa', 'L/P'];
   h1.push('TANGGAL');
   for (let i = 1; i < jumlahHari; i++) h1.push('');
-  h1.push('S', 'I', 'A', 'Jml');
+  h1.push('S', 'I', 'A', 'B', 'Jml');
   aoa.push(h1);
 
   const h2 = ['', '', ''];
   daftarTanggal.forEach(t => h2.push(t.tglNum));
-  h2.push('', '', '', '');
+  h2.push('', '', '', '', '');
   aoa.push(h2);
 
   baris.forEach((b, idx) => {
@@ -4500,13 +4502,13 @@ function downloadTemplateExcel() {
     daftarTanggal.forEach(t => {
       row.push(b.perTanggal?.[t.tgl] || '');
     });
-    row.push(b.totalS || '', b.totalI || '', b.totalA || '', b.totalJml || '');
+    row.push(b.totalS || '', b.totalI || '', b.totalA || '', b.totalB || '', b.totalJml || '');
     aoa.push(row);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  ws['!merges'] = [
+  const merges = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } },
     { s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } },
     { s: { r: 2, c: 0 }, e: { r: 2, c: colCount - 1 } },
@@ -4514,28 +4516,31 @@ function downloadTemplateExcel() {
     { s: { r: headerStartRow, c: 0 }, e: { r: headerStartRow + 1, c: 0 } },
     { s: { r: headerStartRow, c: 1 }, e: { r: headerStartRow + 1, c: 1 } },
     { s: { r: headerStartRow, c: 2 }, e: { r: headerStartRow + 1, c: 2 } },
-    { s: { r: headerStartRow, c: 3 }, e: { r: headerStartRow, c: 3 + Math.max(jumlahHari, 1) - 1 } },
-    { s: { r: headerStartRow, c: 3 + jumlahHari }, e: { r: headerStartRow + 1, c: 3 + jumlahHari } },
-    { s: { r: headerStartRow, c: 3 + jumlahHari + 1 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 1 } },
-    { s: { r: headerStartRow, c: 3 + jumlahHari + 2 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 2 } },
-    { s: { r: headerStartRow, c: 3 + jumlahHari + 3 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 3 } },
   ];
+  if (jumlahHari > 0) {
+    merges.push({ s: { r: headerStartRow, c: 3 }, e: { r: headerStartRow, c: 3 + jumlahHari - 1 } });
+  }
+  for (let i = 0; i < 5; i++) {
+    merges.push({
+      s: { r: headerStartRow, c: 3 + jumlahHari + i },
+      e: { r: headerStartRow + 1, c: 3 + jumlahHari + i },
+    });
+  }
+  ws['!merges'] = merges;
 
-  // Lebar kolom mirip PDF
   const cols = [
     { wch: 4 },
     { wch: isGuru ? 28 : 22 },
     { wch: 4 },
   ];
   for (let i = 0; i < jumlahHari; i++) cols.push({ wch: 3 });
-  cols.push({ wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 5 });
+  cols.push({ wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 5 });
   ws['!cols'] = cols;
 
   ws['!rows'] = [
     { hpt: 18 }, { hpt: 16 }, { hpt: 16 }, { hpt: 14 },
     { hpt: 20 }, { hpt: 16 },
   ];
-  // tinggi baris data (guru multi-baris)
   for (let i = 0; i < baris.length; i++) {
     ws['!rows'][headerStartRow + 2 + i] = { hpt: isGuru ? 36 : 16 };
   }
