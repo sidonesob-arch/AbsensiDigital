@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistem Informasi Terpadu - SMP NEGERI 1 SOBANG</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
@@ -4356,7 +4356,8 @@ function renderTemplateDaftarHadir(data) {
           <tr>
   `;
   daftarTanggal.forEach(t => {
-    html += `<th style="border:1px solid #000; padding:2px 0; text-align:center; width:16px; font-size:9px;">${t.tglNum}</th>`;
+    const thBg = t.isLibur ? 'background:#ff4d4d; color:#fff;' : '';
+    html += `<th style="border:1px solid #000; padding:2px 0; text-align:center; width:16px; font-size:9px; ${thBg}">${t.tglNum}</th>`;
   });
   html += `</tr></thead><tbody>`;
 
@@ -4415,12 +4416,171 @@ function downloadTemplatePDF() {
   }).from(el).save();
 }
 function downloadTemplateExcel() {
-  const table = document.getElementById('tableTemplateAbsensi');
-  if (!table) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
-  const role = window._templateData?.role || 'guru';
-  const judul = role === 'guru' ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
-  const bulan = (window._templateData?.judulBulan || '').replace(/\s+/g, '_');
-  const wb = XLSX.utils.table_to_book(table, { sheet: "Daftar Hadir", raw: true });
+  const data = window._templateData;
+  if (!data) return showBigPopup('warning', 'Peringatan', 'Template belum dibuat.');
+  const role = data.role || 'guru';
+  const isGuru = role === 'guru';
+  const judul = isGuru ? 'Daftar_Hadir_Guru' : 'Daftar_Hadir_Siswa';
+  const bulan = (data.judulBulan || '').replace(/\s+/g, '_');
+  const daftarTanggal = data.daftarTanggal || [];
+  const baris = data.data || [];
+  const jumlahHari = daftarTanggal.length;
+
+  const borderAll = {
+    top: { style: 'thin', color: { rgb: '000000' } },
+    bottom: { style: 'thin', color: { rgb: '000000' } },
+    left: { style: 'thin', color: { rgb: '000000' } },
+    right: { style: 'thin', color: { rgb: '000000' } },
+  };
+  const styleHeader = {
+    font: { bold: true, sz: 9, name: 'Times New Roman' },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: borderAll,
+  };
+  const styleHeaderLibur = {
+    font: { bold: true, sz: 9, name: 'Times New Roman', color: { rgb: 'FFFFFF' } },
+    fill: { fgColor: { rgb: 'FF4D4D' } },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: borderAll,
+  };
+  const styleCell = {
+    font: { sz: 9, name: 'Times New Roman' },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: borderAll,
+  };
+  const styleCellLibur = {
+    font: { sz: 9, name: 'Times New Roman', color: { rgb: 'FFFFFF' } },
+    fill: { fgColor: { rgb: 'FF4D4D' } },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: borderAll,
+  };
+  const styleNama = {
+    font: { sz: 9, name: 'Times New Roman' },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: borderAll,
+  };
+  const styleTitle = {
+    font: { bold: true, sz: 12, name: 'Times New Roman' },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  };
+
+  // Kolom: No | Nama | L/P | tgl1..tglN | S | I | A | Jml
+  const colCount = 3 + jumlahHari + 4;
+  const aoa = [];
+
+  aoa.push(['SMP NEGERI 1 SOBANG']);
+  aoa.push([isGuru ? 'DAFTAR HADIR GURU' : 'DAFTAR HADIR SISWA']);
+  aoa.push(['BULAN ' + String(data.judulBulan || '').toUpperCase()]);
+  if (!isGuru && data.kelas && data.kelas !== '-') {
+    aoa.push(['KELAS : ' + data.kelas]);
+  } else {
+    aoa.push(['']);
+  }
+  const headerStartRow = aoa.length;
+
+  const h1 = ['No', isGuru ? 'Nama/NIP/Pangkat Gol' : 'Nama Siswa', 'L/P'];
+  h1.push('TANGGAL');
+  for (let i = 1; i < jumlahHari; i++) h1.push('');
+  h1.push('S', 'I', 'A', 'Jml');
+  aoa.push(h1);
+
+  const h2 = ['', '', ''];
+  daftarTanggal.forEach(t => h2.push(t.tglNum));
+  h2.push('', '', '', '');
+  aoa.push(h2);
+
+  baris.forEach((b, idx) => {
+    let namaCell;
+    if (isGuru) {
+      namaCell = [b.nama || '', b.id || '', b.pangkat_gol || '-'].filter(Boolean).join('\n');
+    } else {
+      namaCell = b.nama || '';
+    }
+    const row = [idx + 1, namaCell, b.jenis_kelamin || '-'];
+    daftarTanggal.forEach(t => {
+      row.push(b.perTanggal?.[t.tgl] || '');
+    });
+    row.push(b.totalS || '', b.totalI || '', b.totalA || '', b.totalJml || '');
+    aoa.push(row);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: colCount - 1 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: colCount - 1 } },
+    { s: { r: headerStartRow, c: 0 }, e: { r: headerStartRow + 1, c: 0 } },
+    { s: { r: headerStartRow, c: 1 }, e: { r: headerStartRow + 1, c: 1 } },
+    { s: { r: headerStartRow, c: 2 }, e: { r: headerStartRow + 1, c: 2 } },
+    { s: { r: headerStartRow, c: 3 }, e: { r: headerStartRow, c: 3 + Math.max(jumlahHari, 1) - 1 } },
+    { s: { r: headerStartRow, c: 3 + jumlahHari }, e: { r: headerStartRow + 1, c: 3 + jumlahHari } },
+    { s: { r: headerStartRow, c: 3 + jumlahHari + 1 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 1 } },
+    { s: { r: headerStartRow, c: 3 + jumlahHari + 2 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 2 } },
+    { s: { r: headerStartRow, c: 3 + jumlahHari + 3 }, e: { r: headerStartRow + 1, c: 3 + jumlahHari + 3 } },
+  ];
+
+  // Lebar kolom mirip PDF
+  const cols = [
+    { wch: 4 },
+    { wch: isGuru ? 28 : 22 },
+    { wch: 4 },
+  ];
+  for (let i = 0; i < jumlahHari; i++) cols.push({ wch: 3 });
+  cols.push({ wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 5 });
+  ws['!cols'] = cols;
+
+  ws['!rows'] = [
+    { hpt: 18 }, { hpt: 16 }, { hpt: 16 }, { hpt: 14 },
+    { hpt: 20 }, { hpt: 16 },
+  ];
+  // tinggi baris data (guru multi-baris)
+  for (let i = 0; i < baris.length; i++) {
+    ws['!rows'][headerStartRow + 2 + i] = { hpt: isGuru ? 36 : 16 };
+  }
+
+  for (let r = 0; r < 4; r++) {
+    const addr = XLSX.utils.encode_cell({ r, c: 0 });
+    if (ws[addr]) ws[addr].s = styleTitle;
+  }
+
+  for (let c = 0; c < colCount; c++) {
+    const addr = XLSX.utils.encode_cell({ r: headerStartRow, c });
+    if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+    ws[addr].s = styleHeader;
+  }
+
+  for (let c = 0; c < colCount; c++) {
+    const addr = XLSX.utils.encode_cell({ r: headerStartRow + 1, c });
+    if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+    const dateIdx = c - 3;
+    if (dateIdx >= 0 && dateIdx < jumlahHari && daftarTanggal[dateIdx].isLibur) {
+      ws[addr].s = styleHeaderLibur;
+    } else {
+      ws[addr].s = styleHeader;
+    }
+  }
+
+  const bodyStart = headerStartRow + 2;
+  baris.forEach((b, idx) => {
+    const r = bodyStart + idx;
+    for (let c = 0; c < colCount; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+      const dateIdx = c - 3;
+      if (c === 1) {
+        ws[addr].s = styleNama;
+      } else if (dateIdx >= 0 && dateIdx < jumlahHari && daftarTanggal[dateIdx].isLibur) {
+        ws[addr].s = styleCellLibur;
+      } else {
+        ws[addr].s = styleCell;
+      }
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Daftar Hadir');
   XLSX.writeFile(wb, `${judul}_${bulan}.xlsx`);
 }
 
