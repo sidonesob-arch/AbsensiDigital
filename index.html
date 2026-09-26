@@ -871,9 +871,9 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <p style="font-size:11px; color:#64748b; margin-top:10px; line-height:1.45;">
           <b>RNH</b> = rata-rata nilai harian (NH/UH/tugas).<br>
-          Kolom <b>PTS / PAS / PAT / US</b> muncul otomatis jika jenis penilaian itu sudah ada di kelas.<br>
-          <b>NR</b> (Nilai Rapor) = jumlah nilai ÷ banyaknya jenis penilaian.
-          Jenis yang belum diikuti siswa dihitung <b>0</b> (tetap masuk pembagi).
+          Kolom <b>PTS / PAS / PAT / US</b> muncul jika jenis itu ada di kelas.<br>
+          <b>NR</b> = jumlah nilai ÷ banyaknya jenis penilaian di kelas.
+          Yang belum diikuti dihitung <b>0</b> (tetap masuk pembagi). Contoh: RNH=85, PTS kosong → NR=(85+0)/2=<b>42,5</b>.
         </p>
       </div>
     </div>
@@ -3171,10 +3171,9 @@ function loadNilaiSaya() {
     headHtml += `<th style="text-align:center; min-width:52px;" title="Nilai Rapor">NR</th></tr>`;
     if (thead) thead.innerHTML = headHtml;
 
-    const colCount = 3 + (cols.pts ? 1 : 0) + (cols.pas ? 1 : 0) + (cols.pat ? 1 : 0) + (cols.us ? 1 : 0) + 1;
+    const colCount = 3 + (cols.pts?1:0) + (cols.pas?1:0) + (cols.pat?1:0) + (cols.us?1:0) + 1;
 
-    const byCode = {};
-    const byLabel = {};
+    const byCode = {}, byLabel = {};
     serverRows.forEach(r => {
       if (r.code) byCode[String(r.code).toUpperCase()] = r;
       if (r.label) byLabel[String(r.label).toLowerCase()] = r;
@@ -3189,15 +3188,13 @@ function loadNilaiSaya() {
         for (const s of serverRows) {
           const idx = matchMapelOrder(s.mapel || s.label || s.code || '');
           if (idx >= 0 && MAPEL_NILAI_ORDER[idx] && MAPEL_NILAI_ORDER[idx].code === m.code) {
-            found = s;
-            break;
+            found = s; break;
           }
         }
       }
       if (found) used.add(found);
       rows.push({
-        label: m.label,
-        code: m.code,
+        label: m.label, code: m.code,
         rnh: found ? found.rnh : null,
         pts: found ? found.pts : null,
         pas: found ? found.pas : null,
@@ -3208,11 +3205,9 @@ function loadNilaiSaya() {
     });
     serverRows.forEach(s => {
       if (used.has(s)) return;
-      const already = rows.some(r => String(r.label).toLowerCase() === String(s.label || s.mapel || '').toLowerCase());
-      if (already) return;
+      if (rows.some(r => String(r.label).toLowerCase() === String(s.label || s.mapel || '').toLowerCase())) return;
       rows.push({
-        label: s.label || s.mapel || s.code || '-',
-        code: s.code || '',
+        label: s.label || s.mapel || s.code || '-', code: s.code || '',
         rnh: s.rnh, pts: s.pts, pas: s.pas, pat: s.pat, us: s.us, nr: s.nr,
       });
     });
@@ -3236,11 +3231,7 @@ function loadNilaiSaya() {
       if (cols.us) cells += `<td style="text-align:center;">${fmtNilai(r.us)}</td>`;
       cells += `<td style="text-align:center;">${fmtNilai(r.nr)}</td>`;
       return `<tr>${cells}</tr>`;
-    }).join('');
-
-    if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#666;">Belum ada data nilai.</td></tr>`;
-    }
+    }).join('') || `<tr><td colspan="${colCount}" style="text-align:center;color:#666;">Belum ada data nilai.</td></tr>`;
   });
 }
 
