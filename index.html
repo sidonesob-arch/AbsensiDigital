@@ -871,8 +871,9 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <p style="font-size:11px; color:#64748b; margin-top:10px; line-height:1.45;">
           <b>RNH</b> = rata-rata nilai harian (NH/UH/tugas).<br>
-          Kolom <b>PTS / PAS / PAT / US</b> muncul otomatis jika sudah ada nilainya.<br>
-          <b>NR</b> (Nilai Rapor) = rata-rata dari RNH + jenis ulangan yang sudah ada, dibagi jumlah jenis yang ada.
+          Kolom <b>PTS / PAS / PAT / US</b> muncul otomatis jika jenis penilaian itu sudah ada di kelas.<br>
+          <b>NR</b> (Nilai Rapor) = jumlah nilai ÷ banyaknya jenis penilaian.
+          Jenis yang belum diikuti siswa dihitung <b>0</b> (tetap masuk pembagi).
         </p>
       </div>
     </div>
@@ -3159,7 +3160,6 @@ function loadNilaiSaya() {
     const cols = res.columns || { rnh: true, pts: false, pas: false, pat: false, us: false, nr: true };
     const serverRows = res.data || [];
 
-    // Header dinamis
     let headHtml = `<tr>
       <th style="width:36px;">No</th>
       <th>Mata Pelajaran</th>
@@ -3173,7 +3173,6 @@ function loadNilaiSaya() {
 
     const colCount = 3 + (cols.pts ? 1 : 0) + (cols.pas ? 1 : 0) + (cols.pat ? 1 : 0) + (cols.us ? 1 : 0) + 1;
 
-    // Urutkan sesuai MAPEL_NILAI_ORDER, lalu mapel ekstra
     const byCode = {};
     const byLabel = {};
     serverRows.forEach(r => {
@@ -3207,7 +3206,6 @@ function loadNilaiSaya() {
         nr: found ? found.nr : null,
       });
     });
-    // Mapel di luar daftar standar
     serverRows.forEach(s => {
       if (used.has(s)) return;
       const already = rows.some(r => String(r.label).toLowerCase() === String(s.label || s.mapel || '').toLowerCase());
