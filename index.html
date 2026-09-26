@@ -532,36 +532,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 .download-card { background: #fff; padding: 16px; border-radius: 10px; border: 1px solid var(--border-light); margin-bottom: 14px; }
 .download-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .download-summary { background: var(--primary-lighter); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 12px; font-size: 12px; color: var(--primary); }
-/* Tombol aksi Download Absensi — 2 baris rapi di HP */
-.download-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.download-actions-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.download-actions-row.export-row {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-.download-actions-row .btn-primary,
-.download-actions-row .btn-excel,
-.download-actions-row .btn-pdf {
-  width: 100%;
-  margin: 0;
-  padding: 10px 8px;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-sizing: border-box;
-}
-@media (max-width: 480px) {
-  .download-actions-row .btn-primary,
-  .download-actions-row .btn-excel,
-  .download-actions-row .btn-pdf {
-    font-size: 11px;
-    padding: 9px 6px;
-  }
-}
 
 /* SCANNER INFO */
 .scanner-lock-info {
@@ -886,12 +856,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <div class="table-responsive">
           <table id="tableNilaiSaya">
-            <thead>
+            <thead id="tableNilaiSayaHead">
               <tr>
                 <th style="width:36px;">No</th>
                 <th>Mata Pelajaran</th>
-                <th style="width:100px; text-align:center;">Rata-rata</th>
-                <th style="width:90px; text-align:center;">Ikut / Total</th>
+                <th style="text-align:center;" title="Rata-rata Nilai Harian">RNH</th>
+                <th style="text-align:center;" title="Nilai Rapor">NR</th>
               </tr>
             </thead>
             <tbody id="tableNilaiSayaBody">
@@ -899,7 +869,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             </tbody>
           </table>
         </div>
-        <p style="font-size:11px; color:#64748b; margin-top:10px;">Rata-rata dihitung dari seluruh jenis nilai (UH, PTS, PAS, dll.) yang sudah tercatat per mapel.</p>
+        <p style="font-size:11px; color:#64748b; margin-top:10px; line-height:1.45;">
+          <b>RNH</b> = rata-rata nilai harian (NH/UH/tugas).<br>
+          Kolom <b>PTS / PAS / PAT / US</b> muncul otomatis jika sudah ada nilainya.<br>
+          <b>NR</b> (Nilai Rapor) = rata-rata dari RNH + jenis ulangan yang sudah ada, dibagi jumlah jenis yang ada.
+        </p>
       </div>
     </div>
 
@@ -1545,20 +1519,16 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             <input type="date" id="downloadTglSelesai">
           </div>
         </div>
-        <div class="download-actions">
-          <div class="download-actions-row">
-            <button class="btn-primary" onclick="loadDownloadPreview()">🔍 Tampilkan Pratinjau</button>
-            <button class="btn-primary" style="background:#05285e;" onclick="generateTemplateDaftarHadir()">📋 Generate Template</button>
-          </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn-primary" style="width:auto; padding:10px 28px;" onclick="loadDownloadPreview()">🔍 Tampilkan Pratinjau</button>
+          <button class="btn-primary" style="width:auto; padding:10px 28px; background:#05285e;" onclick="generateTemplateDaftarHadir()">📋 Generate Template Daftar Hadir</button>
         </div>
       </div>
       <div id="downloadSummary" class="download-summary" style="display:none;"></div>
-      <div class="download-actions" style="margin-bottom:10px;">
-        <div class="download-actions-row export-row">
-          <button class="btn-excel" onclick="downloadExcel()">📊 Excel</button>
-          <button class="btn-pdf" onclick="downloadPDF()">📄 PDF</button>
-          <button class="btn-primary" style="background:#17a2b8;" onclick="downloadCSV()">📥 CSV</button>
-        </div>
+      <div class="export-section">
+        <button class="btn-excel" onclick="downloadExcel()">📊 Download Excel</button>
+        <button class="btn-pdf" onclick="downloadPDF()">📄 Download PDF</button>
+        <button class="btn-primary" style="background:#17a2b8;" onclick="downloadCSV()">📥 Download CSV</button>
       </div>
       <div class="table-responsive">
         <table id="tableDownloadResult">
@@ -3177,16 +3147,33 @@ function loadNilaiSaya() {
   if (content) content.style.display = 'block';
   setText('nilaiSayaHeaderNama', siswaUserData.nama || 'Siswa');
   setText('nilaiSayaHeaderMeta', 'NISN: ' + (siswaUserData.nisn || '-') + ' · Kelas: ' + (siswaUserData.kelas || '-'));
+  const thead = $('tableNilaiSayaHead');
   const tbody = $('tableNilaiSayaBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">⏳ Memuat nilai...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">⏳ Memuat nilai...</td></tr>';
   sendRequest({ action: 'get_nilai_siswa', nisn: siswaUserData.nisn }, res => {
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#b91c1c;">${res.message || 'Gagal memuat nilai'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#b91c1c;">${res.message || 'Gagal memuat nilai'}</td></tr>`;
       return;
     }
-    // Map data dari server by code / label
+    const cols = res.columns || { rnh: true, pts: false, pas: false, pat: false, us: false, nr: true };
     const serverRows = res.data || [];
+
+    // Header dinamis
+    let headHtml = `<tr>
+      <th style="width:36px;">No</th>
+      <th>Mata Pelajaran</th>
+      <th style="text-align:center; min-width:52px;" title="Rata-rata Nilai Harian">RNH</th>`;
+    if (cols.pts) headHtml += `<th style="text-align:center; min-width:48px;">PTS</th>`;
+    if (cols.pas) headHtml += `<th style="text-align:center; min-width:48px;">PAS</th>`;
+    if (cols.pat) headHtml += `<th style="text-align:center; min-width:48px;">PAT</th>`;
+    if (cols.us) headHtml += `<th style="text-align:center; min-width:48px;">US</th>`;
+    headHtml += `<th style="text-align:center; min-width:52px;" title="Nilai Rapor">NR</th></tr>`;
+    if (thead) thead.innerHTML = headHtml;
+
+    const colCount = 3 + (cols.pts ? 1 : 0) + (cols.pas ? 1 : 0) + (cols.pat ? 1 : 0) + (cols.us ? 1 : 0) + 1;
+
+    // Urutkan sesuai MAPEL_NILAI_ORDER, lalu mapel ekstra
     const byCode = {};
     const byLabel = {};
     serverRows.forEach(r => {
@@ -3195,48 +3182,70 @@ function loadNilaiSaya() {
       if (r.mapel) byLabel[String(r.mapel).toLowerCase()] = r;
     });
 
-    // Selalu tampilkan SEMUA mapel sesuai urutan, meski belum ada nilai
-    const rows = MAPEL_NILAI_ORDER.map(m => {
+    const used = new Set();
+    const rows = [];
+    (typeof MAPEL_NILAI_ORDER !== 'undefined' ? MAPEL_NILAI_ORDER : []).forEach(m => {
       let found = byCode[m.code.toUpperCase()] || byLabel[m.label.toLowerCase()] || null;
-      if (!found) {
-        // coba match via aliases
+      if (!found && typeof matchMapelOrder === 'function') {
         for (const s of serverRows) {
           const idx = matchMapelOrder(s.mapel || s.label || s.code || '');
-          if (idx >= 0 && MAPEL_NILAI_ORDER[idx].code === m.code) {
+          if (idx >= 0 && MAPEL_NILAI_ORDER[idx] && MAPEL_NILAI_ORDER[idx].code === m.code) {
             found = s;
             break;
           }
         }
       }
-      return {
+      if (found) used.add(found);
+      rows.push({
         label: m.label,
         code: m.code,
-        rata_rata: found && found.rata_rata != null ? found.rata_rata : null,
-        jumlah: found ? (found.jumlah || 0) : 0,
-        total_penilaian: found ? (found.total_penilaian || found.jumlah || 0) : 0,
-      };
+        rnh: found ? found.rnh : null,
+        pts: found ? found.pts : null,
+        pas: found ? found.pas : null,
+        pat: found ? found.pat : null,
+        us: found ? found.us : null,
+        nr: found ? found.nr : null,
+      });
+    });
+    // Mapel di luar daftar standar
+    serverRows.forEach(s => {
+      if (used.has(s)) return;
+      const already = rows.some(r => String(r.label).toLowerCase() === String(s.label || s.mapel || '').toLowerCase());
+      if (already) return;
+      rows.push({
+        label: s.label || s.mapel || s.code || '-',
+        code: s.code || '',
+        rnh: s.rnh, pts: s.pts, pas: s.pas, pat: s.pat, us: s.us, nr: s.nr,
+      });
     });
 
+    function fmtNilai(v) {
+      if (v == null || v === '' || isNaN(Number(v))) return '<span style="color:#94a3b8;">—</span>';
+      const n = Number(v);
+      let color = '#334155';
+      if (n >= 80) color = '#16a34a';
+      else if (n >= 70) color = '#0d9488';
+      else if (n < 60) color = '#dc2626';
+      else color = '#b45309';
+      return `<b style="color:${color};">${n % 1 === 0 ? n : n.toFixed(2)}</b>`;
+    }
+
     tbody.innerHTML = rows.map((r, i) => {
-      const hasNilai = r.rata_rata != null && r.jumlah > 0;
-      const avg = hasNilai ? Number(r.rata_rata).toFixed(2) : '—';
-      const avgNum = hasNilai ? parseFloat(r.rata_rata) : NaN;
-      let color = '#94a3b8';
-      if (!isNaN(avgNum)) {
-        if (avgNum >= 80) color = '#16a34a';
-        else if (avgNum >= 70) color = '#0d9488';
-        else if (avgNum < 60) color = '#dc2626';
-        else color = '#b45309';
-      }
-      return `<tr>
-        <td>${i + 1}</td>
-        <td><b>${r.label}</b></td>
-        <td style="text-align:center; font-weight:800; font-size:14px; color:${color};">${avg}</td>
-        <td style="text-align:center; color:${hasNilai ? 'inherit' : '#94a3b8'};">${(r.total_penilaian && r.total_penilaian > 0) ? ((r.jumlah || 0) + '/' + r.total_penilaian) : (r.jumlah || 0)}</td>
-      </tr>`;
+      let cells = `<td>${i + 1}</td><td><b>${r.label}</b></td><td style="text-align:center;">${fmtNilai(r.rnh)}</td>`;
+      if (cols.pts) cells += `<td style="text-align:center;">${fmtNilai(r.pts)}</td>`;
+      if (cols.pas) cells += `<td style="text-align:center;">${fmtNilai(r.pas)}</td>`;
+      if (cols.pat) cells += `<td style="text-align:center;">${fmtNilai(r.pat)}</td>`;
+      if (cols.us) cells += `<td style="text-align:center;">${fmtNilai(r.us)}</td>`;
+      cells += `<td style="text-align:center;">${fmtNilai(r.nr)}</td>`;
+      return `<tr>${cells}</tr>`;
     }).join('');
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#666;">Belum ada data nilai.</td></tr>`;
+    }
   });
 }
+
 
 
 function loadCekSyarat() {
