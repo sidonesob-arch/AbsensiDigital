@@ -742,6 +742,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <a class="nav-item" data-menu="cek-syarat" onclick="switchMenu('cek-syarat', this)">🎓 Cek Syarat Naik Kelas/Lulus</a>
     <a class="nav-item" data-menu="ujian-siswa" onclick="switchMenu('ujian-siswa', this)">🖊️ Kerjakan Ujian</a>
     <a class="nav-item" data-menu="kelulusan" onclick="switchMenu('kelulusan', this)">🎓 Kelulusan</a>
+    <a class="nav-item" data-menu="validasi-lulusan" onclick="switchMenu('validasi-lulusan', this)">✅ Validasi Data Lulusan</a>
 
     <div class="nav-category">MENU UTAMA</div>
     <a class="nav-item" data-menu="scanner" onclick="checkMenuAccess('scanner', this)">📷 Scanner Barcode</a>
@@ -1070,7 +1071,15 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <div class="form-group" style="flex:0 0 auto; min-width:auto;">
           <label>&nbsp;</label>
-          <button class="btn-add" style="width:auto;padding:8px 14px;" onclick="openFormLulusan()">➕ Tambah Manual</button>
+          <button class="btn-add" style="width:auto;padding:8px 14px;" onclick="openFormLulusan()">➕ Tambah</button>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-primary" style="background:#1d6f42;width:auto;padding:8px 14px;" onclick="openImportLulusanModal()">📥 Import</button>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-primary" style="background:#0d9488;width:auto;padding:8px 14px;" onclick="downloadTemplateLulusan()">📄 Template</button>
         </div>
         <div class="form-group" style="flex:0 0 auto; min-width:auto;">
           <label>&nbsp;</label>
@@ -1086,6 +1095,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <th>NISN</th>
               <th>Nama</th>
               <th style="width:40px;">L/P</th>
+              <th>Tgl Lahir</th>
               <th>Lama Belajar</th>
               <th>Lulus Tahun</th>
               <th>Status Awal</th>
@@ -1094,10 +1104,26 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             </tr>
           </thead>
           <tbody id="tableDataLulusanBody">
-            <tr><td colspan="9" style="text-align:center;">Memuat data...</td></tr>
+            <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- VALIDASI DATA LULUSAN (publik) -->
+    <div id="menu-validasi-lulusan" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">✅ Validasi Data Lulusan</h3>
+      <div style="background:#e8f0fe;padding:12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:14px;font-size:13px;color:var(--primary);">
+        Masukkan <b>NISN</b> atau <b>Nama</b> untuk memverifikasi apakah seseorang tercatat sebagai lulusan SMP Negeri 1 Sobang.
+      </div>
+      <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid var(--border-light);max-width:520px;margin-bottom:14px;">
+        <div class="form-group">
+          <label>NISN atau Nama Lulusan:</label>
+          <input type="text" id="validasiLulusanKeyword" placeholder="Contoh: 0012345678 atau Ahmad" style="font-size:15px;">
+        </div>
+        <button class="btn-primary" onclick="cariValidasiLulusan()">🔍 Cari / Validasi</button>
+      </div>
+      <div id="validasiLulusanResult"></div>
     </div>
 
     <!-- ==================== DATA GURU (BARU) ==================== -->
@@ -1430,6 +1456,9 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <!-- PANEL: NAIK KELAS -->
       <div class="pengaturan-panel" id="panel-naik-kelas">
         <h4 class="panel-title">⬆️ Naik Kelas &amp; Kelulusan Massal</h4>
+        <div style="margin-bottom:10px;">
+          <button class="btn-primary btn-sm" style="width:auto;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=data-lulusan]'))">🎓 Buka Data Lulusan (CRUD / Import)</button>
+        </div>
         <div style="background:#e8f0fe;padding:10px 12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:12px;font-size:12px;color:var(--primary);">
           <b>Naik Kelas:</b> 7 → 8, 8 → 9. &nbsp; <b>Kelas 9:</b> pindah ke <b>Data Lulusan</b>.<br>
           Gunakan mode <b>Batalkan</b> untuk mengembalikan jika ada kesalahan.
@@ -2007,7 +2036,7 @@ function saveActiveMenu(menuName) {
 function restoreActiveMenu() {
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
-  const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint'];
+  const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint', 'validasi-lulusan', 'kelulusan'];
   const superMenus = ['pengaturan', 'data-siswa', 'data-guru', 'data-lulusan'];
 
   if (guestMenus.includes(savedMenu)) {
@@ -2500,6 +2529,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
   if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
   if (menuName === 'data-lulusan') loadDataLulusan();
+  if (menuName === 'validasi-lulusan') { const r=$('validasiLulusanResult'); if(r) r.innerHTML=''; }
 }
 
 // ===================== SETUP SCANNER =====================
@@ -5083,6 +5113,15 @@ function openFormSiswa() {
         <option value="Keluar">Keluar</option>
       </select>
     </div>
+    <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
+      <input type="text" id="fmSiswaStatusAwal" placeholder="Siswa Baru / Pindahan" value="Siswa Baru">
+    </div>
+    <div class="form-group"><label>Asal Sekolah:</label>
+      <input type="text" id="fmSiswaAsalSekolah" placeholder="Nama SD / sekolah asal">
+    </div>
+    <div class="form-group"><label>Lama Belajar:</label>
+      <input type="text" id="fmSiswaLamaBelajar" placeholder="3 Tahun" value="">
+    </div>
   `;
   openFormModal('➕ Tambah Siswa Baru', html, submitFormSiswaBaru);
 }
@@ -5098,6 +5137,9 @@ function submitFormSiswaBaru() {
     no_hp: $('fmSiswaHP').value.trim(),
     alamat: $('fmSiswaAlamat').value.trim(),
     status: $('fmSiswaStatus').value,
+    status_awal: $('fmSiswaStatusAwal')?.value?.trim() || '',
+    asal_sekolah: $('fmSiswaAsalSekolah')?.value?.trim() || '',
+    lama_belajar: $('fmSiswaLamaBelajar')?.value?.trim() || '',
   };
   if (!payload.id || !payload.nama) return showBigPopup('warning', 'Peringatan', 'NISN dan Nama wajib diisi!');
   sendRequest(payload, res => {
@@ -5133,6 +5175,15 @@ function editSiswa(id) {
         ${['Aktif','Lulus','Pindah','Keluar'].map(st => `<option value="${st}" ${st === s.status ? 'selected' : ''}>${st}</option>`).join('')}
       </select>
     </div>
+    <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
+      <input type="text" id="fmSiswaStatusAwal" value="${s.status_awal || ''}" placeholder="Siswa Baru / Pindahan">
+    </div>
+    <div class="form-group"><label>Asal Sekolah:</label>
+      <input type="text" id="fmSiswaAsalSekolah" value="${(s.asal_sekolah || '').replace(/"/g, '&quot;')}" placeholder="Nama SD / sekolah asal">
+    </div>
+    <div class="form-group"><label>Lama Belajar:</label>
+      <input type="text" id="fmSiswaLamaBelajar" value="${s.lama_belajar || ''}" placeholder="3 Tahun">
+    </div>
   `;
   openFormModal(`✏️ Edit Siswa: ${s.nama}`, html, () => {
     const payload = {
@@ -5145,6 +5196,9 @@ function editSiswa(id) {
       no_hp: $('fmSiswaHP').value.trim(),
       alamat: $('fmSiswaAlamat').value.trim(),
       status: $('fmSiswaStatus').value,
+      status_awal: $('fmSiswaStatusAwal')?.value?.trim() || '',
+      asal_sekolah: $('fmSiswaAsalSekolah')?.value?.trim() || '',
+      lama_belajar: $('fmSiswaLamaBelajar')?.value?.trim() || '',
     };
     if (!payload.nama) return showBigPopup('warning', 'Peringatan', 'Nama wajib diisi!');
     sendRequest(payload, res => {
@@ -10592,7 +10646,7 @@ function loadDataLulusanDebounced() {
 
 function loadDataLulusan() {
   const tbody = $('tableDataLulusanBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">⏳ Memuat...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">⏳ Memuat...</td></tr>';
   sendRequest({
     action: 'get_data_lulusan',
     search: $('lulusanSearch')?.value || '',
@@ -10600,14 +10654,14 @@ function loadDataLulusan() {
   }, res => {
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
       if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = '';
       return;
     }
     const rows = res.data || [];
     if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = 'Total lulusan: ' + rows.length;
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Belum ada data lulusan.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Belum ada data lulusan.</td></tr>';
       return;
     }
     window._lulusanCache = rows;
@@ -10616,6 +10670,7 @@ function loadDataLulusan() {
       <td>${r.nisn || ''}</td>
       <td>${r.nama || ''}</td>
       <td style="text-align:center;">${r.jenis_kelamin || ''}</td>
+      <td>${r.tanggal_lahir || ''}</td>
       <td>${r.lama_belajar || ''}</td>
       <td>${r.lulus_tahun || ''}</td>
       <td>${r.status_awal || ''}</td>
@@ -10644,6 +10699,9 @@ function openFormLulusan(nisn) {
         <option value="P" ${(row && row.jenis_kelamin === 'P') ? 'selected' : ''}>P</option>
       </select>
     </div>
+    <div class="form-group"><label>Tanggal Lahir:</label>
+      <input type="date" id="fmLulusanTglLahir" value="${row && row.tanggal_lahir ? String(row.tanggal_lahir).substring(0,10) : ''}">
+    </div>
     <div class="form-group"><label>Lama Belajar di Sekolah Ini:</label>
       <input type="text" id="fmLulusanLama" value="${row ? (row.lama_belajar || '3 Tahun') : '3 Tahun'}" placeholder="3 Tahun">
     </div>
@@ -10666,6 +10724,7 @@ function openFormLulusan(nisn) {
       nisn: $('fmLulusanNisn')?.value?.trim(),
       nama: $('fmLulusanNama')?.value?.trim(),
       jenis_kelamin: $('fmLulusanJK')?.value || 'L',
+      tanggal_lahir: $('fmLulusanTglLahir')?.value || '',
       lama_belajar: $('fmLulusanLama')?.value?.trim(),
       lulus_tahun: $('fmLulusanTahun')?.value?.trim(),
       status_awal: $('fmLulusanStatusAwal')?.value?.trim(),
@@ -10696,6 +10755,7 @@ function exportLulusanExcel() {
   if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
   const data = rows.map((r, i) => ({
     No: i + 1, NISN: r.nisn, Nama: r.nama, 'L/P': r.jenis_kelamin,
+    'Tanggal Lahir': r.tanggal_lahir || '',
     'Lama Belajar': r.lama_belajar, 'Lulus Tahun': r.lulus_tahun,
     'Status Awal': r.status_awal, 'Asal Sekolah': r.asal_sekolah, 'Kelas Asal': r.kelas_asal,
   }));
@@ -10703,6 +10763,123 @@ function exportLulusanExcel() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Data Lulusan');
   XLSX.writeFile(wb, 'Data_Lulusan.xlsx');
+}
+
+
+
+// ---- Import Lulusan ----
+let importLulusanData = [];
+function downloadTemplateLulusan() {
+  if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
+  const sample = [
+    { NISN: '0012345678', Nama: 'Contoh Siswa Lulus', 'L/P': 'L', 'Tanggal Lahir': '2010-05-15', 'Lama Belajar': '3 Tahun', 'Lulus Tahun': '2026', 'Status Awal': 'Siswa Baru', 'Asal Sekolah': 'SDN Contoh 1', 'Kelas Asal': '9A' },
+    { NISN: '0012345679', Nama: 'Contoh Siswi Lulus', 'L/P': 'P', 'Tanggal Lahir': '2010-08-20', 'Lama Belajar': '3 Tahun', 'Lulus Tahun': '2026', 'Status Awal': 'Pindahan', 'Asal Sekolah': 'SDN Contoh 2', 'Kelas Asal': '9B' },
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Lulusan');
+  XLSX.writeFile(wb, 'Template_Data_Lulusan.xlsx');
+  showBigPopup('success', 'Template', 'Template Data Lulusan diunduh. Isi lalu Import kembali.', 2500);
+}
+
+function openImportLulusanModal() {
+  importLulusanData = [];
+  const html = `
+    <p style="font-size:12px;color:#666;margin:0 0 10px;">Unggah file Excel sesuai template. Kolom: NISN, Nama, L/P, Tanggal Lahir, Lama Belajar, Lulus Tahun, Status Awal, Asal Sekolah, Kelas Asal.</p>
+    <div class="form-group">
+      <label>File Excel (.xlsx):</label>
+      <input type="file" id="fmImportLulusanFile" accept=".xlsx,.xls,.csv">
+    </div>
+    <div id="fmImportLulusanPreview" style="font-size:12px;color:var(--primary);margin-top:8px;"></div>
+    <button type="button" class="btn-primary btn-sm" style="width:auto;margin-top:8px;background:#0d9488;" onclick="downloadTemplateLulusan()">📄 Unduh Template</button>
+  `;
+  openFormModal('📥 Import Data Lulusan', html, submitImportLulusan);
+  setTimeout(() => {
+    const inp = $('fmImportLulusanFile');
+    if (!inp) return;
+    inp.onchange = function () {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          importLulusanData = rows.map(r => ({
+            nisn: r.NISN || r.nisn || r.Id || r.id || '',
+            nama: r.Nama || r.nama || '',
+            jenis_kelamin: r['L/P'] || r.jenis_kelamin || r.JK || 'L',
+            tanggal_lahir: r['Tanggal Lahir'] || r.tanggal_lahir || '',
+            lama_belajar: r['Lama Belajar'] || r.lama_belajar || '',
+            lulus_tahun: r['Lulus Tahun'] || r.lulus_tahun || '',
+            status_awal: r['Status Awal'] || r.status_awal || '',
+            asal_sekolah: r['Asal Sekolah'] || r.asal_sekolah || '',
+            kelas_asal: r['Kelas Asal'] || r.kelas_asal || r.Kelas || '',
+          })).filter(x => x.nisn && x.nama);
+          const prev = $('fmImportLulusanPreview');
+          if (prev) prev.innerHTML = '✅ Siap import: <b>' + importLulusanData.length + '</b> baris valid.';
+        } catch (err) {
+          showBigPopup('danger', 'Error', 'Gagal membaca file: ' + (err.message || err));
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+  }, 80);
+}
+
+function submitImportLulusan() {
+  if (!importLulusanData.length) return showBigPopup('warning', 'Peringatan', 'Pilih file Excel terlebih dahulu / tidak ada baris valid.');
+  if (!confirm('Import ' + importLulusanData.length + ' data lulusan?')) return;
+  showBigPopup('info', 'Import', '⏳ Mengimpor data...', 0);
+  sendRequest({ action: 'import_lulusan', list: importLulusanData }, res => {
+    closeBigPopup();
+    let msg = res.message || 'Selesai';
+    if (res.detail && res.detail.length) msg += '<br><small>' + res.detail.slice(0, 8).join('<br>') + '</small>';
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Import Lulusan', msg);
+    if (res.status === 'success') { closeFormModal(); loadDataLulusan(); }
+  });
+}
+
+function cariValidasiLulusan() {
+  const keyword = ($('validasiLulusanKeyword')?.value || '').trim();
+  const box = $('validasiLulusanResult');
+  if (!box) return;
+  if (keyword.length < 3) return showBigPopup('warning', 'Peringatan', 'Masukkan minimal 3 karakter (NISN atau nama).');
+  box.innerHTML = '<p style="text-align:center;color:#666;">⏳ Mencari...</p>';
+  sendRequest({ action: 'validasi_lulusan', keyword }, res => {
+    if (res.status !== 'success') {
+      box.innerHTML = `<div class="syarat-empty"><span class="icon">❌</span><h4>Gagal</h4><p>${res.message || 'Error'}</p></div>`;
+      return;
+    }
+    if (!res.found || !(res.data || []).length) {
+      box.innerHTML = `<div class="syarat-card merah">
+        <div class="syarat-header"><div style="font-size:48px;">🔎</div>
+        <h3 class="syarat-nama">Tidak Ditemukan</h3>
+        <p style="font-size:13px;color:#666;">Tidak ada data lulusan untuk "<b>${keyword.replace(/</g,'')}</b>".</p></div>
+      </div>`;
+      return;
+    }
+    box.innerHTML = (res.data || []).map(r => `
+      <div class="syarat-card hijau" style="margin-bottom:12px;max-width:560px;">
+        <div class="syarat-header">
+          <div style="font-size:40px;">🎓</div>
+          <h3 class="syarat-nama">${r.nama || '-'}</h3>
+          <div class="syarat-kelas">NISN ${r.nisn || '-'} · ${r.jenis_kelamin || ''}</div>
+          <div class="syarat-periode">Lulus Tahun ${r.lulus_tahun || '—'}</div>
+        </div>
+        <ul class="syarat-list">
+          <li><span>Tanggal Lahir</span><b>${r.tanggal_lahir || '—'}</b></li>
+          <li><span>Lama Belajar</span><b>${r.lama_belajar || '—'}</b></li>
+          <li><span>Status Awal</span><b>${r.status_awal || '—'}</b></li>
+          <li><span>Asal Sekolah</span><b>${r.asal_sekolah || '—'}</b></li>
+          <li><span>Kelas Asal</span><b>${r.kelas_asal || '—'}</b></li>
+        </ul>
+        <div class="syarat-status hijau">✅ Terdaftar sebagai Lulusan SMP Negeri 1 Sobang</div>
+      </div>
+    `).join('');
+  });
 }
 
 </script>
