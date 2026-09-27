@@ -1340,8 +1340,39 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <p style="font-size:11px; color:#64748b; margin-top:8px;">Jika error tabel belum ada, jalankan SQL CREATE TABLE di Supabase (pesan error berisi skripnya).</p>
       </div>
-
     </div>
+
+          <!-- PANEL: TAHUN AJARAN & SEMESTER -->
+      <div class="pengaturan-panel" id="panel-periode">
+        <h4 class="panel-title">📆 Tahun Ajaran &amp; Semester Aktif</h4>
+        <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; border-left:4px solid var(--primary); margin-bottom:12px; font-size:12px; color:var(--primary);">
+          Periode ini dipakai sebagai <b>acuan aktif</b> sistem (rekap, nilai, filter nanti).
+          <br>Aturan otomatis: <b>Juli–Desember = Ganjil</b>, <b>Januari–Juni = Genap</b>.
+          Anda bisa mengunci nilai di sini agar tidak berubah otomatis.
+        </div>
+        <div class="download-filter" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Tahun Ajaran:</label>
+            <input type="text" id="periodeTahunAjaran" placeholder="contoh: 2025/2026" maxlength="9">
+          </div>
+          <div class="form-group">
+            <label>Semester:</label>
+            <select id="periodeSemester">
+              <option value="ganjil">Ganjil (Juli – Desember)</option>
+              <option value="genap">Genap (Januari – Juni)</option>
+            </select>
+          </div>
+        </div>
+        <div id="periodeInfoBox" class="download-summary" style="display:none; margin-bottom:12px;"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button class="btn-primary" style="width:auto; padding:8px 22px;" onclick="savePeriodeSetting()">💾 Simpan Periode</button>
+          <button class="btn-primary" style="width:auto; padding:8px 16px; background:#6c757d;" onclick="loadPeriodeSetting()">🔄 Muat Ulang</button>
+          <button class="btn-add" style="width:auto; padding:8px 16px;" onclick="isiPeriodeOtomatis()">⚡ Isi Otomatis dari Tanggal Hari Ini</button>
+        </div>
+        <p style="font-size:11px; color:var(--muted); margin-top:12px;">
+          ℹ️ Menyimpan di sini <b>belum</b> memfilter data absensi/nilai. Itu dilakukan di tahap berikutnya setelah kolom periode ditambahkan ke tabel.
+        </p>
+      </div>
 
     <!-- JADWAL MAPEL -->
     <div id="menu-jadwal-mapel" class="section">
