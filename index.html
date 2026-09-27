@@ -1060,53 +1060,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- ==================== DATA LULUSAN ==================== -->
     <div id="menu-data-lulusan" class="section">
       <h3 style="color:var(--primary); font-size:15px;">🎓 Data Lulusan</h3>
-      <div class="master-toolbar">
-        <div class="form-group">
-          <label>Cari (NISN/Nama/Asal Sekolah):</label>
-          <input type="text" id="lulusanSearch" placeholder="Ketik untuk mencari..." oninput="loadDataLulusanDebounced()">
+      <div style="background:#e8f0fe;padding:14px;border-radius:8px;border-left:4px solid var(--primary);font-size:13px;color:var(--primary);">
+        Data Lulusan dikelola di <b>Pengaturan → Data Lulusan</b>.
+        <div style="margin-top:12px;">
+          <button class="btn-primary" style="width:auto;padding:10px 16px;" onclick="bukaPengaturanDataLulusan()">Buka Data Lulusan</button>
         </div>
-        <div class="form-group">
-          <label>Tahun Lulus:</label>
-          <input type="text" id="lulusanFilterTahun" placeholder="2026" maxlength="4" onchange="loadDataLulusan()">
-        </div>
-        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
-          <label>&nbsp;</label>
-          <button class="btn-add" style="width:auto;padding:8px 14px;" onclick="openFormLulusan()">➕ Tambah</button>
-        </div>
-        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
-          <label>&nbsp;</label>
-          <button class="btn-primary" style="background:#1d6f42;width:auto;padding:8px 14px;" onclick="openImportLulusanModal()">📥 Import</button>
-        </div>
-        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
-          <label>&nbsp;</label>
-          <button class="btn-primary" style="background:#0d9488;width:auto;padding:8px 14px;" onclick="downloadTemplateLulusan()">📄 Template</button>
-        </div>
-        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
-          <label>&nbsp;</label>
-          <button class="btn-excel" style="width:auto;padding:8px 14px;" onclick="exportLulusanExcel()">📊 Excel</button>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <p id="lulusanTotalInfo" style="font-weight:bold;color:var(--primary);font-size:12px;margin:0 0 8px;"></p>
-        <table>
-          <thead>
-            <tr>
-              <th style="width:36px;">No</th>
-              <th>NISN</th>
-              <th>Nama</th>
-              <th style="width:40px;">L/P</th>
-              <th>Tgl Lahir</th>
-              <th>Lama Belajar</th>
-              <th>Lulus Tahun</th>
-              <th>Status Awal</th>
-              <th>Asal Sekolah</th>
-              <th style="width:100px;text-align:center;">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="tableDataLulusanBody">
-            <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
-          </tbody>
-        </table>
       </div>
     </div>
 
@@ -1516,23 +1474,59 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
 
 
-      <!-- PANEL: DATA LULUSAN (shortcut) -->
+      <!-- PANEL: DATA LULUSAN -->
       <div class="pengaturan-panel" id="panel-data-lulusan">
         <h4 class="panel-title">🎓 Data Lulusan</h4>
-        <div style="background:#e8f0fe;padding:12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:14px;font-size:13px;color:var(--primary);">
-          Kelola data alumni: tambah, edit, hapus, import Excel, dan unduh template.
-          Data terisi otomatis saat proses <b>Naik Kelas</b> untuk siswa kelas 9.
+        <div style="background:#e8f0fe;padding:10px 12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:12px;font-size:12px;color:var(--primary);">
+          Kelola data alumni (CRUD, import, template). Terisi otomatis saat <b>Naik Kelas</b> untuk siswa kelas 9.
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;">
-          <button class="btn-primary" style="width:auto;padding:12px 18px;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=&quot;data-lulusan&quot;]'))">
-            🎓 Buka Menu Data Lulusan
-          </button>
-          <button class="btn-primary" style="width:auto;padding:12px 18px;background:#1d6f42;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=&quot;data-lulusan&quot;]')); setTimeout(function(){ if(typeof openImportLulusanModal==='function') openImportLulusanModal(); }, 200);">
-            📥 Import Excel
-          </button>
-          <button class="btn-primary" style="width:auto;padding:12px 18px;background:#0d9488;" onclick="if(typeof downloadTemplateLulusan==='function') downloadTemplateLulusan();">
-            📄 Template Excel
-          </button>
+        <div class="master-toolbar">
+          <div class="form-group">
+            <label>Cari (NISN/Nama/Asal Sekolah):</label>
+            <input type="text" id="lulusanSearch" placeholder="Ketik untuk mencari..." oninput="loadDataLulusanDebounced()">
+          </div>
+          <div class="form-group">
+            <label>Tahun Lulus:</label>
+            <input type="text" id="lulusanFilterTahun" placeholder="2026" maxlength="4" onchange="loadDataLulusan()">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;min-width:auto;">
+            <label>&nbsp;</label>
+            <button class="btn-add" style="width:auto;padding:8px 14px;" onclick="openFormLulusan()">➕ Tambah</button>
+          </div>
+          <div class="form-group" style="flex:0 0 auto;min-width:auto;">
+            <label>&nbsp;</label>
+            <button class="btn-primary" style="background:#1d6f42;width:auto;padding:8px 14px;" onclick="openImportLulusanModal()">📥 Import</button>
+          </div>
+          <div class="form-group" style="flex:0 0 auto;min-width:auto;">
+            <label>&nbsp;</label>
+            <button class="btn-primary" style="background:#0d9488;width:auto;padding:8px 14px;" onclick="downloadTemplateLulusan()">📄 Template</button>
+          </div>
+          <div class="form-group" style="flex:0 0 auto;min-width:auto;">
+            <label>&nbsp;</label>
+            <button class="btn-excel" style="width:auto;padding:8px 14px;" onclick="exportLulusanExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <p id="lulusanTotalInfo" style="font-weight:bold;color:var(--primary);font-size:12px;margin:0 0 8px;"></p>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;">No</th>
+                <th>NISN</th>
+                <th>Nama</th>
+                <th style="width:40px;">L/P</th>
+                <th>Tgl Lahir</th>
+                <th>Lama Belajar</th>
+                <th>Lulus Tahun</th>
+                <th>Status Awal</th>
+                <th>Asal Sekolah</th>
+                <th style="width:100px;text-align:center;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tableDataLulusanBody">
+              <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -2547,7 +2541,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'download-absensi') initDownloadAbsensi();
   if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
   if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
-  if (menuName === 'data-lulusan') loadDataLulusan();
+  if (menuName === 'data-lulusan') { /* UI di Pengaturan */ setTimeout(bukaPengaturanDataLulusan, 50); }
   if (menuName === 'validasi-lulusan') { const r=$('validasiLulusanResult'); if(r) r.innerHTML=''; }
 }
 
@@ -3807,7 +3801,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'kelulusan') loadKelulusanSetting();
   if (tab === 'periode') loadPeriodeSetting();
   if (tab === 'naik-kelas') initNaikKelasPanel();
-  if (tab === 'data-lulusan') { /* panel shortcut saja */ }
+  if (tab === 'data-lulusan') loadDataLulusan();
 }
 
 function renderSesiConfig(dataList) {
@@ -10900,6 +10894,23 @@ function cariValidasiLulusan() {
       </div>
     `).join('');
   });
+}
+
+
+function bukaPengaturanDataLulusan() {
+  const nav = document.querySelector('[data-menu="pengaturan"]');
+  if (typeof checkMenuAccess === 'function') checkMenuAccess('pengaturan', nav);
+  else if (typeof switchMenu === 'function') switchMenu('pengaturan', nav);
+  setTimeout(function () {
+    if (typeof togglePengaturanPanel === 'function') {
+      // buka paksa tab data-lulusan
+      if (typeof activePengaturanPanel !== 'undefined' && activePengaturanPanel === 'data-lulusan') {
+        loadDataLulusan();
+      } else {
+        togglePengaturanPanel('data-lulusan');
+      }
+    }
+  }, 120);
 }
 
 </script>
