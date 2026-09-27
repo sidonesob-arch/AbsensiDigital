@@ -3668,6 +3668,81 @@ function saveSettingAbsen() {
   });
 }
 
+function loadPeriodeSetting() {
+  sendRequest({ action: 'get_periode' }, function (res) {
+    if (!res || res.status !== 'success') {
+      showBigPopup('danger', 'Gagal', (res && res.message) ? res.message : 'Tidak bisa memuat periode. Deploy ulang Edge Function.');
+      return;
+    }
+    var d = res.data || {};
+    var elTahun = document.getElementById('periodeTahunAjaran');
+    var elSem = document.getElementById('periodeSemester');
+    if (elTahun) elTahun.value = d.tahun_ajaran || '';
+    if (elSem) elSem.value = (d.semester === 'genap') ? 'genap' : 'ganjil';
+
+    var box = document.getElementById('periodeInfoBox');
+    if (box) {
+      var sumber = d.sumber === 'pengaturan' ? 'disimpan di Pengaturan' : 'otomatis dari tanggal hari ini';
+      box.style.display = 'block';
+      box.innerHTML = '<b>Status:</b> ' + (d.tahun_ajaran || '-') +
+        ' · Semester ' + (d.semester === 'genap' ? 'Genap' : 'Ganjil') +
+        '<br><span style="font-size:11px;">Sumber: ' + sumber + '. ' + (d.keterangan || '') + '</span>' +
+        '<br><span style="font-size:11px;color:#666;">Saran otomatis: ' +
+        (d.tahun_ajaran_otomatis || '-') + ' / ' + (d.semester_otomatis || '-') + '</span>';
+    }
+  });
+}
+
+function isiPeriodeOtomatis() {
+  sendRequest({ action: 'get_periode' }, function (res) {
+    if (!res || res.status !== 'success') {
+      showBigPopup('danger', 'Gagal', (res && res.message) ? res.message : 'Gagal memuat data');
+      return;
+    }
+    var d = res.data || {};
+    var elTahun = document.getElementById('periodeTahunAjaran');
+    var elSem = document.getElementById('periodeSemester');
+    if (elTahun) elTahun.value = d.tahun_ajaran_otomatis || d.tahun_ajaran || '';
+    if (elSem) elSem.value = d.semester_otomatis || d.semester || 'ganjil';
+    showBigPopup('info', 'Otomatis', 'Form diisi sesuai tanggal hari ini. Klik Simpan untuk mengunci.', 2500);
+  });
+}
+
+function savePeriodeSetting() {
+  var elTahun = document.getElementById('periodeTahunAjaran');
+  var elSem = document.getElementById('periodeSemester');
+  var tahun = (elTahun && elTahun.value ? elTahun.value : '').trim().replace(/-/g, '/');
+  var semester = (elSem && elSem.value ? elSem.value : '').trim().toLowerCase();
+
+  if (!tahun) {
+    showBigPopup('warning', 'Peringatan', 'Tahun Ajaran wajib diisi (contoh: 2025/2026)');
+    return;
+  }
+  if (!/^\d{4}\/\d{4}$/.test(tahun)) {
+    showBigPopup('warning', 'Peringatan', 'Format Tahun Ajaran harus seperti 2025/2026');
+    return;
+  }
+  if (semester !== 'ganjil' && semester !== 'genap') {
+    showBigPopup('warning', 'Peringatan', 'Pilih semester Ganjil atau Genap');
+    return;
+  }
+
+  showBigPopup('info', 'Menyimpan', 'Menyimpan periode...', 0);
+  sendRequest({
+    action: 'save_periode',
+    tahun_ajaran: tahun,
+    semester: semester
+  }, function (res) {
+    closeBigPopup();
+    if (res && res.status === 'success') {
+      showBigPopup('success', 'Periode', res.message || 'Berhasil disimpan');
+      loadPeriodeSetting();
+    } else {
+      showBigPopup('danger', 'Gagal', (res && res.message) ? res.message : 'Gagal menyimpan. Cek deploy Edge Function.');
+    }
+  });
+}
+    
 function loadHariLiburData() {
   sendRequest({ action: 'get_hari_libur' }, res => {
     const tbody = $('tableHariLiburBody');
