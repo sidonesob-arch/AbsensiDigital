@@ -253,15 +253,34 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .profile-dropdown-divider { height: 1px; background: var(--border-light); margin: 4px 0; }
 
 .topbar-user {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 2px 0 3px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 2px; width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 3px 10px 4px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 2px; width: 100%;
+  flex-wrap: wrap;
 }
-.topbar-user .user-name-display { font-size: 11px; font-weight: 600; color: #e2e8f0; white-space: nowrap; max-width: 200px; }
+.topbar-user .topbar-user-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topbar-user .user-name-display { font-size: 11px; font-weight: 600; color: #e2e8f0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .topbar-user .user-role-display { font-size: 9px; background: rgba(255,255,255,0.12); padding: 1px 10px; border-radius: 10px; color: #b2ccf3; font-weight: 500; white-space: nowrap; }
 .topbar-user .user-role-display.guru { background: rgba(46,204,113,0.25); color: #2ecc71; }
 .topbar-user .user-role-display.admin { background: rgba(52,152,219,0.25); color: #3498db; }
 .topbar-user .user-role-display.super { background: rgba(241,196,15,0.25); color: #f1c40f; }
 .topbar-user .user-role-display.siswa { background: rgba(52,152,219,0.25); color: #3498db; }
+.topbar-periode {
+  display: flex; align-items: center; gap: 0; flex-shrink: 0;
+  background: rgba(0,0,0,0.18); border-radius: 8px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.topbar-periode .tp-label {
+  font-size: 9px; font-weight: 700; color: #93c5fd; letter-spacing: 0.3px;
+  padding: 3px 10px; background: rgba(255,255,255,0.06); white-space: nowrap;
+  border-right: 1px solid rgba(255,255,255,0.12);
+}
+.topbar-periode .tp-value {
+  font-size: 10px; font-weight: 800; color: #fef08a; padding: 3px 10px; white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .topbar-periode .tp-label { font-size: 8px; padding: 2px 6px; }
+  .topbar-periode .tp-value { font-size: 9px; padding: 2px 6px; }
+}
 
 /* LAYOUT */
 .main-wrapper { display: flex; margin-top: 65px; margin-bottom: 45px; flex: 1; position: relative; }
@@ -625,9 +644,14 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     </div>
   </div>
   <div class="topbar-user" id="topbarUserInfo">
-    <span class="user-name-display" id="topbarUserName">Tamu</span>
-    <span class="user-role-display" id="topbarUserRole">Tamu</span>
-    <span id="topbarPeriodeBadge" style="font-size:9px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:10px;color:#b2ccf3;font-weight:600;margin-left:4px;">📅 —</span>
+    <div class="topbar-user-left">
+      <span class="user-name-display" id="topbarUserName">Tamu</span>
+      <span class="user-role-display" id="topbarUserRole">Tamu</span>
+    </div>
+    <div class="topbar-periode" id="topbarPeriodeBox" title="Periode aktif sistem (Pengaturan → Tahun Ajaran)">
+      <span class="tp-label">TA || Semester</span>
+      <span class="tp-value" id="topbarPeriodeValue">— || —</span>
+    </div>
   </div>
 </div>
 
@@ -803,6 +827,12 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- CARI DATA -->
     <div id="menu-cari" class="section">
       <h3 style="color:var(--primary); font-size:15px;">🔍 Pencarian Data Kehadiran</h3>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="form-group" style="flex:1; min-width:140px;"><label>Tahun Ajaran:</label><input type="text" id="cariTahunAjaran" placeholder="2025/2026" maxlength="9"></div>
+        <div class="form-group" style="flex:1; min-width:120px;"><label>Semester:</label>
+          <select id="cariSemester"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select>
+        </div>
+      </div>
       <div class="form-group"><label>Kata Kunci:</label><input type="text" id="cariKeyword" placeholder="NISN atau Nama Siswa"></div>
       <div style="display:flex; gap:10px;">
         <div class="form-group" style="flex:1;"><label>Dari:</label><input type="date" id="cariTglMulai"></div>
@@ -847,6 +877,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- LIHAT NILAI SAYA -->
     <div id="menu-lihat-nilai-saya" class="section">
       <h3 style="color:var(--primary); font-size:15px; margin-top:0;">📊 Lihat Nilai Saya</h3>
+      <div id="nilaiSayaPeriodeHint" class="download-summary" style="margin-bottom:10px;">📅 Periode: —</div>
       <div id="nilaiSayaLoginHint" style="background:#fff3cd; padding:14px; border-radius:8px; margin-bottom:14px; font-size:13px; border-left:4px solid #f59e0b;">
         Login sebagai <b>Siswa</b> terlebih dahulu (menu profil → Login Siswa) untuk melihat nilai Anda.
       </div>
@@ -1466,6 +1497,14 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <div id="menu-ujian-kelola" class="section">
       <h3 style="color:var(--primary); font-size:15px;">📝 Kelola Ujian Online</h3>
       <div class="master-toolbar">
+        <div class="form-group" style="margin:0; min-width:130px;">
+          <label style="margin:0 0 2px;">Tahun Ajaran</label>
+          <input type="text" id="ujianTahunAjaran" placeholder="2025/2026" maxlength="9" style="padding:6px 8px;">
+        </div>
+        <div class="form-group" style="margin:0; min-width:110px;">
+          <label style="margin:0 0 2px;">Semester</label>
+          <select id="ujianSemester" style="padding:6px 8px;"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select>
+        </div>
         <button class="btn-add" onclick="openFormUjianBaru()">➕ Buat Ujian Baru</button>
         <button class="btn-primary btn-sm" onclick="loadUjianList()">🔄 Refresh</button>
       </div>
@@ -2322,6 +2361,8 @@ function switchMenu(menuName, el, isRestoring = false) {
   const target = $(`menu-${menuName}`);
   if (target) target.classList.add('active');
   saveActiveMenu(menuName);
+  // Sinkronkan filter periode di form dengan pengaturan aktif
+  if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
 
   if (menuName === 'scanner') setupScannerView();
   if (menuName === 'rekap') {
@@ -3072,10 +3113,13 @@ function hapusKehadiranRow(idx) {
 }
 
 function cariKehadiran() {
+  const ta = ($('cariTahunAjaran') && $('cariTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '';
+  const sem = ($('cariSemester') && $('cariSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil';
   sendRequest({
     action: 'cari_kehadiran', keyword: $('cariKeyword').value.trim(),
-    tglMulai: $('cariTglMulai').value, tglSelesai: $('cariTglSelesai').value
-  , tahun_ajaran: (window.periodeAktif&&window.periodeAktif.tahun_ajaran)||'', semester: (window.periodeAktif&&window.periodeAktif.semester)||'ganjil' }, res => {
+    tglMulai: $('cariTglMulai').value, tglSelesai: $('cariTglSelesai').value,
+    tahun_ajaran: ta, semester: sem
+  }, res => {
     const thead = $('tableCariHead');
     const tbody = $('tableCariBody');
     thead.innerHTML = '<tr><th>Waktu</th><th>Peran</th><th>ID</th><th>Nama</th><th>Status</th></tr>';
@@ -3214,6 +3258,13 @@ function matchMapelOrder(mapelName) {
 function loadNilaiSaya() {
   const hint = $('nilaiSayaLoginHint');
   const content = $('nilaiSayaContent');
+  const pHint = $('nilaiSayaPeriodeHint');
+  if (pHint) {
+    const p = window.periodeAktif || {};
+    const ta = p.tahun_ajaran || '—';
+    const sem = p.semester === 'genap' ? 'Genap' : (p.semester === 'ganjil' ? 'Ganjil' : '—');
+    pHint.textContent = '📅 Periode aktif: ' + ta + ' || ' + sem + ' (data nilai tidak tercampur antar semester)';
+  }
   if (!siswaUserData || !siswaUserData.nisn) {
     if (hint) hint.style.display = 'block';
     if (content) content.style.display = 'none';
@@ -3718,6 +3769,7 @@ function applyPeriodeToInputs() {
     ['daftarNilaiTahunAjaran', 'daftarNilaiSemester'],
     ['downloadTahunAjaran', 'downloadSemester'],
     ['ujianTahunAjaran', 'ujianSemester'],
+    ['cariTahunAjaran', 'cariSemester'],
   ];
   pairs.forEach(function (ids) {
     const elT = document.getElementById(ids[0]);
@@ -3725,11 +3777,11 @@ function applyPeriodeToInputs() {
     if (elT && p.tahun_ajaran) elT.value = p.tahun_ajaran;
     if (elS && p.semester) elS.value = p.semester;
   });
-  const badge = document.getElementById('topbarPeriodeBadge');
-  if (badge) {
+  const valEl = document.getElementById('topbarPeriodeValue');
+  if (valEl) {
     const ta = p.tahun_ajaran || '—';
     const sem = p.semester === 'genap' ? 'Genap' : (p.semester === 'ganjil' ? 'Ganjil' : '—');
-    badge.textContent = '📅 ' + ta + ' · ' + sem;
+    valEl.textContent = ta + ' || ' + sem;
   }
 }
 
@@ -5585,7 +5637,9 @@ let ujianKerjaState = null;
 let ujianTimerInterval = null;
 
 function loadUjianList() {
-  const payload = { action: 'ujian_list', ...(getPeriodePayload ? getPeriodePayload() : {}) };
+  const ta = ($('ujianTahunAjaran') && $('ujianTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '';
+  const sem = ($('ujianSemester') && $('ujianSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil';
+  const payload = { action: 'ujian_list', tahun_ajaran: ta, semester: sem };
   if (userRole === 'guru' && userData) {
     payload.role = 'guru';
     payload.guruNama = userData.nama;
@@ -6694,8 +6748,8 @@ function submitFormUjian() {
     acak_soal: $('fmUjAcakSoal').checked,
     acak_opsi: $('fmUjAcakOpsi').checked,
     petunjuk: $('fmUjPetunjuk').value.trim(),
-    tahun_ajaran: (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '',
-    semester: (window.periodeAktif && window.periodeAktif.semester) || 'ganjil',
+    tahun_ajaran: ($('ujianTahunAjaran') && $('ujianTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '',
+    semester: ($('ujianSemester') && $('ujianSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil',
   };
   if (!payload.judul || !payload.mapel || !payload.guru) return showBigPopup('warning', 'Peringatan', 'Judul, Mapel, dan Guru wajib diisi.');
   sendRequest(payload, res => {
