@@ -1178,6 +1178,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="pengaturan-tab-btn" data-tab="kelulusan" onclick="togglePengaturanPanel('kelulusan')"><span class="tab-icon">🎓</span>Kelulusan</button>
         <button class="pengaturan-tab-btn" data-tab="periode" onclick="togglePengaturanPanel('periode')"><span class="tab-icon">📆</span>Tahun Ajaran</button>
         <button class="pengaturan-tab-btn" data-tab="naik-kelas" onclick="togglePengaturanPanel('naik-kelas')"><span class="tab-icon">⬆️</span>Naik Kelas</button>
+        <button class="pengaturan-tab-btn" data-tab="data-lulusan" onclick="togglePengaturanPanel('data-lulusan')"><span class="tab-icon">🎓</span>Data Lulusan</button>
       </div>
 
       <!-- PANEL: SESI -->
@@ -1456,9 +1457,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <!-- PANEL: NAIK KELAS -->
       <div class="pengaturan-panel" id="panel-naik-kelas">
         <h4 class="panel-title">⬆️ Naik Kelas &amp; Kelulusan Massal</h4>
-        <div style="margin-bottom:10px;">
-          <button class="btn-primary btn-sm" style="width:auto;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=data-lulusan]'))">🎓 Buka Data Lulusan (CRUD / Import)</button>
-        </div>
         <div style="background:#e8f0fe;padding:10px 12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:12px;font-size:12px;color:var(--primary);">
           <b>Naik Kelas:</b> 7 → 8, 8 → 9. &nbsp; <b>Kelas 9:</b> pindah ke <b>Data Lulusan</b>.<br>
           Gunakan mode <b>Batalkan</b> untuk mengembalikan jika ada kesalahan.
@@ -1514,6 +1512,27 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <tr><td colspan="6" style="text-align:center;">Pilih mode lalu klik Muat Daftar.</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+
+      <!-- PANEL: DATA LULUSAN (shortcut) -->
+      <div class="pengaturan-panel" id="panel-data-lulusan">
+        <h4 class="panel-title">🎓 Data Lulusan</h4>
+        <div style="background:#e8f0fe;padding:12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:14px;font-size:13px;color:var(--primary);">
+          Kelola data alumni: tambah, edit, hapus, import Excel, dan unduh template.
+          Data terisi otomatis saat proses <b>Naik Kelas</b> untuk siswa kelas 9.
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <button class="btn-primary" style="width:auto;padding:12px 18px;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=&quot;data-lulusan&quot;]'))">
+            🎓 Buka Menu Data Lulusan
+          </button>
+          <button class="btn-primary" style="width:auto;padding:12px 18px;background:#1d6f42;" onclick="switchMenu('data-lulusan', document.querySelector('[data-menu=&quot;data-lulusan&quot;]')); setTimeout(function(){ if(typeof openImportLulusanModal==='function') openImportLulusanModal(); }, 200);">
+            📥 Import Excel
+          </button>
+          <button class="btn-primary" style="width:auto;padding:12px 18px;background:#0d9488;" onclick="if(typeof downloadTemplateLulusan==='function') downloadTemplateLulusan();">
+            📄 Template Excel
+          </button>
         </div>
       </div>
 
@@ -3788,6 +3807,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'kelulusan') loadKelulusanSetting();
   if (tab === 'periode') loadPeriodeSetting();
   if (tab === 'naik-kelas') initNaikKelasPanel();
+  if (tab === 'data-lulusan') { /* panel shortcut saja */ }
 }
 
 function renderSesiConfig(dataList) {
