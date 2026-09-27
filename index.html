@@ -751,6 +751,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <div class="nav-category super">MASTER DATA (SUPER ADMIN)</div>
     <a class="nav-item" data-menu="data-siswa" onclick="checkMenuAccess('data-siswa', this)">👥 Data Siswa</a>
     <a class="nav-item" data-menu="data-guru" onclick="checkMenuAccess('data-guru', this)">👨‍🏫 Data Guru</a>
+    <a class="nav-item" data-menu="data-lulusan" onclick="checkMenuAccess('data-lulusan', this)">🎓 Data Lulusan</a>
     <a class="nav-item" data-menu="pengaturan" onclick="checkMenuAccess('pengaturan', this)">⚙️ Pengaturan</a>
 
     <div class="nav-category">PEMBELAJARAN</div>
@@ -1055,6 +1056,50 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
+    <!-- ==================== DATA LULUSAN ==================== -->
+    <div id="menu-data-lulusan" class="section">
+      <h3 style="color:var(--primary); font-size:15px;">🎓 Data Lulusan</h3>
+      <div class="master-toolbar">
+        <div class="form-group">
+          <label>Cari (NISN/Nama/Asal Sekolah):</label>
+          <input type="text" id="lulusanSearch" placeholder="Ketik untuk mencari..." oninput="loadDataLulusanDebounced()">
+        </div>
+        <div class="form-group">
+          <label>Tahun Lulus:</label>
+          <input type="text" id="lulusanFilterTahun" placeholder="2026" maxlength="4" onchange="loadDataLulusan()">
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-add" style="width:auto;padding:8px 14px;" onclick="openFormLulusan()">➕ Tambah Manual</button>
+        </div>
+        <div class="form-group" style="flex:0 0 auto; min-width:auto;">
+          <label>&nbsp;</label>
+          <button class="btn-excel" style="width:auto;padding:8px 14px;" onclick="exportLulusanExcel()">📊 Excel</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <p id="lulusanTotalInfo" style="font-weight:bold;color:var(--primary);font-size:12px;margin:0 0 8px;"></p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36px;">No</th>
+              <th>NISN</th>
+              <th>Nama</th>
+              <th style="width:40px;">L/P</th>
+              <th>Lama Belajar</th>
+              <th>Lulus Tahun</th>
+              <th>Status Awal</th>
+              <th>Asal Sekolah</th>
+              <th style="width:100px;text-align:center;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableDataLulusanBody">
+            <tr><td colspan="9" style="text-align:center;">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ==================== DATA GURU (BARU) ==================== -->
     <div id="menu-data-guru" class="section">
       <h3 style="color:var(--primary); font-size:15px;">👨‍🏫 Data Guru</h3>
@@ -1106,6 +1151,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="pengaturan-tab-btn" data-tab="edit-kehadiran" onclick="togglePengaturanPanel('edit-kehadiran')"><span class="tab-icon">✏️</span>Edit Kehadiran</button>
         <button class="pengaturan-tab-btn" data-tab="kelulusan" onclick="togglePengaturanPanel('kelulusan')"><span class="tab-icon">🎓</span>Kelulusan</button>
         <button class="pengaturan-tab-btn" data-tab="periode" onclick="togglePengaturanPanel('periode')"><span class="tab-icon">📆</span>Tahun Ajaran</button>
+        <button class="pengaturan-tab-btn" data-tab="naik-kelas" onclick="togglePengaturanPanel('naik-kelas')"><span class="tab-icon">⬆️</span>Naik Kelas</button>
       </div>
 
       <!-- PANEL: SESI -->
@@ -1380,7 +1426,69 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
     </div>
 
-          <!-- PANEL: TAHUN AJARAN & SEMESTER -->
+          
+      <!-- PANEL: NAIK KELAS -->
+      <div class="pengaturan-panel" id="panel-naik-kelas">
+        <h4 class="panel-title">⬆️ Naik Kelas &amp; Kelulusan Massal</h4>
+        <div style="background:#e8f0fe;padding:10px 12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:12px;font-size:12px;color:var(--primary);">
+          <b>Naik Kelas:</b> 7 → 8, 8 → 9. &nbsp; <b>Kelas 9:</b> pindah ke <b>Data Lulusan</b>.<br>
+          Gunakan mode <b>Batalkan</b> untuk mengembalikan jika ada kesalahan.
+        </div>
+        <div class="download-filter" style="margin-bottom:10px;">
+          <div class="form-group">
+            <label>Mode:</label>
+            <select id="nkMode" onchange="loadNaikKelasPreview()">
+              <option value="naik">Naik Kelas / Luluskan</option>
+              <option value="batal_naik">Batalkan Naik Kelas</option>
+              <option value="batal_lulus">Batalkan Lulus (kembalikan dari Data Lulusan)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tahun Ajaran:</label>
+            <input type="text" id="nkTahunAjaran" placeholder="2025/2026" maxlength="9">
+          </div>
+          <div class="form-group">
+            <label>Semester:</label>
+            <select id="nkSemester"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select>
+          </div>
+          <div class="form-group">
+            <label>Filter Kelas:</label>
+            <select id="nkKelas" onchange="loadNaikKelasPreview()"><option value="">-- Semua --</option></select>
+          </div>
+          <div class="form-group">
+            <label>Cari NISN / Nama:</label>
+            <input type="text" id="nkSearch" placeholder="Ketik NISN atau nama..." oninput="loadNaikKelasPreviewDebounced()">
+          </div>
+          <div class="form-group">
+            <label>Tahun Lulus (untuk kelas 9):</label>
+            <input type="text" id="nkLulusTahun" placeholder="2026" maxlength="4">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:0;cursor:pointer;">
+            <input type="checkbox" id="nkPilihSemua" onchange="toggleNaikKelasSelectAll(this.checked)" style="width:16px;height:16px;margin:0;"> Pilih semua di daftar
+          </label>
+          <button class="btn-primary btn-sm" onclick="loadNaikKelasPreview()">🔄 Muat Daftar</button>
+          <button class="btn-success btn-sm" onclick="prosesNaikKelas(true)">✅ Proses Semua (sesuai filter)</button>
+          <button class="btn-primary btn-sm" onclick="prosesNaikKelas(false)">✅ Proses yang Dipilih</button>
+        </div>
+        <div id="nkSummary" class="download-summary" style="display:none;margin-bottom:8px;"></div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;"><input type="checkbox" id="nkCheckAll" onchange="toggleNaikKelasSelectAll(this.checked)" style="width:16px;height:16px;"></th>
+                <th>NISN</th><th>Nama</th><th>Kelas Saat Ini</th><th>Aksi</th><th>Hasil</th>
+              </tr>
+            </thead>
+            <tbody id="tableNaikKelasBody">
+              <tr><td colspan="6" style="text-align:center;">Pilih mode lalu klik Muat Daftar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+<!-- PANEL: TAHUN AJARAN & SEMESTER -->
       <div class="pengaturan-panel" id="panel-periode">
         <h4 class="panel-title">📆 Tahun Ajaran &amp; Semester Aktif</h4>
         <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; border-left:4px solid var(--primary); margin-bottom:12px; font-size:12px; color:var(--primary);">
@@ -1900,7 +2008,7 @@ function restoreActiveMenu() {
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
   const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint'];
-  const superMenus = ['pengaturan', 'data-siswa', 'data-guru'];
+  const superMenus = ['pengaturan', 'data-siswa', 'data-guru', 'data-lulusan'];
 
   if (guestMenus.includes(savedMenu)) {
     switchMenu(savedMenu, navItem, true);
@@ -2347,7 +2455,7 @@ function checkMenuAccess(menuName, el) {
   }
   const isSuperAdmin = userRole === 'super_admin';
   if (menuName === 'pengaturan' && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
-  if ((menuName === 'data-siswa' || menuName === 'data-guru') && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
+  if ((menuName === 'data-siswa' || menuName === 'data-guru' || menuName === 'data-lulusan') && !isSuperAdmin) return showBigPopup("warning", "Akses Ditolak", "Hanya Super Admin!");
   switchMenu(menuName, el);
 }
 
@@ -2391,6 +2499,7 @@ function switchMenu(menuName, el, isRestoring = false) {
   if (menuName === 'download-absensi') initDownloadAbsensi();
   if (menuName === 'data-siswa') { loadDataSiswa(); loadKelasUnik(); }
   if (menuName === 'data-guru') { loadDataGuru(); loadMapelUnik(); loadKelasUnik(); }
+  if (menuName === 'data-lulusan') loadDataLulusan();
 }
 
 // ===================== SETUP SCANNER =====================
@@ -3648,6 +3757,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'edit-kehadiran') initEditKehadiran();
   if (tab === 'kelulusan') loadKelulusanSetting();
   if (tab === 'periode') loadPeriodeSetting();
+  if (tab === 'naik-kelas') initNaikKelasPanel();
 }
 
 function renderSesiConfig(dataList) {
@@ -3770,6 +3880,7 @@ function applyPeriodeToInputs() {
     ['downloadTahunAjaran', 'downloadSemester'],
     ['ujianTahunAjaran', 'ujianSemester'],
     ['cariTahunAjaran', 'cariSemester'],
+    ['nkTahunAjaran', 'nkSemester'],
   ];
   pairs.forEach(function (ids) {
     const elT = document.getElementById(ids[0]);
@@ -10327,6 +10438,272 @@ function submitUjianSiswa(isTimeout, retryCount) {
   });
 }
 
+
+
+
+// ===================== NAIK KELAS =====================
+let _nkPreviewCache = [];
+let _nkDebounce = null;
+
+function initNaikKelasPanel() {
+  if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
+  const p = window.periodeAktif || {};
+  if ($('nkTahunAjaran') && !$('nkTahunAjaran').value) $('nkTahunAjaran').value = p.tahun_ajaran || '';
+  if ($('nkSemester') && p.semester) $('nkSemester').value = p.semester;
+  if ($('nkLulusTahun') && !$('nkLulusTahun').value) {
+    const ta = ($('nkTahunAjaran').value || p.tahun_ajaran || '');
+    const m = ta.match(/(\d{4})\s*\/\s*(\d{4})/);
+    $('nkLulusTahun').value = m ? m[2] : String(new Date().getFullYear());
+  }
+  // isi filter kelas
+  sendRequest({ action: 'get_kelas' }, res => {
+    const sel = $('nkKelas');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">-- Semua --</option>';
+    (res.data || []).forEach(k => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = k;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  });
+  loadNaikKelasPreview();
+}
+
+function loadNaikKelasPreviewDebounced() {
+  clearTimeout(_nkDebounce);
+  _nkDebounce = setTimeout(loadNaikKelasPreview, 350);
+}
+
+function loadNaikKelasPreview() {
+  const mode = $('nkMode')?.value || 'naik';
+  const payload = {
+    action: 'naik_kelas_preview',
+    mode,
+    kelas: $('nkKelas')?.value || '',
+    search: $('nkSearch')?.value || '',
+    tahun_ajaran: $('nkTahunAjaran')?.value || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '',
+    semester: $('nkSemester')?.value || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil',
+  };
+  const tbody = $('tableNaikKelasBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">⏳ Memuat...</td></tr>';
+  sendRequest(payload, res => {
+    if (!tbody) return;
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal'}</td></tr>`;
+      return;
+    }
+    _nkPreviewCache = res.data || [];
+    const sum = $('nkSummary');
+    if (sum) {
+      sum.style.display = 'block';
+      const nNaik = _nkPreviewCache.filter(x => x.aksi === 'naik' || x.aksi === 'batal_naik').length;
+      const nLulus = _nkPreviewCache.filter(x => x.aksi === 'lulus' || x.aksi === 'batal_lulus').length;
+      sum.innerHTML = `<b>Ditemukan ${_nkPreviewCache.length} siswa</b> — Naik/turun: ${nNaik}, Lulus/batal lulus: ${nLulus}` +
+        (res.periode ? ` · Periode ${res.periode.tahun_ajaran || ''} ${res.periode.semester || ''}` : '');
+    }
+    if (!_nkPreviewCache.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Tidak ada data sesuai filter.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _nkPreviewCache.map((r, i) => {
+      const badge = r.aksi === 'lulus' ? 'background:#7c3aed;color:#fff;'
+        : r.aksi === 'batal_lulus' ? 'background:#dc2626;color:#fff;'
+        : r.aksi === 'batal_naik' ? 'background:#ea580c;color:#fff;'
+        : 'background:#16a34a;color:#fff;';
+      return `<tr>
+        <td style="text-align:center;"><input type="checkbox" class="nk-check" value="${r.nisn}" style="width:16px;height:16px;"></td>
+        <td>${r.nisn || ''}</td>
+        <td>${r.nama || ''}</td>
+        <td><b>${r.kelas || ''}</b></td>
+        <td><span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;${badge}">${(r.aksi || '').replace('_',' ')}</span></td>
+        <td style="font-size:12px;">${r.keterangan || r.target || ''}</td>
+      </tr>`;
+    }).join('');
+    if ($('nkCheckAll')) $('nkCheckAll').checked = false;
+    if ($('nkPilihSemua')) $('nkPilihSemua').checked = false;
+  });
+}
+
+function toggleNaikKelasSelectAll(checked) {
+  document.querySelectorAll('.nk-check').forEach(c => { c.checked = !!checked; });
+  if ($('nkCheckAll')) $('nkCheckAll').checked = !!checked;
+  if ($('nkPilihSemua')) $('nkPilihSemua').checked = !!checked;
+}
+
+function prosesNaikKelas(semua) {
+  const mode = $('nkMode')?.value || 'naik';
+  const ids = Array.from(document.querySelectorAll('.nk-check:checked')).map(c => c.value);
+  if (!semua && !ids.length) return showBigPopup('warning', 'Peringatan', 'Centang minimal 1 siswa, atau gunakan Proses Semua.');
+
+  let confirmMsg = '';
+  let action = 'naik_kelas_proses';
+  let payload = {};
+
+  if (mode === 'naik') {
+    confirmMsg = semua
+      ? 'Naikkan / luluskan SEMUA siswa di daftar filter?\n\nKelas 7→8, 8→9, 9→Data Lulusan.\nTindakan ini mengubah data siswa secara permanen.'
+      : `Naikkan / luluskan ${ids.length} siswa terpilih?`;
+    action = 'naik_kelas_proses';
+    payload = {
+      action, mode: 'naik', semua: !!semua, ids,
+      tahun_ajaran: $('nkTahunAjaran')?.value || '',
+      semester: $('nkSemester')?.value || 'ganjil',
+      kelas: $('nkKelas')?.value || '',
+      search: $('nkSearch')?.value || '',
+      lulus_tahun: $('nkLulusTahun')?.value || '',
+      lama_belajar: '3 Tahun',
+    };
+  } else if (mode === 'batal_naik') {
+    confirmMsg = semua ? 'Batalkan naik kelas untuk SEMUA di daftar (turunkan tingkat)?' : `Batalkan naik kelas ${ids.length} siswa?`;
+    action = 'naik_kelas_batal';
+    payload = {
+      action, jenis: 'naik', semua: !!semua, ids,
+      kelas: $('nkKelas')?.value || '',
+      search: $('nkSearch')?.value || '',
+    };
+  } else {
+    confirmMsg = semua ? 'Batalkan kelulusan SEMUA di daftar (kembalikan ke kelas 9)?' : `Batalkan kelulusan ${ids.length} siswa?`;
+    action = 'naik_kelas_batal';
+    payload = {
+      action, jenis: 'lulus', semua: !!semua, ids,
+      search: $('nkSearch')?.value || '',
+    };
+  }
+
+  if (!confirm(confirmMsg)) return;
+  showBigPopup('info', 'Memproses', '⏳ Memproses naik kelas / kelulusan...', 0);
+  sendRequest(payload, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hasil', res.message || 'Selesai');
+    loadNaikKelasPreview();
+    if (typeof loadDataSiswa === 'function') try { loadDataSiswa(); } catch(e) {}
+    if (typeof loadDataLulusan === 'function') try { loadDataLulusan(); } catch(e) {}
+  });
+}
+
+// ===================== DATA LULUSAN =====================
+let _lulusanDebounce = null;
+function loadDataLulusanDebounced() {
+  clearTimeout(_lulusanDebounce);
+  _lulusanDebounce = setTimeout(loadDataLulusan, 350);
+}
+
+function loadDataLulusan() {
+  const tbody = $('tableDataLulusanBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">⏳ Memuat...</td></tr>';
+  sendRequest({
+    action: 'get_data_lulusan',
+    search: $('lulusanSearch')?.value || '',
+    lulus_tahun: $('lulusanFilterTahun')?.value || '',
+  }, res => {
+    if (!tbody) return;
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
+      if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = '';
+      return;
+    }
+    const rows = res.data || [];
+    if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = 'Total lulusan: ' + rows.length;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Belum ada data lulusan.</td></tr>';
+      return;
+    }
+    window._lulusanCache = rows;
+    tbody.innerHTML = rows.map((r, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${r.nisn || ''}</td>
+      <td>${r.nama || ''}</td>
+      <td style="text-align:center;">${r.jenis_kelamin || ''}</td>
+      <td>${r.lama_belajar || ''}</td>
+      <td>${r.lulus_tahun || ''}</td>
+      <td>${r.status_awal || ''}</td>
+      <td>${r.asal_sekolah || ''}</td>
+      <td style="text-align:center;white-space:nowrap;">
+        <button class="btn-edit" title="Edit" onclick="openFormLulusan('${String(r.nisn).replace(/'/g,"\\'")}')">✏️</button>
+        <button class="btn-danger" title="Hapus" onclick="hapusDataLulusan('${String(r.nisn).replace(/'/g,"\\'")}','${String(r.nama||'').replace(/'/g,"\\'")}')">🗑️</button>
+      </td>
+    </tr>`).join('');
+  });
+}
+
+function openFormLulusan(nisn) {
+  const list = window._lulusanCache || [];
+  const row = nisn ? list.find(x => String(x.nisn) === String(nisn)) : null;
+  const html = `
+    <div class="form-group"><label>NISN:</label>
+      <input type="text" id="fmLulusanNisn" value="${row ? (row.nisn || '') : ''}" ${row ? 'readonly' : ''} placeholder="NISN">
+    </div>
+    <div class="form-group"><label>Nama:</label>
+      <input type="text" id="fmLulusanNama" value="${row ? (row.nama || '').replace(/"/g, '&quot;') : ''}">
+    </div>
+    <div class="form-group"><label>L/P:</label>
+      <select id="fmLulusanJK">
+        <option value="L" ${(row && row.jenis_kelamin === 'L') ? 'selected' : ''}>L</option>
+        <option value="P" ${(row && row.jenis_kelamin === 'P') ? 'selected' : ''}>P</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Lama Belajar di Sekolah Ini:</label>
+      <input type="text" id="fmLulusanLama" value="${row ? (row.lama_belajar || '3 Tahun') : '3 Tahun'}" placeholder="3 Tahun">
+    </div>
+    <div class="form-group"><label>Lulus Tahun:</label>
+      <input type="text" id="fmLulusanTahun" value="${row ? (row.lulus_tahun || '') : ''}" placeholder="2026" maxlength="4">
+    </div>
+    <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
+      <input type="text" id="fmLulusanStatusAwal" value="${row ? (row.status_awal || '') : 'Siswa Baru'}" placeholder="Siswa Baru / Pindahan">
+    </div>
+    <div class="form-group"><label>Asal Sekolah:</label>
+      <input type="text" id="fmLulusanAsal" value="${row ? (row.asal_sekolah || '').replace(/"/g, '&quot;') : ''}" placeholder="Nama SD / sekolah asal">
+    </div>
+    <div class="form-group"><label>Kelas Asal (saat lulus):</label>
+      <input type="text" id="fmLulusanKelasAsal" value="${row ? (row.kelas_asal || '') : ''}" placeholder="9A">
+    </div>
+  `;
+  openFormModal(row ? '✏️ Edit Data Lulusan' : '➕ Tambah Data Lulusan', html, () => {
+    const payload = {
+      action: 'save_data_lulusan',
+      nisn: $('fmLulusanNisn')?.value?.trim(),
+      nama: $('fmLulusanNama')?.value?.trim(),
+      jenis_kelamin: $('fmLulusanJK')?.value || 'L',
+      lama_belajar: $('fmLulusanLama')?.value?.trim(),
+      lulus_tahun: $('fmLulusanTahun')?.value?.trim(),
+      status_awal: $('fmLulusanStatusAwal')?.value?.trim(),
+      asal_sekolah: $('fmLulusanAsal')?.value?.trim(),
+      kelas_asal: $('fmLulusanKelasAsal')?.value?.trim(),
+      tahun_ajaran: (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '',
+      semester: (window.periodeAktif && window.periodeAktif.semester) || '',
+    };
+    if (!payload.nisn || !payload.nama) return showBigPopup('warning', 'Peringatan', 'NISN dan Nama wajib.');
+    sendRequest(payload, res => {
+      showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message || 'Selesai');
+      if (res.status === 'success') { closeFormModal(); loadDataLulusan(); }
+    });
+  });
+}
+
+function hapusDataLulusan(nisn, nama) {
+  if (!confirm('Hapus data lulusan ' + (nama || nisn) + '?')) return;
+  sendRequest({ action: 'delete_data_lulusan', nisn }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message || 'Selesai');
+    if (res.status === 'success') loadDataLulusan();
+  });
+}
+
+function exportLulusanExcel() {
+  const rows = window._lulusanCache || [];
+  if (!rows.length) return showBigPopup('warning', 'Info', 'Tidak ada data untuk diekspor.');
+  if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
+  const data = rows.map((r, i) => ({
+    No: i + 1, NISN: r.nisn, Nama: r.nama, 'L/P': r.jenis_kelamin,
+    'Lama Belajar': r.lama_belajar, 'Lulus Tahun': r.lulus_tahun,
+    'Status Awal': r.status_awal, 'Asal Sekolah': r.asal_sekolah, 'Kelas Asal': r.kelas_asal,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Data Lulusan');
+  XLSX.writeFile(wb, 'Data_Lulusan.xlsx');
+}
 
 </script>
 </body>
