@@ -228,6 +228,65 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
   overflow: hidden; flex-shrink: 0; cursor: pointer; transition: all 0.2s;
 }
 .profile-avatar:hover { border-color: #fff; transform: scale(1.05); }
+
+/* LOGIN NOTIF bell near profile */
+.login-notif-wrap { position: relative; margin-right: 4px; }
+.login-notif-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.12);
+  color: #fff; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; position: relative;
+}
+.login-notif-btn:hover { background: rgba(255,255,255,0.22); border-color: #fff; transform: scale(1.06); }
+.login-notif-badge {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 10px; background: #ef4444; color: #fff;
+  font-size: 10px; font-weight: 800; line-height: 18px; text-align: center;
+  border: 2px solid var(--primary, #05285e);
+  display: none;
+}
+.login-notif-badge.show { display: block; }
+.login-notif-panel {
+  position: absolute; top: 44px; right: 0;
+  width: min(340px, 92vw); max-height: 420px;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+  border: 1px solid var(--border, #d0dbe8);
+  display: none; z-index: 2100; overflow: hidden;
+  color: #333;
+}
+.login-notif-panel.show { display: flex; flex-direction: column; animation: dropdownIn 0.2s ease-out; }
+.login-notif-header {
+  padding: 12px 14px; background: linear-gradient(135deg, var(--primary) 0%, #0a3a7a 100%);
+  color: #fff; font-size: 13px; font-weight: 700;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.login-notif-header small { font-weight: 500; opacity: 0.9; font-size: 11px; }
+.login-notif-body { overflow-y: auto; max-height: 340px; padding: 6px 0; }
+.login-notif-item {
+  padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+  font-size: 12px; display: flex; gap: 10px; align-items: flex-start;
+}
+.login-notif-item:hover { background: #f8fafc; }
+.login-notif-item .ln-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0; font-weight: 800; color: #fff;
+}
+.login-notif-item .ln-icon.guru { background: #16a34a; }
+.login-notif-item .ln-icon.siswa { background: #2563eb; }
+.login-notif-item .ln-icon.admin { background: #7c3aed; }
+.login-notif-item .ln-icon.super_admin { background: #d97706; }
+.login-notif-item .ln-name { font-weight: 700; color: var(--primary, #05285e); }
+.login-notif-item .ln-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+.login-notif-empty { padding: 28px 16px; text-align: center; color: #94a3b8; font-size: 12px; }
+.login-notif-footer {
+  padding: 8px 12px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+  font-size: 11px; color: #64748b; text-align: center;
+}
 .profile-dropdown {
   position: absolute; top: 45px; right: 0;
   background: #fff; border-radius: 10px;
@@ -623,6 +682,22 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="topbar-clock" id="topbarClock">Memuat Waktu...</div>
     </div>
     <div class="topbar-right">
+      <div class="login-notif-wrap" id="loginNotifWrap">
+        <button type="button" class="login-notif-btn" id="loginNotifBtn" title="Log login hari ini" onclick="toggleLoginNotifPanel(event)" aria-label="Notifikasi login">
+          🔔
+          <span class="login-notif-badge" id="loginNotifBadge">0</span>
+        </button>
+        <div class="login-notif-panel" id="loginNotifPanel" onclick="event.stopPropagation()">
+          <div class="login-notif-header">
+            <span>🔔 Login Hari Ini</span>
+            <small id="loginNotifDate">—</small>
+          </div>
+          <div class="login-notif-body" id="loginNotifBody">
+            <div class="login-notif-empty">Memuat...</div>
+          </div>
+          <div class="login-notif-footer" id="loginNotifFooter">Menampilkan aktivitas login hari ini</div>
+        </div>
+      </div>
       <div class="profile-dropdown-wrapper">
         <div class="profile-avatar" id="topbarAvatar" onclick="toggleProfileDropdown(event)">
           <span class="avatar-initials" id="avatarText">👤</span>
@@ -1931,6 +2006,7 @@ function showBigPopup(type, title, message, autoClose = null) {
   popup.classList.add('show');
   closeSidebar();
   closeProfileDropdown();
+  if (typeof closeLoginNotifPanel === 'function') closeLoginNotifPanel();
   let delay = autoClose;
   if (delay === null) delay = (type === 'success' || type === 'info') ? 2000 : 0;
   if (delay > 0) popupTimeout = setTimeout(closeBigPopup, delay);
@@ -1942,6 +2018,7 @@ function closeBigPopup() {
 
 function toggleProfileDropdown(e) {
   if (e) e.stopPropagation();
+  closeLoginNotifPanel();
   $('profileDropdown').classList.toggle('show');
 }
 function closeProfileDropdown() {
@@ -1951,6 +2028,8 @@ function closeProfileDropdown() {
 document.addEventListener('click', (e) => {
   const wrapper = document.querySelector('.profile-dropdown-wrapper');
   if (wrapper && !wrapper.contains(e.target)) closeProfileDropdown();
+  const notifWrap = document.getElementById('loginNotifWrap');
+  if (notifWrap && !notifWrap.contains(e.target)) closeLoginNotifPanel();
 });
 
 $('izinTanggal').value = new Date().toISOString().split('T')[0];
@@ -1963,6 +2042,7 @@ sendRequest({ action: 'get_pengaturan' }, res => {});
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(restoreSession, 500);
   setTimeout(function(){ if (typeof refreshPeriodeAktif === 'function') refreshPeriodeAktif(); }, 800);
+  setTimeout(function(){ if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling(); }, 1200);
 });
 
 function startRealtimeClock() {
@@ -2220,6 +2300,7 @@ function submitLoginSiswa() {
       }
       closeLoginSiswaModal();
       sessionStorage.setItem('siswaSession', JSON.stringify({ nisn, sessionToken: 'siswa_' + Date.now() + '_' + nisn }));
+      catatLoginClient({ user_id: nisn, nama: res.nama || nisn, role: 'siswa', kelas: res.kelas || '' });
       updateSiswaUI();
       setTimeout(() => checkSiswaFingerprintStatus(nisn), 300);
       updateTopbarUserInfo();
@@ -2461,6 +2542,11 @@ function submitLogin() {
         }
       };
       sessionStorage.setItem('userSession', JSON.stringify(sessionPayload));
+      catatLoginClient({
+        user_id: (userData && (userData.nip || userData.id)) || userRole,
+        nama: (userData && userData.nama) || userRole,
+        role: userRole,
+      });
       if (userRole === 'guru' && userData) {
         setTimeout(() => {
           checkFingerprintStatus();
@@ -2489,6 +2575,138 @@ function applyRoleAccessUI() {
   setText('guruNamaDisplay', nama);
   setText('guruNamaDisplayDaftar', nama);
 }
+
+// ===================== NOTIFIKASI LOG LOGIN =====================
+let _loginNotifTimer = null;
+
+function toggleLoginNotifPanel(ev) {
+  if (ev) ev.stopPropagation();
+  const panel = $('loginNotifPanel');
+  if (!panel) return;
+  const open = panel.classList.contains('show');
+  // tutup dropdown profil jika terbuka
+  const pd = $('profileDropdown');
+  if (pd) pd.classList.remove('show');
+  if (open) {
+    panel.classList.remove('show');
+    return;
+  }
+  panel.classList.add('show');
+  loadLoginNotif();
+}
+
+function closeLoginNotifPanel() {
+  const panel = $('loginNotifPanel');
+  if (panel) panel.classList.remove('show');
+}
+
+function roleIcon(role) {
+  const r = String(role || '').toLowerCase();
+  if (r === 'guru') return { cls: 'guru', icon: '👨‍🏫' };
+  if (r === 'siswa') return { cls: 'siswa', icon: '👤' };
+  if (r === 'super_admin') return { cls: 'super_admin', icon: '⭐' };
+  if (r === 'admin') return { cls: 'admin', icon: '🛡️' };
+  return { cls: 'admin', icon: '🔑' };
+}
+
+function formatLoginTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso).replace('T', ' ').substring(0, 19);
+    const pad = (n) => String(n).padStart(2, '0');
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  } catch (e) {
+    return String(iso).substring(11, 19) || '—';
+  }
+}
+
+function loadLoginNotif() {
+  const body = $('loginNotifBody');
+  const foot = $('loginNotifFooter');
+  const badge = $('loginNotifBadge');
+  const dateEl = $('loginNotifDate');
+  if (body) body.innerHTML = '<div class="login-notif-empty">⏳ Memuat...</div>';
+  sendRequest({ action: 'get_login_log' }, res => {
+    if (!res || res.status !== 'success') {
+      if (body) body.innerHTML = '<div class="login-notif-empty">Gagal memuat log.<br><small>Deploy Edge Function & buat tabel login_log.</small></div>';
+      return;
+    }
+    if (dateEl) {
+      const t = res.tanggal || '';
+      const parts = t.split('-');
+      dateEl.textContent = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : t;
+    }
+    const rows = res.data || [];
+    const totalUser = res.total_user != null ? res.total_user : (res.unique || []).length;
+    if (badge) {
+      badge.textContent = String(totalUser);
+      if (totalUser > 0) badge.classList.add('show');
+      else badge.classList.remove('show');
+    }
+    if (!rows.length) {
+      if (body) body.innerHTML = '<div class="login-notif-empty">Belum ada yang login hari ini.</div>';
+      if (foot) foot.textContent = '0 aktivitas';
+      return;
+    }
+    // tampilkan semua event (bukan hanya unik) agar urutan waktu terlihat
+    if (body) {
+      body.innerHTML = rows.map(r => {
+        const ic = roleIcon(r.role);
+        const roleLabel = String(r.role || '').replace('_', ' ');
+        const kelas = r.kelas ? ' · ' + r.kelas : '';
+        return `<div class="login-notif-item">
+          <div class="ln-icon ${ic.cls}">${ic.icon}</div>
+          <div style="min-width:0;flex:1;">
+            <div class="ln-name">${(r.nama || r.user_id || '-').replace(/</g,'&lt;')}</div>
+            <div class="ln-meta">${roleLabel}${kelas} · ID ${(r.user_id || '-').toString().replace(/</g,'&lt;')}</div>
+            <div class="ln-meta">🕐 ${formatLoginTime(r.login_at)}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    const c = res.count_by_role || {};
+    const parts = [];
+    if (c.guru) parts.push(c.guru + ' guru');
+    if (c.siswa) parts.push(c.siswa + ' siswa');
+    if (c.admin) parts.push(c.admin + ' admin');
+    if (c.super_admin) parts.push(c.super_admin + ' super');
+    if (foot) {
+      foot.textContent = totalUser + ' orang · ' + (res.total_event || rows.length) + ' login' +
+        (parts.length ? ' (' + parts.join(', ') + ')' : '');
+    }
+  });
+}
+
+function refreshLoginNotifBadge() {
+  sendRequest({ action: 'get_login_log' }, res => {
+    const badge = $('loginNotifBadge');
+    if (!badge || !res || res.status !== 'success') return;
+    const n = res.total_user != null ? res.total_user : 0;
+    badge.textContent = String(n);
+    if (n > 0) badge.classList.add('show');
+    else badge.classList.remove('show');
+  });
+}
+
+function startLoginNotifPolling() {
+  if (_loginNotifTimer) clearInterval(_loginNotifTimer);
+  refreshLoginNotifBadge();
+  _loginNotifTimer = setInterval(refreshLoginNotifBadge, 60000);
+}
+
+function catatLoginClient(payload) {
+  try {
+    sendRequest({
+      action: 'log_login',
+      user_id: payload.user_id,
+      nama: payload.nama,
+      role: payload.role,
+      kelas: payload.kelas || '',
+    }, function () { refreshLoginNotifBadge(); });
+  } catch (e) {}
+}
+
 function logoutSession() {
   closeSidebar();
   closeProfileDropdown();
