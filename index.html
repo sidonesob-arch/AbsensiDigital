@@ -1668,19 +1668,24 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="master-toolbar">
         <div class="form-group" style="margin:0; min-width:130px;">
           <label style="margin:0 0 2px;">Tahun Ajaran</label>
-          <input type="text" id="ujianTahunAjaran" placeholder="2025/2026" maxlength="9" style="padding:6px 8px;">
+          <input type="text" id="ujianTahunAjaran" placeholder="2025/2026" maxlength="9" style="padding:6px 8px;" onchange="loadUjianList()">
         </div>
-        <div class="form-group" style="margin:0; min-width:110px;">
+        <div class="form-group" style="margin:0; min-width:130px;">
           <label style="margin:0 0 2px;">Semester</label>
-          <select id="ujianSemester" style="padding:6px 8px;"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select>
+          <select id="ujianSemester" style="padding:6px 8px;" onchange="loadUjianList()">
+            <option value="ganjil">Ganjil</option>
+            <option value="genap">Genap</option>
+            <option value="semua">Semua semester</option>
+          </select>
         </div>
         <button class="btn-add" onclick="openFormUjianBaru()">➕ Buat Ujian Baru</button>
         <button class="btn-primary btn-sm" onclick="loadUjianList()">🔄 Refresh</button>
+        <button class="btn-sm" style="background:#64748b;color:#fff;border:none;border-radius:6px;padding:7px 10px;cursor:pointer;" onclick="tampilSemuaUjian()" title="Tampilkan ujian semua tahun ajaran">📋 Semua TA</button>
       </div>
       <div class="table-responsive">
         <table>
-          <thead><tr><th>No</th><th>Judul</th><th>Mapel</th><th>Guru</th><th>Durasi</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody id="tableUjianBody"><tr><td colspan="7" style="text-align:center;">Memuat...</td></tr></tbody>
+          <thead><tr><th>No</th><th>Judul</th><th>Mapel</th><th>Guru</th><th>Periode</th><th>Durasi</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody id="tableUjianBody"><tr><td colspan="8" style="text-align:center;">Memuat...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -2551,8 +2556,20 @@ function switchMenu(menuName, el, isRestoring = false) {
   }
   if (menuName === 'input-nilai') loadFilterInputNilaiWithGuru();
   if (menuName === 'daftar-nilai') loadFilterDaftarNilaiWithGuru();
-  if (menuName === 'ujian-kelola') { loadKelasUnik(); loadMapelUnik(); loadUjianList(); }
-  if (menuName === 'ujian-siswa') loadUjianTersediaSiswa();
+  if (menuName === 'ujian-kelola') {
+    loadKelasUnik(); loadMapelUnik();
+    if (typeof refreshPeriodeAktif === 'function') {
+      refreshPeriodeAktif(function () { loadUjianList(); });
+    } else {
+      if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
+      loadUjianList();
+    }
+  }
+  if (menuName === 'ujian-siswa') {
+    if (typeof refreshPeriodeAktif === 'function') {
+      refreshPeriodeAktif(function () { loadUjianTersediaSiswa(); });
+    } else loadUjianTersediaSiswa();
+  }
   if (menuName === 'jadwal-mapel') loadJadwalMapel();
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'lihat-nilai-saya') loadNilaiSaya();
@@ -5927,33 +5944,61 @@ let ujianSoalUjianId = null;
 let ujianKerjaState = null;
 let ujianTimerInterval = null;
 
-function loadUjianList() {
-  const ta = ($('ujianTahunAjaran') && $('ujianTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '';
-  const sem = ($('ujianSemester') && $('ujianSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil';
+function loadUjianList(forceSemua) {
+  // Pastikan filter mengikuti periode aktif jika masih kosong
+  if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
+  const elTa = $('ujianTahunAjaran');
+  const elSem = $('ujianSemester');
+  let ta = (elTa && elTa.value) ? elTa.value.trim() : '';
+  let sem = (elSem && elSem.value) ? elSem.value.trim() : '';
+  if (!ta && window.periodeAktif && window.periodeAktif.tahun_ajaran) {
+    ta = window.periodeAktif.tahun_ajaran;
+    if (elTa) elTa.value = ta;
+  }
+  if ((!sem || (sem !== 'ganjil' && sem !== 'genap' && sem !== 'semua')) && window.periodeAktif && window.periodeAktif.semester) {
+    sem = window.periodeAktif.semester;
+    if (elSem) elSem.value = sem;
+  }
+  if (!sem) sem = 'ganjil';
+
   const payload = { action: 'ujian_list', tahun_ajaran: ta, semester: sem };
+  if (forceSemua === true || forceSemua === 'semua') {
+    payload.semua = true;
+    payload.tahun_ajaran = '';
+    payload.semester = 'semua';
+  }
   if (userRole === 'guru' && userData) {
     payload.role = 'guru';
     payload.guruNama = userData.nama;
   }
+  const tbody = $('tableUjianBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">⏳ Memuat ujian...</td></tr>';
   sendRequest(payload, res => {
-    const tbody = $('tableUjianBody');
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;">${res.message || 'Gagal memuat'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;">${res.message || 'Gagal memuat'}</td></tr>`;
       return;
     }
     ujianListCache = res.data || [];
+    const p = res.periode || {};
     if (!ujianListCache.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada ujian. Klik "Buat Ujian Baru".</td></tr>';
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Belum ada ujian untuk periode <b>${p.tahun_ajaran || ta || '—'}</b> / <b>${p.semester || sem || '—'}</b>.<br>
+        <span style="font-size:11px;color:#666;">Coba klik <b>Semua TA</b> jika ujian dibuat di semester lain, atau buat ujian baru.</span></td></tr>`;
       return;
+    }
+    if (res.auto_stamped > 0) {
+      console.log('Ujian auto-stamped periode:', res.auto_stamped);
     }
     tbody.innerHTML = ujianListCache.map((u, i) => {
       const stColor = u.status === 'aktif' ? '#28a745' : (u.status === 'draft' ? '#f59e0b' : '#6c757d');
+      const periodeLabel = (u.tahun_ajaran || '—') + ' · ' + (u.semester === 'genap' ? 'Genap' : (u.semester === 'ganjil' ? 'Ganjil' : (u.semester || '—')));
+      const judulEsc = String(u.judul || '').replace(/'/g, "\\'");
       return `<tr>
         <td>${i+1}</td>
         <td><b>${u.judul || '-'}</b></td>
         <td>${u.mapel || '-'}</td>
         <td>${u.guru || '-'}</td>
+        <td style="font-size:11px;white-space:nowrap;">${periodeLabel}</td>
         <td>${u.durasi_menit || 60} mnt</td>
         <td><span style="background:${stColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(u.status||'').toUpperCase()}</span></td>
         <td style="white-space:nowrap;">
@@ -5961,13 +6006,20 @@ function loadUjianList() {
             <button class="btn-edit" title="Edit meta" onclick="editUjianMeta('${u.id}')">✏️</button>
             <button class="btn-edit" style="background:#dbeafe;border-color:#3b82f6;color:#1e40af;" title="Soal" onclick="bukaBankSoal('${u.id}')">📚</button>
             <button class="btn-edit" style="background:#f3e8ff;border-color:#a855f7;color:#6b21a8;" title="Hasil" onclick="bukaHasilUjian('${u.id}')">📊</button>
-            <button class="btn-danger" title="Hapus" onclick="hapusUjian('${u.id}','${(u.judul||'').replace(/'/g,"\\'")}')">🗑️</button>
+            <button class="btn-danger" title="Hapus" onclick="hapusUjian('${u.id}','${judulEsc}')">🗑️</button>
           </span>
         </td>
       </tr>`;
     }).join('');
   });
 }
+
+function tampilSemuaUjian() {
+  const elSem = $('ujianSemester');
+  if (elSem) elSem.value = 'semua';
+  loadUjianList(true);
+}
+
 
 
 // ===================== RICH EDITOR (Quill + KaTeX) =====================
@@ -7039,8 +7091,16 @@ function submitFormUjian() {
     acak_soal: $('fmUjAcakSoal').checked,
     acak_opsi: $('fmUjAcakOpsi').checked,
     petunjuk: $('fmUjPetunjuk').value.trim(),
-    tahun_ajaran: ($('ujianTahunAjaran') && $('ujianTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '',
-    semester: ($('ujianSemester') && $('ujianSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil',
+    tahun_ajaran: (function () {
+      var v = ($('ujianTahunAjaran') && $('ujianTahunAjaran').value) ? $('ujianTahunAjaran').value.trim() : '';
+      if (!v || v.toLowerCase() === 'semua') v = (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '';
+      return v;
+    })(),
+    semester: (function () {
+      var v = ($('ujianSemester') && $('ujianSemester').value) ? $('ujianSemester').value.trim().toLowerCase() : '';
+      if (!v || v === 'semua') v = (window.periodeAktif && window.periodeAktif.semester) || 'ganjil';
+      return (v === 'genap') ? 'genap' : 'ganjil';
+    })(),
   };
   if (!payload.judul || !payload.mapel || !payload.guru) return showBigPopup('warning', 'Peringatan', 'Judul, Mapel, dan Guru wajib diisi.');
   sendRequest(payload, res => {
