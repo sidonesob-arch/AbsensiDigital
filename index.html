@@ -9939,6 +9939,14 @@ function openFormSoalEdit(s) {
       <label>Kunci Benar/Salah:</label>
       <select id="fmSoalKunciBS"><option value="benar">Benar</option><option value="salah">Salah</option></select>
     </div>
+    <div id="fmSoalEsaiKunciArea" style="display:none;" class="form-group">
+      <label>Kunci Jawaban Esai (penilaian otomatis):</label>
+      <textarea id="fmSoalKunciEsai" rows="4" placeholder="Tulis kunci jawaban. Pisahkan langkah/kalimat dengan baris baru, titik, atau koma.&#10;Contoh Matematika: 2x-10=12, 2x=22, x=11&#10;Contoh IPA/IPS: Kalimat kunci 1. Kalimat kunci 2."></textarea>
+      <small style="color:#666;font-size:11px;display:block;margin-top:4px;">
+        Sistem membandingkan <b>kemiripan</b> jawaban siswa dengan setiap segmen kunci (semua mapel).
+        Poin = (segmen cocok ÷ total segmen) × poin soal. Ada jawaban tapi 0 cocok → 0,5 poin.
+      </small>
+    </div>
   `;
   openFormModal('✏️ Edit Soal', formHtml, submitFormSoal);
   setTimeout(() => {
@@ -9946,6 +9954,9 @@ function openFormSoalEdit(s) {
       if ($('formModalSaveBtn')) $('formModalSaveBtn').innerText = '💾 Simpan Perubahan';
       $('fmSoalJenis').value = s.jenis || 'pg';
       $('fmSoalPoin').value = s.poin != null ? s.poin : 1;
+      if ($('fmSoalKunciEsai')) {
+        $('fmSoalKunciEsai').value = s.kunci_jawaban || s.pembahasan || '';
+      }
       // Kunci B/S
       if (s.jenis === 'benar_salah') {
         const benarOpsi = (s.opsi || []).find(o => o.is_benar);
@@ -10027,6 +10038,13 @@ function openFormSoalBaru() {
       <label>Kunci Benar/Salah:</label>
       <select id="fmSoalKunciBS"><option value="benar">Benar</option><option value="salah">Salah</option></select>
     </div>
+    <div id="fmSoalEsaiKunciArea" style="display:none;" class="form-group">
+      <label>Kunci Jawaban Esai (penilaian otomatis):</label>
+      <textarea id="fmSoalKunciEsai" rows="4" placeholder="Tulis kunci jawaban. Pisahkan langkah/kalimat dengan baris baru, titik, atau koma."></textarea>
+      <small style="color:#666;font-size:11px;display:block;margin-top:4px;">
+        Semua mapel: skor dari kemiripan jawaban vs kunci. (segmen cocok ÷ total) × poin. 0 cocok tapi ada jawaban → 0,5.
+      </small>
+    </div>
   `;
   openFormModal('➕ Tambah Soal', html, submitFormSoal);
   setTimeout(() => {
@@ -10041,8 +10059,10 @@ function toggleSoalOpsiUI() {
   const j = $('fmSoalJenis').value;
   const area = $('fmSoalOpsiArea');
   const bs = $('fmSoalBSArea');
+  const esaiK = $('fmSoalEsaiKunciArea');
   if (area) area.style.display = (j === 'pg' || j === 'checkbox') ? 'block' : 'none';
   if (bs) bs.style.display = j === 'benar_salah' ? 'block' : 'none';
+  if (esaiK) esaiK.style.display = j === 'esai' ? 'block' : 'none';
   const lbl = $('fmSoalOpsiLabel');
   if (lbl) {
     lbl.innerHTML = j === 'pg'
@@ -10210,6 +10230,8 @@ function submitFormSoal() {
     ujian_id: ujianSoalUjianId,
     jenis, pertanyaan, poin, opsi,
     kunci_bs: $('fmSoalKunciBS')?.value || 'benar',
+    kunci_jawaban: (jenis === 'esai' && $('fmSoalKunciEsai')) ? ($('fmSoalKunciEsai').value || '').trim() : '',
+    pembahasan: (jenis === 'esai' && $('fmSoalKunciEsai')) ? ($('fmSoalKunciEsai').value || '').trim() : '',
   };
   const isEdit = !!window._editingSoalId;
   if (isEdit) payload.id = window._editingSoalId;
