@@ -2069,17 +2069,26 @@ document.addEventListener('click', (e) => {
   if (notifWrap && !notifWrap.contains(e.target)) closeLoginNotifPanel();
 });
 
-$('izinTanggal').value = new Date().toISOString().split('T')[0];
-startRealtimeClock();
-preloadPinConfig();
-startRealtimeDashboard();
-loadOpsiKelas();
-updateTopbarUserInfo();
-sendRequest({ action: 'get_pengaturan' }, res => {});
+try { if ($('izinTanggal')) $('izinTanggal').value = new Date().toISOString().split('T')[0]; } catch (e) {}
+try { startRealtimeClock(); } catch (e) {}
+try { preloadPinConfig(); } catch (e) {}
+try { startRealtimeDashboard(); } catch (e) {}
+try { loadOpsiKelas(); } catch (e) {}
+try { updateTopbarUserInfo(); } catch (e) { console.warn('updateTopbarUserInfo', e); }
+try { sendRequest({ action: 'get_pengaturan' }, res => {}); } catch (e) {}
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(restoreSession, 500);
-  setTimeout(function(){ if (typeof refreshPeriodeAktif === 'function') refreshPeriodeAktif(); }, 800);
-  setTimeout(function(){ if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling(); }, 1200);
+  setTimeout(function () { try { restoreSession(); } catch (e) { console.warn(e); } }, 500);
+  setTimeout(function () {
+    try {
+      if (typeof refreshPeriodeAktif === 'function') refreshPeriodeAktif();
+    } catch (e) { console.warn('refreshPeriodeAktif', e); }
+  }, 600);
+  setTimeout(function () {
+    try {
+      if (typeof updateLoginNotifVisibility === 'function') updateLoginNotifVisibility();
+      else if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling();
+    } catch (e) {}
+  }, 1200);
 });
 
 function startRealtimeClock() {
@@ -2146,15 +2155,17 @@ function updateLoginNotifVisibility() {
   // Siswa / guru / tamu tidak boleh melihat
   if (!isAdmin || siswaUserData) {
     wrap.style.display = 'none';
-    if (typeof closeLoginNotifPanel === 'function') closeLoginNotifPanel();
-    if (typeof _loginNotifTimer !== 'undefined' && _loginNotifTimer) {
-      clearInterval(_loginNotifTimer);
-      _loginNotifTimer = null;
-    }
+    try { if (typeof closeLoginNotifPanel === 'function') closeLoginNotifPanel(); } catch (e) {}
+    try {
+      if (window._loginNotifTimer) {
+        clearInterval(window._loginNotifTimer);
+        window._loginNotifTimer = null;
+      }
+    } catch (e) {}
     return;
   }
   wrap.style.display = '';
-  if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling();
+  try { if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling(); } catch (e) {}
 }
 
 function updateProfileDropdown() {
@@ -2636,7 +2647,7 @@ function applyRoleAccessUI() {
 }
 
 // ===================== NOTIFIKASI LOG LOGIN =====================
-let _loginNotifTimer = null;
+window._loginNotifTimer = null;
 
 function toggleLoginNotifPanel(ev) {
   if (ev) ev.stopPropagation();
@@ -2759,12 +2770,12 @@ function refreshLoginNotifBadge() {
 
 function startLoginNotifPolling() {
   if (userRole !== 'admin' && userRole !== 'super_admin') {
-    if (_loginNotifTimer) { clearInterval(_loginNotifTimer); _loginNotifTimer = null; }
+    if (window._loginNotifTimer) { clearInterval(window._loginNotifTimer); window._loginNotifTimer = null; }
     return;
   }
-  if (_loginNotifTimer) clearInterval(_loginNotifTimer);
+  if (window._loginNotifTimer) clearInterval(window._loginNotifTimer);
   refreshLoginNotifBadge();
-  _loginNotifTimer = setInterval(refreshLoginNotifBadge, 60000);
+  window._loginNotifTimer = setInterval(refreshLoginNotifBadge, 60000);
 }
 
 function catatLoginClient(payload) {
