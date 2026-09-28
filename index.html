@@ -1044,6 +1044,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <th>Kelas</th>
               <th style="width:40px;">L/P</th>
               <th>Tgl Lahir</th>
+              <th>Tgl Mulai Sekolah</th>
               <th>No. HP</th>
               <th>Alamat</th>
               <th>Status</th>
@@ -1051,7 +1052,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
             </tr>
           </thead>
           <tbody id="tableDataSiswaBody">
-            <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
+            <tr><td colspan="11" style="text-align:center;">Memuat data...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1516,15 +1517,17 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
                 <th>Nama</th>
                 <th style="width:40px;">L/P</th>
                 <th>Tgl Lahir</th>
+                <th>Tgl Mulai Sekolah</th>
                 <th>Lama Belajar</th>
                 <th>Lulus Tahun</th>
+                <th>Tanggal Lulus</th>
                 <th>Status Awal</th>
                 <th>Asal Sekolah</th>
                 <th style="width:100px;text-align:center;">Aksi</th>
               </tr>
             </thead>
             <tbody id="tableDataLulusanBody">
-              <tr><td colspan="10" style="text-align:center;">Memuat data...</td></tr>
+              <tr><td colspan="12" style="text-align:center;">Memuat data...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1541,7 +1544,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <div class="download-filter" style="margin-bottom:12px;">
           <div class="form-group">
             <label>Tahun Ajaran:</label>
-            <input type="text" id="periodeTahunAjaran" placeholder="contoh: 2025/2026" maxlength="9">
+            <input type="text" id="periodeTahunAjaran" placeholder="contoh: 2025/2026" maxlength="9" onchange="onPeriodeTahunChange()">
           </div>
           <div class="form-group">
             <label>Semester:</label>
@@ -1550,8 +1553,24 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <option value="genap">Genap (Januari – Juni)</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Tanggal Mulai Tahun Ajaran:</label>
+            <input type="date" id="periodeTglMulai">
+          </div>
+          <div class="form-group">
+            <label>Tanggal Akhir Tahun Ajaran:</label>
+            <input type="date" id="periodeTglAkhir">
+          </div>
+          <div class="form-group">
+            <label>Tanggal Kelulusan:</label>
+            <input type="date" id="periodeTglKelulusan">
+          </div>
         </div>
         <div id="periodeInfoBox" class="download-summary" style="display:none; margin-bottom:12px;"></div>
+        <p style="font-size:11px; color:var(--muted); margin:0 0 10px;">
+          Tanggal di atas disimpan <b>per Tahun Ajaran</b>. Tanggal Mulai dipakai otomatis di Data Siswa (Siswa Baru) &amp; Data Lulusan.
+          Tanggal Kelulusan muncul otomatis di pengumuman kelulusan &amp; kolom Tanggal Lulus pada Data Lulusan.
+        </p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
           <button class="btn-primary" style="width:auto; padding:8px 22px;" onclick="savePeriodeSetting()">💾 Simpan Periode</button>
           <button class="btn-primary" style="width:auto; padding:8px 16px; background:#6c757d;" onclick="loadPeriodeSetting()">🔄 Muat Ulang</button>
@@ -3688,7 +3707,8 @@ function loadPengumumanKelulusan() {
       const list = (res.data || []).filter(s => s.status);
       const cnt = { LULUS: 0, DITANGGUHKAN: 0, 'TIDAK LULUS': 0 };
       list.forEach(s => { if (cnt[s.status] != null) cnt[s.status]++; });
-      if (meta) meta.innerHTML = `Tanggal: <b>${tgl}</b> · Jam: <b>${jam}</b> · Tahun Ajaran: <b>${ta}</b><br>
+      const tglKelStaff = res.tgl_kelulusan || '—';
+      if (meta) meta.innerHTML = `Tanggal buka: <b>${tgl}</b> · Jam: <b>${jam}</b> · Tahun Ajaran: <b>${ta}</b> · Tanggal Kelulusan: <b>${tglKelStaff}</b><br>
         Lulus: <b style="color:#16a34a">${cnt.LULUS}</b> · Ditangguhkan: <b style="color:#b45309">${cnt.DITANGGUHKAN}</b> · Tidak Lulus: <b style="color:#dc2626">${cnt['TIDAK LULUS']}</b> · Belum diatur: <b>${(res.data||[]).length - list.length}</b>`;
       if (body) {
         if (!list.length) body.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada status yang diatur.</td></tr>';
@@ -3757,10 +3777,12 @@ function loadPengumumanKelulusan() {
       } else {
         statusPenutup = `Dari SMP NEGERI 1 SOBANG Tahun Ajaran ${ta}`;
       }
+      const tglKel = d.tgl_kelulusan_display || d.tgl_kelulusan || '';
       teks.innerHTML = `
         <div style="text-align:center; font-family: 'Times New Roman', Times, serif;">
           <div style="font-size:20px; font-weight:700; color:#000; letter-spacing:1px; margin-bottom:8px;">PENGUMUMAN KELULUSAN</div>
-          <div style="font-size:14px; color:#000; margin-bottom:18px;">Nomor : ${nomor}</div>
+          <div style="font-size:14px; color:#000; margin-bottom:8px;">Nomor : ${nomor}</div>
+          ${tglKel ? `<div style="font-size:13px; color:#000; margin-bottom:14px;">Tanggal Kelulusan : <b>${tglKel}</b></div>` : ''}
           <p style="margin:0 0 16px; text-align:justify; font-size:14px; line-height:1.6; color:#000;">Berdasarkan Hasil Penilaian Semester 1 s.d Semester 6, Hasil Ujian Sekolah dan Syarat-Syarat Kelulusan, siswa dengan :</p>
           <div style="text-align:left; font-size:14px; line-height:1.8; color:#000; margin-bottom:12px;">
             <div><span style="display:inline-block; width:90px;">NISN</span>: ${d.nisn || '-'}</div>
@@ -3905,7 +3927,8 @@ function saveSettingAbsen() {
 }
 
 // ===== PERIODE GLOBAL (sinkron FE ↔ BE) =====
-window.periodeAktif = { tahun_ajaran: '', semester: 'ganjil' };
+window.periodeAktif = { tahun_ajaran: '', semester: 'ganjil', tgl_mulai: '', tgl_akhir: '', tgl_kelulusan: '' };
+window._daftarTanggalTA = {};
 
 function getPeriodePayload() {
   const p = window.periodeAktif || {};
@@ -3913,6 +3936,29 @@ function getPeriodePayload() {
     tahun_ajaran: p.tahun_ajaran || '',
     semester: p.semester || 'ganjil',
   };
+}
+
+function getDefaultTglMulaiSekolah() {
+  const p = window.periodeAktif || {};
+  return (p.tgl_mulai || '').substring(0, 10);
+}
+
+function getDefaultTglKelulusan() {
+  const p = window.periodeAktif || {};
+  return (p.tgl_kelulusan || '').substring(0, 10);
+}
+
+function onPeriodeTahunChange() {
+  const elTahun = document.getElementById('periodeTahunAjaran');
+  const ta = (elTahun && elTahun.value ? elTahun.value : '').trim().replace(/-/g, '/');
+  const map = window._daftarTanggalTA || {};
+  const entry = map[ta] || {};
+  const elM = document.getElementById('periodeTglMulai');
+  const elA = document.getElementById('periodeTglAkhir');
+  const elK = document.getElementById('periodeTglKelulusan');
+  if (elM) elM.value = entry.tgl_mulai || '';
+  if (elA) elA.value = entry.tgl_akhir || '';
+  if (elK) elK.value = entry.tgl_kelulusan || '';
 }
 
 function applyPeriodeToInputs() {
@@ -3946,7 +3992,11 @@ function refreshPeriodeAktif(cb) {
       window.periodeAktif = {
         tahun_ajaran: res.data.tahun_ajaran || '',
         semester: res.data.semester || 'ganjil',
+        tgl_mulai: res.data.tgl_mulai || '',
+        tgl_akhir: res.data.tgl_akhir || '',
+        tgl_kelulusan: res.data.tgl_kelulusan || '',
       };
+      if (res.data.daftar_tanggal_ta) window._daftarTanggalTA = res.data.daftar_tanggal_ta;
       applyPeriodeToInputs();
     }
     if (typeof cb === 'function') cb(res);
@@ -3962,20 +4012,30 @@ function loadPeriodeSetting() {
     var d = res.data || {};
     var elTahun = document.getElementById('periodeTahunAjaran');
     var elSem = document.getElementById('periodeSemester');
+    var elM = document.getElementById('periodeTglMulai');
+    var elA = document.getElementById('periodeTglAkhir');
+    var elK = document.getElementById('periodeTglKelulusan');
     if (elTahun) elTahun.value = d.tahun_ajaran || '';
     if (elSem) elSem.value = (d.semester === 'genap') ? 'genap' : 'ganjil';
-    window.periodeAktif = { tahun_ajaran: d.tahun_ajaran || '', semester: d.semester === 'genap' ? 'genap' : 'ganjil' };
+    if (elM) elM.value = (d.tgl_mulai || '').substring(0, 10);
+    if (elA) elA.value = (d.tgl_akhir || '').substring(0, 10);
+    if (elK) elK.value = (d.tgl_kelulusan || '').substring(0, 10);
+    if (d.daftar_tanggal_ta) window._daftarTanggalTA = d.daftar_tanggal_ta;
+    window.periodeAktif = {
+      tahun_ajaran: d.tahun_ajaran || '',
+      semester: d.semester === 'genap' ? 'genap' : 'ganjil',
+      tgl_mulai: d.tgl_mulai || '',
+      tgl_akhir: d.tgl_akhir || '',
+      tgl_kelulusan: d.tgl_kelulusan || '',
+    };
     if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
-
     var box = document.getElementById('periodeInfoBox');
     if (box) {
-      var sumber = d.sumber === 'pengaturan' ? 'disimpan di Pengaturan' : 'otomatis dari tanggal hari ini';
       box.style.display = 'block';
-      box.innerHTML = '<b>Status:</b> ' + (d.tahun_ajaran || '-') +
-        ' · Semester ' + (d.semester === 'genap' ? 'Genap' : 'Ganjil') +
-        '<br><span style="font-size:11px;">Sumber: ' + sumber + '. ' + (d.keterangan || '') + '</span>' +
-        '<br><span style="font-size:11px;color:#666;">Saran otomatis: ' +
-        (d.tahun_ajaran_otomatis || '-') + ' / ' + (d.semester_otomatis || '-') + '</span>';
+      box.innerHTML = 'Sumber: <b>' + (d.sumber || '-') + '</b> · Otomatis hari ini: <b>' +
+        (d.tahun_ajaran_otomatis || '-') + ' / ' + (d.semester_otomatis || '-') + '</b><br>' +
+        'Tgl mulai TA: <b>' + (d.tgl_mulai || '—') + '</b> · Tgl akhir: <b>' + (d.tgl_akhir || '—') +
+        '</b> · Tgl kelulusan: <b>' + (d.tgl_kelulusan || '—') + '</b>';
     }
   });
 }
@@ -3998,8 +4058,14 @@ function isiPeriodeOtomatis() {
 function savePeriodeSetting() {
   var elTahun = document.getElementById('periodeTahunAjaran');
   var elSem = document.getElementById('periodeSemester');
+  var elM = document.getElementById('periodeTglMulai');
+  var elA = document.getElementById('periodeTglAkhir');
+  var elK = document.getElementById('periodeTglKelulusan');
   var tahun = (elTahun && elTahun.value ? elTahun.value : '').trim().replace(/-/g, '/');
   var semester = (elSem && elSem.value ? elSem.value : '').trim().toLowerCase();
+  var tglMulai = (elM && elM.value ? elM.value : '').trim();
+  var tglAkhir = (elA && elA.value ? elA.value : '').trim();
+  var tglKelulusan = (elK && elK.value ? elK.value : '').trim();
 
   if (!tahun) {
     showBigPopup('warning', 'Peringatan', 'Tahun Ajaran wajib diisi (contoh: 2025/2026)');
@@ -4018,7 +4084,10 @@ function savePeriodeSetting() {
   sendRequest({
     action: 'save_periode',
     tahun_ajaran: tahun,
-    semester: semester
+    semester: semester,
+    tgl_mulai: tglMulai,
+    tgl_akhir: tglAkhir,
+    tgl_kelulusan: tglKelulusan
   }, function (res) {
     closeBigPopup();
     if (res && res.status === 'success') {
@@ -5071,17 +5140,18 @@ function loadDataSiswa() {
   sendRequest({ action: 'get_data_siswa', search, kelas }, res => {
     const tbody = $('tableDataSiswaBody');
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">${res.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;">${res.message}</td></tr>`;
       return;
     }
     dataSiswaCache = res.data || [];
     setText('siswaTotalInfo', `Total: ${dataSiswaCache.length} siswa`);
     if (!dataSiswaCache.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Tidak ada data siswa.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Tidak ada data siswa.</td></tr>';
       return;
     }
     tbody.innerHTML = dataSiswaCache.map((s, idx) => {
       const tgl = s.tanggal_lahir ? String(s.tanggal_lahir).substring(0, 10) : '-';
+      const tglMulai = s.tanggal_mulai_sekolah ? String(s.tanggal_mulai_sekolah).substring(0, 10) : '-';
       return `<tr>
         <td>${idx + 1}</td>
         <td><b>${s.id}</b></td>
@@ -5089,6 +5159,7 @@ function loadDataSiswa() {
         <td><span class="tag-mini">${s.kelas || '-'}</span></td>
         <td style="text-align:center;">${s.jenis_kelamin || '-'}</td>
         <td>${tgl}</td>
+        <td>${tglMulai}</td>
         <td>${s.no_hp || '-'}</td>
         <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${s.alamat || ''}">${s.alamat || '-'}</td>
         <td>${s.status || 'Aktif'}</td>
@@ -5128,7 +5199,14 @@ function openFormSiswa() {
       </select>
     </div>
     <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
-      <input type="text" id="fmSiswaStatusAwal" placeholder="Siswa Baru / Pindahan" value="Siswa Baru">
+      <select id="fmSiswaStatusAwal" onchange="onSiswaStatusAwalChange()">
+        <option value="Siswa Baru" selected>Siswa Baru</option>
+        <option value="Pindahan">Pindahan</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Tanggal Mulai Sekolah:</label>
+      <input type="date" id="fmSiswaTglMulaiSekolah" value="${getDefaultTglMulaiSekolah() || ''}">
+      <small style="color:#666;font-size:11px;">Otomatis dari Tahun Ajaran untuk Siswa Baru. Isi manual untuk siswa Pindahan.</small>
     </div>
     <div class="form-group"><label>Asal Sekolah:</label>
       <input type="text" id="fmSiswaAsalSekolah" placeholder="Nama SD / sekolah asal">
@@ -5154,12 +5232,25 @@ function submitFormSiswaBaru() {
     status_awal: $('fmSiswaStatusAwal')?.value?.trim() || '',
     asal_sekolah: $('fmSiswaAsalSekolah')?.value?.trim() || '',
     lama_belajar: $('fmSiswaLamaBelajar')?.value?.trim() || '',
+    tanggal_mulai_sekolah: $('fmSiswaTglMulaiSekolah')?.value || '',
   };
   if (!payload.id || !payload.nama) return showBigPopup('warning', 'Peringatan', 'NISN dan Nama wajib diisi!');
   sendRequest(payload, res => {
     if (res.status === 'success') { closeFormModal(); showBigPopup('success', 'Berhasil', res.message); loadDataSiswa(); }
     else showBigPopup('danger', 'Gagal', res.message);
   });
+}
+
+function onSiswaStatusAwalChange() {
+  const status = ($('fmSiswaStatusAwal')?.value || '').trim();
+  const el = $('fmSiswaTglMulaiSekolah');
+  if (!el) return;
+  if (/pindah/i.test(status)) {
+    // biarkan user mengisi manual; jangan overwrite jika sudah diisi
+    el.focus();
+  } else if (!el.value) {
+    el.value = getDefaultTglMulaiSekolah() || '';
+  }
 }
 
 function editSiswa(id) {
@@ -5190,7 +5281,15 @@ function editSiswa(id) {
       </select>
     </div>
     <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
-      <input type="text" id="fmSiswaStatusAwal" value="${s.status_awal || ''}" placeholder="Siswa Baru / Pindahan">
+      <select id="fmSiswaStatusAwal" onchange="onSiswaStatusAwalChange()">
+        <option value="Siswa Baru" ${(!s.status_awal || s.status_awal === 'Siswa Baru') ? 'selected' : ''}>Siswa Baru</option>
+        <option value="Pindahan" ${s.status_awal && /pindah/i.test(s.status_awal) ? 'selected' : ''}>Pindahan</option>
+        ${s.status_awal && s.status_awal !== 'Siswa Baru' && !/pindah/i.test(s.status_awal) ? `<option value="${String(s.status_awal).replace(/"/g,'&quot;')}" selected>${s.status_awal}</option>` : ''}
+      </select>
+    </div>
+    <div class="form-group"><label>Tanggal Mulai Sekolah:</label>
+      <input type="date" id="fmSiswaTglMulaiSekolah" value="${s.tanggal_mulai_sekolah ? String(s.tanggal_mulai_sekolah).substring(0,10) : (getDefaultTglMulaiSekolah() || '')}">
+      <small style="color:#666;font-size:11px;">Untuk siswa Pindahan isi tanggal masuk aktual.</small>
     </div>
     <div class="form-group"><label>Asal Sekolah:</label>
       <input type="text" id="fmSiswaAsalSekolah" value="${(s.asal_sekolah || '').replace(/"/g, '&quot;')}" placeholder="Nama SD / sekolah asal">
@@ -5213,6 +5312,7 @@ function editSiswa(id) {
       status_awal: $('fmSiswaStatusAwal')?.value?.trim() || '',
       asal_sekolah: $('fmSiswaAsalSekolah')?.value?.trim() || '',
       lama_belajar: $('fmSiswaLamaBelajar')?.value?.trim() || '',
+      tanggal_mulai_sekolah: $('fmSiswaTglMulaiSekolah')?.value || '',
     };
     if (!payload.nama) return showBigPopup('warning', 'Peringatan', 'Nama wajib diisi!');
     sendRequest(payload, res => {
@@ -5290,11 +5390,18 @@ function previewImportSiswa(ev) {
         nama: headers.findIndex(h => h.includes('nama')),
         kelas: headers.findIndex(h => h.includes('kelas')),
         jenis_kelamin: headers.findIndex(h => h.includes('jenis') || h === 'jk' || h === 'l/p'),
-        tanggal_lahir: headers.findIndex(h => h.includes('tanggal') || h.includes('tgl')),
+        tanggal_lahir: headers.findIndex(h => (h.includes('tanggal_lahir') || h.includes('tgl_lahir') || (h.includes('lahir') && h.includes('tgl'))) || h === 'tanggal lahir'),
+        tanggal_mulai_sekolah: headers.findIndex(h => h.includes('mulai_sekolah') || h.includes('mulai sekolah') || h.includes('tgl_mulai')),
+        status_awal: headers.findIndex(h => h.includes('status_awal') || h.includes('status awal')),
+        asal_sekolah: headers.findIndex(h => h.includes('asal')),
         no_hp: headers.findIndex(h => h.includes('hp') || h.includes('telepon') || h.includes('telp')),
         alamat: headers.findIndex(h => h.includes('alamat')),
-        status: headers.findIndex(h => h.includes('status')),
+        status: headers.findIndex(h => h === 'status' || (h.includes('status') && !h.includes('awal'))),
       };
+      // fallback tanggal_lahir jika header generik "tanggal"
+      if (idxMap.tanggal_lahir < 0) {
+        idxMap.tanggal_lahir = headers.findIndex(h => (h.includes('tanggal') || h.includes('tgl')) && !h.includes('mulai') && !h.includes('lulus'));
+      }
       const data = [];
       for (let i = 1; i < rows.length; i++) {
         const r = rows[i];
@@ -5309,6 +5416,9 @@ function previewImportSiswa(ev) {
           kelas: getVal(idxMap.kelas),
           jenis_kelamin: getVal(idxMap.jenis_kelamin).toUpperCase() || 'L',
           tanggal_lahir: getVal(idxMap.tanggal_lahir),
+          tanggal_mulai_sekolah: getVal(idxMap.tanggal_mulai_sekolah),
+          status_awal: getVal(idxMap.status_awal),
+          asal_sekolah: getVal(idxMap.asal_sekolah),
           no_hp: getVal(idxMap.no_hp),
           alamat: getVal(idxMap.alamat),
           status: getVal(idxMap.status) || 'Aktif',
@@ -5345,16 +5455,15 @@ function submitImportSiswa() {
 // ===================== TEMPLATE & IMPORT NILAI =====================
 function downloadTemplateSiswa() {
   const rows = [
-    ['nisn', 'nama', 'kelas', 'jenis_kelamin', 'tanggal_lahir', 'no_hp', 'alamat', 'status'],
-    ['0123456789', 'Ahmad Fauzi', '7A', 'L', '2012-03-15', '081234567890', 'Kp. Contoh RT 01/02', 'Aktif'],
-    ['0123456790', 'Siti Aminah', '7A', 'P', '2012-07-20', '081298765432', 'Kp. Contoh RT 03/01', 'Aktif'],
-    ['0123456791', 'Budi Santoso', '8B', 'L', '2011-01-10', '', 'Jl. Merdeka No. 5', 'Aktif'],
+    ['nisn', 'nama', 'kelas', 'jenis_kelamin', 'tanggal_lahir', 'tanggal_mulai_sekolah', 'status_awal', 'asal_sekolah', 'no_hp', 'alamat', 'status'],
+    ['0123456789', 'Ahmad Fauzi', '7A', 'L', '2012-03-15', '2025-07-14', 'Siswa Baru', 'SDN Contoh 1', '081234567890', 'Kp. Contoh RT 01/02', 'Aktif'],
+    ['0123456790', 'Siti Aminah', '7A', 'P', '2012-07-20', '2025-08-01', 'Pindahan', 'SMPN 2 Contoh', '081298765432', 'Kp. Contoh RT 03/01', 'Aktif'],
+    ['0123456791', 'Budi Santoso', '8B', 'L', '2011-01-10', '', 'Siswa Baru', '', '', 'Jl. Merdeka No. 5', 'Aktif'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 10 }];
+  ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 28 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
-  // Sheet petunjuk
   const petunjuk = [
     ['PETUNJUK IMPORT DATA SISWA'],
     [''],
@@ -5364,6 +5473,9 @@ function downloadTemplateSiswa() {
     ['kelas', 'Tidak', 'Contoh: 7A, 8B, 9C'],
     ['jenis_kelamin', 'Tidak', 'L = Laki-laki, P = Perempuan'],
     ['tanggal_lahir', 'Tidak', 'Format: YYYY-MM-DD (contoh 2012-03-15)'],
+    ['tanggal_mulai_sekolah', 'Tidak', 'YYYY-MM-DD. Kosong + Siswa Baru → otomatis dari Tanggal Mulai Tahun Ajaran. Pindahan: isi tanggal masuk aktual'],
+    ['status_awal', 'Tidak', 'Siswa Baru / Pindahan'],
+    ['asal_sekolah', 'Tidak', 'Nama SD / sekolah asal'],
     ['no_hp', 'Tidak', 'Nomor HP / WhatsApp'],
     ['alamat', 'Tidak', 'Alamat lengkap'],
     ['status', 'Tidak', 'Aktif / Lulus / Pindah / Keluar (default Aktif)'],
@@ -5374,7 +5486,7 @@ function downloadTemplateSiswa() {
     ['- Jangan ubah nama kolom header'],
   ];
   const ws2 = XLSX.utils.aoa_to_sheet(petunjuk);
-  ws2['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 50 }];
+  ws2['!cols'] = [{ wch: 22 }, { wch: 8 }, { wch: 70 }];
   XLSX.utils.book_append_sheet(wb, ws2, 'Petunjuk');
   XLSX.writeFile(wb, 'Template_Import_Siswa.xlsx');
   showBigPopup('success', 'Template', 'Template Import Siswa berhasil diunduh.');
@@ -10660,7 +10772,7 @@ function loadDataLulusanDebounced() {
 
 function loadDataLulusan() {
   const tbody = $('tableDataLulusanBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">⏳ Memuat...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">⏳ Memuat...</td></tr>';
   sendRequest({
     action: 'get_data_lulusan',
     search: $('lulusanSearch')?.value || '',
@@ -10668,14 +10780,14 @@ function loadDataLulusan() {
   }, res => {
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="10" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat'}</td></tr>`;
       if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = '';
       return;
     }
     const rows = res.data || [];
     if ($('lulusanTotalInfo')) $('lulusanTotalInfo').textContent = 'Total lulusan: ' + rows.length;
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Belum ada data lulusan.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Belum ada data lulusan.</td></tr>';
       return;
     }
     window._lulusanCache = rows;
@@ -10685,8 +10797,10 @@ function loadDataLulusan() {
       <td>${r.nama || ''}</td>
       <td style="text-align:center;">${r.jenis_kelamin || ''}</td>
       <td>${r.tanggal_lahir || ''}</td>
+      <td>${r.tanggal_mulai_sekolah ? String(r.tanggal_mulai_sekolah).substring(0,10) : ''}</td>
       <td>${r.lama_belajar || ''}</td>
       <td>${r.lulus_tahun || ''}</td>
+      <td>${r.tanggal_lulus ? String(r.tanggal_lulus).substring(0,10) : ''}</td>
       <td>${r.status_awal || ''}</td>
       <td>${r.asal_sekolah || ''}</td>
       <td style="text-align:center;white-space:nowrap;">
@@ -10716,11 +10830,19 @@ function openFormLulusan(nisn) {
     <div class="form-group"><label>Tanggal Lahir:</label>
       <input type="date" id="fmLulusanTglLahir" value="${row && row.tanggal_lahir ? String(row.tanggal_lahir).substring(0,10) : ''}">
     </div>
+    <div class="form-group"><label>Tanggal Mulai Sekolah:</label>
+      <input type="date" id="fmLulusanTglMulai" value="${row && row.tanggal_mulai_sekolah ? String(row.tanggal_mulai_sekolah).substring(0,10) : (getDefaultTglMulaiSekolah() || '')}">
+      <small style="color:#666;font-size:11px;">Otomatis dari Tanggal Mulai Tahun Ajaran.</small>
+    </div>
     <div class="form-group"><label>Lama Belajar di Sekolah Ini:</label>
       <input type="text" id="fmLulusanLama" value="${row ? (row.lama_belajar || '3 Tahun') : '3 Tahun'}" placeholder="3 Tahun">
     </div>
     <div class="form-group"><label>Lulus Tahun:</label>
       <input type="text" id="fmLulusanTahun" value="${row ? (row.lulus_tahun || '') : ''}" placeholder="2026" maxlength="4">
+    </div>
+    <div class="form-group"><label>Tanggal Lulus:</label>
+      <input type="date" id="fmLulusanTglLulus" value="${row && row.tanggal_lulus ? String(row.tanggal_lulus).substring(0,10) : (getDefaultTglKelulusan() || '')}">
+      <small style="color:#666;font-size:11px;">Otomatis dari Tanggal Kelulusan di Pengaturan Tahun Ajaran.</small>
     </div>
     <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
       <input type="text" id="fmLulusanStatusAwal" value="${row ? (row.status_awal || '') : 'Siswa Baru'}" placeholder="Siswa Baru / Pindahan">
@@ -10741,6 +10863,8 @@ function openFormLulusan(nisn) {
       tanggal_lahir: $('fmLulusanTglLahir')?.value || '',
       lama_belajar: $('fmLulusanLama')?.value?.trim(),
       lulus_tahun: $('fmLulusanTahun')?.value?.trim(),
+      tanggal_mulai_sekolah: $('fmLulusanTglMulai')?.value || '',
+      tanggal_lulus: $('fmLulusanTglLulus')?.value || '',
       status_awal: $('fmLulusanStatusAwal')?.value?.trim(),
       asal_sekolah: $('fmLulusanAsal')?.value?.trim(),
       kelas_asal: $('fmLulusanKelasAsal')?.value?.trim(),
@@ -10770,7 +10894,9 @@ function exportLulusanExcel() {
   const data = rows.map((r, i) => ({
     No: i + 1, NISN: r.nisn, Nama: r.nama, 'L/P': r.jenis_kelamin,
     'Tanggal Lahir': r.tanggal_lahir || '',
+    'Tanggal Mulai Sekolah': r.tanggal_mulai_sekolah || '',
     'Lama Belajar': r.lama_belajar, 'Lulus Tahun': r.lulus_tahun,
+    'Tanggal Lulus': r.tanggal_lulus || '',
     'Status Awal': r.status_awal, 'Asal Sekolah': r.asal_sekolah, 'Kelas Asal': r.kelas_asal,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
@@ -10786,8 +10912,8 @@ let importLulusanData = [];
 function downloadTemplateLulusan() {
   if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
   const sample = [
-    { NISN: '0012345678', Nama: 'Contoh Siswa Lulus', 'L/P': 'L', 'Tanggal Lahir': '2010-05-15', 'Lama Belajar': '3 Tahun', 'Lulus Tahun': '2026', 'Status Awal': 'Siswa Baru', 'Asal Sekolah': 'SDN Contoh 1', 'Kelas Asal': '9A' },
-    { NISN: '0012345679', Nama: 'Contoh Siswi Lulus', 'L/P': 'P', 'Tanggal Lahir': '2010-08-20', 'Lama Belajar': '3 Tahun', 'Lulus Tahun': '2026', 'Status Awal': 'Pindahan', 'Asal Sekolah': 'SDN Contoh 2', 'Kelas Asal': '9B' },
+    { NISN: '0012345678', Nama: 'Contoh Siswa Lulus', 'L/P': 'L', 'Tanggal Lahir': '2010-05-15', 'Tanggal Mulai Sekolah': '2023-07-17', 'Lama Belajar': '3 Tahun', 'Lulus Tahun': '2026', 'Tanggal Lulus': '2026-06-15', 'Status Awal': 'Siswa Baru', 'Asal Sekolah': 'SDN Contoh 1', 'Kelas Asal': '9A' },
+    { NISN: '0012345679', Nama: 'Contoh Siswi Lulus', 'L/P': 'P', 'Tanggal Lahir': '2010-08-20', 'Tanggal Mulai Sekolah': '2024-01-08', 'Lama Belajar': '2 Tahun', 'Lulus Tahun': '2026', 'Tanggal Lulus': '2026-06-15', 'Status Awal': 'Pindahan', 'Asal Sekolah': 'SDN Contoh 2', 'Kelas Asal': '9B' },
   ];
   const ws = XLSX.utils.json_to_sheet(sample);
   const wb = XLSX.utils.book_new();
@@ -10826,8 +10952,10 @@ function openImportLulusanModal() {
             nama: r.Nama || r.nama || '',
             jenis_kelamin: r['L/P'] || r.jenis_kelamin || r.JK || 'L',
             tanggal_lahir: r['Tanggal Lahir'] || r.tanggal_lahir || '',
+            tanggal_mulai_sekolah: r['Tanggal Mulai Sekolah'] || r.tanggal_mulai_sekolah || '',
             lama_belajar: r['Lama Belajar'] || r.lama_belajar || '',
             lulus_tahun: r['Lulus Tahun'] || r.lulus_tahun || '',
+            tanggal_lulus: r['Tanggal Lulus'] || r.tanggal_lulus || '',
             status_awal: r['Status Awal'] || r.status_awal || '',
             asal_sekolah: r['Asal Sekolah'] || r.asal_sekolah || '',
             kelas_asal: r['Kelas Asal'] || r.kelas_asal || r.Kelas || '',
@@ -10885,7 +11013,9 @@ function cariValidasiLulusan() {
         </div>
         <ul class="syarat-list">
           <li><span>Tanggal Lahir</span><b>${r.tanggal_lahir || '—'}</b></li>
+          <li><span>Tanggal Mulai Sekolah</span><b>${r.tanggal_mulai_sekolah || '—'}</b></li>
           <li><span>Lama Belajar</span><b>${r.lama_belajar || '—'}</b></li>
+          <li><span>Tanggal Lulus</span><b>${r.tanggal_lulus || '—'}</b></li>
           <li><span>Status Awal</span><b>${r.status_awal || '—'}</b></li>
           <li><span>Asal Sekolah</span><b>${r.asal_sekolah || '—'}</b></li>
           <li><span>Kelas Asal</span><b>${r.kelas_asal || '—'}</b></li>
