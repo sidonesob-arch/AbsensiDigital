@@ -1718,7 +1718,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div id="ujianHasilSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
       <p style="font-size:11px; color:#666; margin:0 0 8px;">
         💡 <b>Sedang ujian</b> = masih mengerjakan.
-        <b>Buka kembali</b> = siswa timeout/logout bisa lanjut (jawaban tetap).
+        <b>Buka kembali 🔓</b> = buka ulang sesi untuk <b>semua siswa</b> (timeout / selesai / sedang) — jawaban tetap tersimpan.
         <b>Reset</b> = hapus sesi, siswa mulai dari nol.
         <b>Sinkronkan</b> = nilai = (skor ÷ skor_max) × 100 masuk Daftar Nilai.
       </p>
@@ -10317,9 +10317,8 @@ function loadHasilUjianData(ujianId) {
       if (r.status === 'berlangsung') {
         aksi += `<button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Perpanjang waktu" onclick="perpanjangUjianSiswa('${r.id}')">⏱️+</button> `;
       }
-      if (r.status === 'timeout' || r.status === 'berlangsung') {
-        aksi += `<button class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Buka kembali (jawaban tetap)" onclick="bukaKembaliUjianSiswa('${r.id}')">🔓</button> `;
-      }
+      // Buka kembali: tersedia untuk SEMUA status (berlangsung, timeout, selesai)
+      aksi += `<button class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Buka kembali / lanjutkan (jawaban tetap tersimpan)" onclick="bukaKembaliUjianSiswa('${r.id}')">🔓</button> `;
       aksi += `<button class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Reset sesi (mulai dari nol)" onclick="resetPengerjaanUjian('${r.id}','${(r.nama||r.nisn||'').replace(/'/g,"\'")}')">↺</button>`;
       return `<tr>
         <td>${i+1}</td>
@@ -10362,11 +10361,13 @@ function perpanjangUjianSiswa(pengerjaanId) {
 }
 
 function bukaKembaliUjianSiswa(pengerjaanId) {
-  const menit = prompt('Buka kembali & beri waktu berapa menit?\n(Jawaban siswa tetap tersimpan)', '30');
+  const menit = prompt('Buka kembali sesi ujian & beri waktu berapa menit?\n\n• Berlaku untuk status Timeout / Selesai / Sedang ujian\n• Jawaban yang sudah tersimpan TIDAK dihapus\n• Siswa bisa lanjut mengerjakan', '30');
   if (menit == null) return;
   const n = parseInt(menit, 10);
   if (!n || n < 1) return showBigPopup('warning', 'Info', 'Menit tidak valid.');
+  showBigPopup('info', 'Memproses', '⏳ Membuka kembali sesi...', 0);
   sendRequest({ action: 'ujian_buka_kembali', pengerjaan_id: pengerjaanId, tambah_menit: n }, res => {
+    closeBigPopup();
     showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Buka Kembali', res.message || 'Selesai');
     if (res.status === 'success') refreshHasilUjian();
   });
