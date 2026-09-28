@@ -1202,6 +1202,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       <div class="pengaturan-tabs">
         <button class="pengaturan-tab-btn" data-tab="sesi" onclick="togglePengaturanPanel('sesi')"><span class="tab-icon">📋</span>Sesi Absensi</button>
         <button class="pengaturan-tab-btn" data-tab="izin" onclick="togglePengaturanPanel('izin')"><span class="tab-icon">👆</span>Izin Sidik Jari</button>
+        <button class="pengaturan-tab-btn" data-tab="buka-blokir-alpa" onclick="togglePengaturanPanel('buka-blokir-alpa')"><span class="tab-icon">🔓</span>Buka Blokir Alpa</button>
         <button class="pengaturan-tab-btn" data-tab="reset-fingerprint" onclick="togglePengaturanPanel('reset-fingerprint')"><span class="tab-icon">👆</span>Reset Sidik Jari</button>
         <button class="pengaturan-tab-btn" data-tab="reset-pin" onclick="togglePengaturanPanel('reset-pin')"><span class="tab-icon">🔑</span>Reset PIN</button>
         <button class="pengaturan-tab-btn" data-tab="seting-absen" onclick="togglePengaturanPanel('seting-absen')"><span class="tab-icon">📅</span>Seting Absen</button>
@@ -1291,9 +1292,45 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           </table>
         </div>
         <p style="font-size:11px; color:var(--muted); margin-top:10px;">
-          ℹ️ <b>Izin Scan QR</b> hanya untuk guru. <b>Izin Ujian</b> hanya untuk siswa — nonaktifkan untuk memblokir siswa dari ujian (manual), terpisah dari status Alpa/Bolos otomatis.
+          ℹ️ <b>Izin Scan QR</b> hanya untuk guru. <b>Izin Ujian</b> = blokir manual. Untuk buka blokir otomatis Alpa/Bolos, gunakan tab <b>🔓 Buka Blokir Alpa</b>.
         </p>
 
+      </div>
+
+      <!-- PANEL: BUKA BLOKIR ALPA (UJIAN) -->
+      <div class="pengaturan-panel" id="panel-buka-blokir-alpa">
+        <h4 class="panel-title">🔓 Buka Blokir Alpa / Bolos (Akses Ujian)</h4>
+        <p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.5;">
+          Siswa dengan status <b>Alpa (A)</b> atau <b>Bolos (B)</b> hari ini otomatis <b>tidak bisa mengerjakan ujian</b>.
+          Gunakan menu ini untuk <b>membuka blokir</b> sementara agar siswa tetap boleh ujian (status absensi tidak diubah).
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+          <button class="btn-primary btn-sm" style="width:auto;padding:8px 14px;" onclick="loadSiswaBlokirAlpa()">🔄 Muat Daftar Hari Ini</button>
+          <button class="btn-success btn-sm" style="width:auto;padding:8px 14px;" onclick="bukaBlokirAlpaSemua(true)">✅ Buka Blokir Semua</button>
+          <button class="btn-sm" style="width:auto;padding:8px 14px;background:#64748b;color:#fff;border:none;border-radius:6px;cursor:pointer;" onclick="bukaBlokirAlpaSemua(false)">🔒 Aktifkan Lagi Semua</button>
+        </div>
+        <div id="blokirAlpaSummary" style="font-size:12px;margin-bottom:10px;color:var(--primary);font-weight:600;"></div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;">No</th>
+                <th>NISN</th>
+                <th>Nama</th>
+                <th>Kelas</th>
+                <th>Status Hari Ini</th>
+                <th style="width:140px;text-align:center;">Buka Blokir Ujian</th>
+              </tr>
+            </thead>
+            <tbody id="tableBlokirAlpaBody">
+              <tr><td colspan="6" style="text-align:center;color:#94a3b8;">Klik "Muat Daftar Hari Ini"</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px;">
+          ℹ️ Menyalakan <b>Buka Blokir</b> hanya mengizinkan ujian; data Alpa/Bolos di absensi tetap tercatat.
+          Untuk blokir manual permanen, gunakan kolom <b>Izin Ujian</b> di tab Izin Sidik Jari.
+        </p>
       </div>
 
       <!-- PANEL: RESET SIDIK JARI -->
@@ -4054,6 +4091,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'seting-absen') loadSettingAbsen();
   if (tab === 'historis') loadHistorisInfo();
   if (tab === 'izin') loadAllowedUsers();
+  if (tab === 'buka-blokir-alpa') loadSiswaBlokirAlpa();
   if (tab === 'edit-kehadiran') initEditKehadiran();
   if (tab === 'kelulusan') loadKelulusanSetting();
   if (tab === 'periode') loadPeriodeSetting();
@@ -4358,6 +4396,65 @@ function hapusHariLibur(rowIndex) {
   sendRequest({ action: 'delete_hari_libur', rowIndex }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', "Info", res.message);
     if (res.status === 'success') loadHariLiburData();
+  });
+}
+
+
+function loadSiswaBlokirAlpa() {
+  const tbody = $('tableBlokirAlpaBody');
+  const sum = $('blokirAlpaSummary');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">⏳ Memuat...</td></tr>';
+  sendRequest({ action: 'get_siswa_blokir_alpa' }, res => {
+    if (!res || res.status !== 'success') {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#dc2626;">${(res && res.message) || 'Gagal memuat'}</td></tr>`;
+      return;
+    }
+    const list = res.data || [];
+    const tgl = res.tanggal || '';
+    if (sum) {
+      sum.innerHTML = `Tanggal: <b>${tgl}</b> · Total Alpa/Bolos: <b>${res.total || 0}</b> · Masih diblokir ujian: <b style="color:#dc2626;">${res.total_blokir != null ? res.total_blokir : 0}</b> · Sudah dibuka: <b style="color:#16a34a;">${(res.sudah_buka || []).length}</b>`;
+    }
+    if (!list.length) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#16a34a;">✅ Tidak ada siswa Alpa/Bolos hari ini.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map((s, i) => {
+      const on = !!s.bypass_alpa_ujian;
+      const st = (s.statuses || []).join(', ') || (s.hasAlpa ? 'A' : '') + (s.hasBolos ? ' B' : '');
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${(s.user_id || '').replace(/</g,'&lt;')}</td>
+        <td>${(s.nama || '-').replace(/</g,'&lt;')}</td>
+        <td>${(s.kelas || '-').replace(/</g,'&lt;')}</td>
+        <td><span style="font-weight:700;color:${s.hasAlpa ? '#dc2626' : '#ea580c'};">${st}</span></td>
+        <td style="text-align:center;">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700;color:${on ? '#16a34a' : '#64748b'};">
+            <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleBukaBlokirAlpa('${String(s.user_id).replace(/'/g,"\\'")}', this.checked)">
+            ${on ? '🔓 Dibuka' : '🔒 Blokir'}
+          </label>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+}
+
+function toggleBukaBlokirAlpa(userId, buka) {
+  sendRequest({ action: 'buka_blokir_alpa', user_id: userId, buka: !!buka }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Buka Blokir Alpa', res.message || 'Selesai');
+    if (res.status === 'success') loadSiswaBlokirAlpa();
+  });
+}
+
+function bukaBlokirAlpaSemua(buka) {
+  const msg = buka
+    ? 'Buka blokir Alpa/Bolos untuk SEMUA siswa yang Alpa/Bolos hari ini?\nMereka akan boleh mengerjakan ujian.'
+    : 'Aktifkan kembali blokir Alpa/Bolos untuk SEMUA siswa yang sebelumnya dibuka?';
+  if (!confirm(msg)) return;
+  showBigPopup('info', 'Memproses', '⏳ Menyimpan...', 0);
+  sendRequest({ action: 'buka_blokir_alpa', semua: true, buka: !!buka }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Buka Blokir Alpa', res.message || 'Selesai');
+    if (res.status === 'success') loadSiswaBlokirAlpa();
   });
 }
 
@@ -10494,7 +10591,7 @@ function syncHasilUjianKeNilai() {
   const u = ujianListCache.find(x => String(x.id) === String(_hasilUjianIdAktif));
   const jenis = (u && u.jenis_nilai) ? String(u.jenis_nilai).toUpperCase() : 'UH';
   const mapel = (u && u.mapel) ? u.mapel : '-';
-  if (!confirm('Sinkronkan skor ujian ke Daftar Nilai?\n\nMapel: ' + mapel + '\nJenis Nilai: ' + jenis + '\n\nRumus: (skor ÷ skor_max) × 100\nNilai tertinggi dipertahankan jika attempt berulang.')) return;
+  if (!confirm('Sinkronkan skor ujian ke Daftar Nilai?\n\nMapel: ' + mapel + '\nJenis Nilai: ' + jenis + '\n\nRumus: (skor ÷ skor_max) × 100\n\nJika siswa mengerjakan lebih dari 1 kali, sistem otomatis mengambil NILAI TERTINGGI (persentase terbaik).')) return;
   showBigPopup('info', 'Sinkronisasi', '⏳ Menghitung & mengirim nilai (skala 0–100)...', 0);
   sendRequest({ action: 'ujian_sync_nilai', ujian_id: _hasilUjianIdAktif }, res => {
     closeBigPopup();
