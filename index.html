@@ -2112,6 +2112,7 @@ function updateTopbarUserInfo() {
     roleEl.innerText = 'Siswa';
     roleEl.className = 'user-role-display siswa';
     updateProfileDropdown();
+    updateLoginNotifVisibility();
     return;
   }
   if (userRole === 'tamu' || !userRole) {
@@ -2119,6 +2120,7 @@ function updateTopbarUserInfo() {
     roleEl.innerText = 'Tamu';
     roleEl.className = 'user-role-display';
     updateProfileDropdown();
+    updateLoginNotifVisibility();
     return;
   }
   const map = {
@@ -2133,6 +2135,26 @@ function updateTopbarUserInfo() {
     roleEl.className = `user-role-display ${info.cls}`;
     updateProfileDropdown();
   }
+  updateLoginNotifVisibility();
+}
+
+/** Notif log login hanya untuk admin / super_admin */
+function updateLoginNotifVisibility() {
+  const wrap = $('loginNotifWrap');
+  if (!wrap) return;
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+  // Siswa / guru / tamu tidak boleh melihat
+  if (!isAdmin || siswaUserData) {
+    wrap.style.display = 'none';
+    if (typeof closeLoginNotifPanel === 'function') closeLoginNotifPanel();
+    if (typeof _loginNotifTimer !== 'undefined' && _loginNotifTimer) {
+      clearInterval(_loginNotifTimer);
+      _loginNotifTimer = null;
+    }
+    return;
+  }
+  wrap.style.display = '';
+  if (typeof startLoginNotifPolling === 'function') startLoginNotifPolling();
 }
 
 function updateProfileDropdown() {
@@ -2618,6 +2640,10 @@ let _loginNotifTimer = null;
 
 function toggleLoginNotifPanel(ev) {
   if (ev) ev.stopPropagation();
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
+    updateLoginNotifVisibility();
+    return;
+  }
   const panel = $('loginNotifPanel');
   if (!panel) return;
   const open = panel.classList.contains('show');
@@ -2659,6 +2685,10 @@ function formatLoginTime(iso) {
 }
 
 function loadLoginNotif() {
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
+    updateLoginNotifVisibility();
+    return;
+  }
   const body = $('loginNotifBody');
   const foot = $('loginNotifFooter');
   const badge = $('loginNotifBadge');
@@ -2716,6 +2746,7 @@ function loadLoginNotif() {
 }
 
 function refreshLoginNotifBadge() {
+  if (userRole !== 'admin' && userRole !== 'super_admin') return;
   sendRequest({ action: 'get_login_log' }, res => {
     const badge = $('loginNotifBadge');
     if (!badge || !res || res.status !== 'success') return;
@@ -2727,6 +2758,10 @@ function refreshLoginNotifBadge() {
 }
 
 function startLoginNotifPolling() {
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
+    if (_loginNotifTimer) { clearInterval(_loginNotifTimer); _loginNotifTimer = null; }
+    return;
+  }
   if (_loginNotifTimer) clearInterval(_loginNotifTimer);
   refreshLoginNotifBadge();
   _loginNotifTimer = setInterval(refreshLoginNotifBadge, 60000);
@@ -2734,6 +2769,9 @@ function startLoginNotifPolling() {
 
 function catatLoginClient(payload) {
   try {
+    const role = String(payload.role || '').toLowerCase();
+    // Admin / super_admin tidak dicatat
+    if (role === 'admin' || role === 'super_admin') return;
     sendRequest({
       action: 'log_login',
       user_id: payload.user_id,
