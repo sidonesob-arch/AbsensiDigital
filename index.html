@@ -673,6 +673,118 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 </style>
 </head>
 <body>
+<script>
+/* Penanganan tombol kembali — dijalankan paling awal, login/tamu sama */
+(function () {
+  if (window.__sitBackEarly) return;
+  window.__sitBackEarly = true;
+  window.__sitAllowExit = false;
+  window.__sitExitOpen = false;
+
+  function lock() {
+    try { history.pushState({ sit: 1, t: Date.now() }, "", location.href); } catch (e) {}
+  }
+  function lock2() { lock(); setTimeout(lock, 0); }
+
+  function menuNow() {
+    try {
+      var s = document.querySelector(".section.active");
+      if (s && s.id && s.id.indexOf("menu-") === 0) return s.id.slice(5);
+    } catch (e) {}
+    return (window._currentMenu || "dashboard");
+  }
+
+  function toDash() {
+    try {
+      if (typeof switchMenu === "function") {
+        window._navFromPopstate = true;
+        switchMenu("dashboard", document.querySelector('[data-menu="dashboard"]'), true);
+        window._navFromPopstate = false;
+        return;
+      }
+    } catch (e) {}
+    try {
+      document.querySelectorAll(".section").forEach(function (el) { el.classList.remove("active"); });
+      var d = document.getElementById("menu-dashboard");
+      if (d) d.classList.add("active");
+      window._currentMenu = "dashboard";
+    } catch (e2) {}
+  }
+
+  function showExit() {
+    if (window.__sitExitOpen) return;
+    window.__sitExitOpen = true;
+    var m = document.getElementById("exitConfirmModal");
+    if (m) {
+      m.style.display = "flex";
+      return;
+    }
+    // fallback
+    var ok = false;
+    try { ok = window.confirm("Yakin ingin keluar dari aplikasi?"); } catch (e) {}
+    window.__sitExitOpen = false;
+    if (ok) {
+      window.__sitAllowExit = true;
+      try { history.go(-5); } catch (e) {}
+    } else {
+      lock2();
+    }
+  }
+
+  function onPop() {
+    if (window.__sitAllowExit) return;
+    lock2();
+    if (window.__sitExitOpen) return;
+    var cur = menuNow();
+    if (cur !== "dashboard") {
+      toDash();
+      return;
+    }
+    showExit();
+  }
+
+  try { history.replaceState({ sit: 1, root: 1 }, "", location.href); } catch (e) {}
+  lock2();
+  window.addEventListener("popstate", onPop);
+
+  window.addEventListener("DOMContentLoaded", function () {
+    lock2();
+    var ok = document.getElementById("exitConfirmOkBtn");
+    var cancel = document.getElementById("exitConfirmCancelBtn");
+    var modal = document.getElementById("exitConfirmModal");
+    if (ok) ok.onclick = function (e) {
+      e && e.preventDefault();
+      window.__sitExitOpen = false;
+      if (modal) modal.style.display = "none";
+      window.__sitAllowExit = true;
+      try {
+        if (navigator.app && navigator.app.exitApp) navigator.app.exitApp();
+        else history.go(-5);
+      } catch (err) {}
+      setTimeout(function () {
+        if (document.visibilityState === "visible") {
+          window.__sitAllowExit = false;
+          lock2();
+        }
+      }, 500);
+    };
+    if (cancel) cancel.onclick = function (e) {
+      e && e.preventDefault();
+      window.__sitExitOpen = false;
+      if (modal) modal.style.display = "none";
+      lock2();
+    };
+    if (modal) modal.addEventListener("click", function (e) {
+      if (e.target === modal) {
+        window.__sitExitOpen = false;
+        modal.style.display = "none";
+        lock2();
+      }
+    });
+  });
+})();
+</script>
+
 
 <div class="topbar">
   <div class="topbar-row">
@@ -2375,6 +2487,7 @@ function hideExitConfirmModal() {
 function confirmExitApp() {
   hideExitConfirmModal();
   window._allowAppExit = true;
+  window.__sitAllowExit = true;
   try {
     if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
       window.navigator.app.exitApp();
@@ -2399,7 +2512,11 @@ function confirmExitApp() {
 function cancelExitApp() {
   hideExitConfirmModal();
   window._allowAppExit = false;
+  window.__sitAllowExit = false;
+  window.__sitExitOpen = false;
   ensureHistoryLocked();
+  try { history.pushState({ sit: 1, t: Date.now() }, '', location.href); } catch (e) {}
+  try { history.pushState({ sit: 1, t: Date.now() }, '', location.href); } catch (e) {}
   if (getActiveMenuName() !== 'dashboard') goDashboardFromBack();
 }
 
@@ -2433,6 +2550,14 @@ function bindExitConfirmButtons() {
 }
 
 function initBackButtonHandler() {
+  // Handler utama ada di script awal (__sitBackEarly). Ini hanya mengikat tombol modal.
+  try {
+    if (typeof bindExitConfirmButtons === 'function') bindExitConfirmButtons();
+  } catch (e) {}
+  if (window.__sitBackEarly) {
+    window._backHandlerReady = true;
+    return;
+  }
   if (window._backHandlerReady) return;
   window._backHandlerReady = true;
   window._currentMenu = window._currentMenu || sessionStorage.getItem('activeMenu') || 'dashboard';
