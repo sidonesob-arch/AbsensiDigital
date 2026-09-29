@@ -11375,6 +11375,42 @@ function loadDataLulusan() {
   });
 }
 
+
+/** Hitung lama belajar (client) — sama logika backend */
+function hitungLamaBelajarClient(statusAwal, tglMulai, tglLulus, lulusTahun) {
+  const isPindahan = /pindah/i.test(String(statusAwal || ''));
+  if (!isPindahan) return '3 Tahun';
+  let mulai = String(tglMulai || '').trim().substring(0, 10);
+  let lulus = String(tglLulus || '').trim().substring(0, 10);
+  if (!mulai || !/^\d{4}-\d{2}-\d{2}$/.test(mulai)) return '';
+  if (!lulus || !/^\d{4}-\d{2}-\d{2}$/.test(lulus)) {
+    const y = String(lulusTahun || '').match(/\d{4}/);
+    if (y) lulus = y[0] + '-06-30';
+  }
+  if (!lulus || !/^\d{4}-\d{2}-\d{2}$/.test(lulus)) return '';
+  const [ys, ms, ds] = mulai.split('-').map(Number);
+  const [ye, me, de] = lulus.split('-').map(Number);
+  let months = (ye - ys) * 12 + (me - ms);
+  if (de < ds) months -= 1;
+  if (months < 0) months = 0;
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  if (years === 0 && rem === 0) return '0 Tahun';
+  if (years === 0) return rem + ' Bulan';
+  if (rem === 0) return years + ' Tahun';
+  return years + ' Tahun ' + rem + ' Bulan';
+}
+
+function recalcLamaBelajarLulusanForm() {
+  const el = $('fmLulusanLama');
+  if (!el) return;
+  const status = $('fmLulusanStatusAwal')?.value || 'Siswa Baru';
+  const mulai = $('fmLulusanTglMulai')?.value || '';
+  const lulus = $('fmLulusanTglLulus')?.value || '';
+  const tahun = $('fmLulusanTahun')?.value || '';
+  el.value = hitungLamaBelajarClient(status, mulai, lulus, tahun) || ( /pindah/i.test(status) ? '' : '3 Tahun');
+}
+
 function openFormLulusan(nisn) {
   const list = window._lulusanCache || [];
   const row = nisn ? list.find(x => String(x.nisn) === String(nisn)) : null;
@@ -11395,21 +11431,24 @@ function openFormLulusan(nisn) {
       <input type="date" id="fmLulusanTglLahir" value="${row && row.tanggal_lahir ? String(row.tanggal_lahir).substring(0,10) : ''}">
     </div>
     <div class="form-group"><label>Tanggal Mulai Sekolah:</label>
-      <input type="date" id="fmLulusanTglMulai" value="${row && row.tanggal_mulai_sekolah ? String(row.tanggal_mulai_sekolah).substring(0,10) : (getDefaultTglMulaiSekolah() || '')}">
+      <input type="date" id="fmLulusanTglMulai" value="${row && row.tanggal_mulai_sekolah ? String(row.tanggal_mulai_sekolah).substring(0,10) : (getDefaultTglMulaiSekolah() || '')}" onchange="recalcLamaBelajarLulusanForm()">
       <small style="color:#666;font-size:11px;">Otomatis dari Tanggal Mulai Tahun Ajaran.</small>
     </div>
     <div class="form-group"><label>Lama Belajar di Sekolah Ini:</label>
       <input type="text" id="fmLulusanLama" value="${row ? (row.lama_belajar || '3 Tahun') : '3 Tahun'}" placeholder="3 Tahun">
     </div>
     <div class="form-group"><label>Lulus Tahun:</label>
-      <input type="text" id="fmLulusanTahun" value="${row ? (row.lulus_tahun || '') : ''}" placeholder="2026" maxlength="4">
+      <input type="text" id="fmLulusanTahun" value="${row ? (row.lulus_tahun || '') : ''}" placeholder="2026" maxlength="4" oninput="recalcLamaBelajarLulusanForm()">
     </div>
     <div class="form-group"><label>Tanggal Lulus:</label>
-      <input type="date" id="fmLulusanTglLulus" value="${row && row.tanggal_lulus ? String(row.tanggal_lulus).substring(0,10) : (getDefaultTglKelulusan() || '')}">
+      <input type="date" id="fmLulusanTglLulus" value="${row && row.tanggal_lulus ? String(row.tanggal_lulus).substring(0,10) : (getDefaultTglKelulusan() || '')}" onchange="recalcLamaBelajarLulusanForm()">
       <small style="color:#666;font-size:11px;">Otomatis dari Tanggal Kelulusan di Pengaturan Tahun Ajaran.</small>
     </div>
     <div class="form-group"><label>Status Awal di Sekolah Ini:</label>
-      <input type="text" id="fmLulusanStatusAwal" value="${row ? (row.status_awal || '') : 'Siswa Baru'}" placeholder="Siswa Baru / Pindahan">
+      <select id="fmLulusanStatusAwal" onchange="recalcLamaBelajarLulusanForm()">
+        <option value="Siswa Baru" ${(!row || !row.status_awal || row.status_awal === 'Siswa Baru' || !/pindah/i.test(row.status_awal||'')) ? 'selected' : ''}>Siswa Baru</option>
+        <option value="Pindahan" ${row && row.status_awal && /pindah/i.test(row.status_awal) ? 'selected' : ''}>Pindahan</option>
+      </select>
     </div>
     <div class="form-group"><label>Asal Sekolah:</label>
       <input type="text" id="fmLulusanAsal" value="${row ? (row.asal_sekolah || '').replace(/"/g, '&quot;') : ''}" placeholder="Nama SD / sekolah asal">
@@ -11441,6 +11480,7 @@ function openFormLulusan(nisn) {
       if (res.status === 'success') { closeFormModal(); loadDataLulusan(); }
     });
   });
+  setTimeout(function () { try { recalcLamaBelajarLulusanForm(); } catch (e) {} }, 150);
 }
 
 function hapusDataLulusan(nisn, nama) {
