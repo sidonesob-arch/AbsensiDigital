@@ -1754,7 +1754,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <div class="form-group" style="flex:1; min-width:140px;"><label>Kelas:</label><select id="filterInputNilaiKelas"><option value="">-- Semua --</option></select></div>
           <div class="form-group" style="flex:1; min-width:160px;">
             <label>Input Nama Nilai Manual:</label>
-            <input type="text" id="inputNamaJenisNilai" placeholder="Misal: NH1, UH1, F1, Tugas 1">
+            <input type="text" id="inputNamaJenisNilai" placeholder="Misal: NH1, UH1, PTS (UTS→PTS), PAS (UAS→PAS)">
           </div>
         </div>
         <button class="btn-primary" onclick="loadInputNilaiData()">Muat Data Siswa</button>
@@ -5026,6 +5026,16 @@ function loadInputNilaiData() {
 }
 
 /** Normalisasi input nilai (koma → titik, buang spasi) */
+function normalizeJenisNilaiClient(raw) {
+  let j = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!j) return 'NH1';
+  if (/^UTS[-_]?\d*$/i.test(j)) return j.replace(/^UTS/i, 'PTS').replace(/[-_]/g, '');
+  if (/^UAS[-_]?\d*$/i.test(j)) return j.replace(/^UAS/i, 'PAS').replace(/[-_]/g, '');
+  if (j.startsWith('UTS')) return ('PTS' + j.slice(3)).replace(/[-_]/g, '') || 'PTS';
+  if (j.startsWith('UAS')) return ('PAS' + j.slice(3)).replace(/[-_]/g, '') || 'PAS';
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ') || 'NH1';
+}
+
 function normalizeNilaiInput(raw) {
   if (raw == null) return '';
   let s = String(raw).trim().replace(/\s+/g, '').replace(',', '.');
@@ -5052,7 +5062,10 @@ function simpanDataNilai() {
   }
   const mapel = ($('filterInputNilaiMapel').value || '').trim();
   let jenisNilai = ($('inputNamaJenisNilai').value || '').trim() || 'NH1';
-  jenisNilai = jenisNilai.replace(/\s+/g, ' ').trim();
+  jenisNilai = (typeof normalizeJenisNilaiClient === 'function')
+    ? normalizeJenisNilaiClient(jenisNilai)
+    : jenisNilai.replace(/\s+/g, ' ').trim().toUpperCase();
+
 
   if (!guru || guru === '-' || /^(admin|administrator|super admin)$/i.test(guru)) {
     return showBigPopup("warning", "Peringatan", "Guru tidak teridentifikasi! Login sebagai Guru agar nama guru terisi otomatis.");
@@ -7585,7 +7598,7 @@ function openFormUjianBaru() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="form-group" style="flex:1;min-width:100px;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="60" min="5"></div>
-        <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / UTS / NH1"></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / PTS / PAS (UTS=PTS, UAS=PAS)"></div>
         <div class="form-group" style="flex:1;min-width:100px;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="1" min="1"></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
