@@ -1829,14 +1829,26 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       </div>
       <div id="ujianHasilSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
       <p style="font-size:11px; color:#666; margin:0 0 8px;">
-        💡 <b>Sedang ujian</b> = masih mengerjakan.
-        <b>Buka kembali 🔓</b> = buka ulang sesi untuk <b>semua siswa</b> (timeout / selesai / sedang) — jawaban tetap tersimpan.
-        <b>Reset</b> = hapus sesi, siswa mulai dari nol.
-        <b>Sinkronkan</b> = nilai = (skor ÷ skor_max) × 100 masuk Daftar Nilai.
+        💡 Centang siswa di tabel, lalu gunakan tombol aksi di atas.
+        <b>Buka kembali</b> = lanjut (jawaban tetap). <b>Selesaikan</b> = kirim jawaban tersimpan.
+        <b>Reset</b> = hapus sesi. <b>Sinkronkan</b> = nilai ke Daftar Nilai.
       </p>
+      <div id="ujianHasilBulkBar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;padding:10px;background:#f1f5f9;border-radius:10px;border:1px solid #e2e8f0;">
+        <span style="font-size:12px;font-weight:700;color:var(--primary);">Aksi terpilih:</span>
+        <span id="hasilSelectedCount" style="font-size:11px;color:#64748b;">0 dipilih</span>
+        <button type="button" class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:700;" onclick="bulkBukaKembaliHasil()" title="Buka kembali sesi (jawaban tetap)">🔓 Buka Kembali</button>
+        <button type="button" class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:700;" onclick="bulkPaksaSelesaiHasil()" title="Selesaikan / kirim jawaban">✅ Selesaikan</button>
+        <button type="button" class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:700;" onclick="bulkPerpanjangHasil()" title="Perpanjang waktu (status sedang)">⏱️+ Perpanjang</button>
+        <button type="button" class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:700;" onclick="bulkResetHasil()" title="Reset sesi (hapus jawaban)">↺ Reset</button>
+        <button type="button" class="btn-sm" style="background:#64748b;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;" onclick="clearHasilSelection()">✖ Batal pilih</button>
+      </div>
       <div class="table-responsive">
         <table>
-          <thead><tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Skor</th><th>Status</th><th>Sisa / Waktu</th><th style="min-width:160px;">Aksi</th></tr></thead>
+          <thead><tr>
+            <th style="width:36px;text-align:center;"><input type="checkbox" id="hasilCheckAll" title="Pilih semua" onchange="toggleHasilCheckAll(this.checked)"></th>
+            <th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Skor</th><th>Status</th><th>Sisa / Waktu</th>
+            <th style="width:48px;text-align:center;">Detail</th>
+          </tr></thead>
           <tbody id="tableUjianHasilBody"></tbody>
         </table>
       </div>
@@ -10654,11 +10666,14 @@ function loadHasilUjianData(ujianId) {
     const sum = $('ujianHasilSummary');
     if (!tbody) return;
     if (res.status !== 'success') {
-      tbody.innerHTML = `<tr><td colspan="8">${res.message || 'Gagal memuat'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9">${res.message || 'Gagal memuat'}</td></tr>`;
       if (sum) sum.innerHTML = '';
+      window._hasilUjianRows = [];
+      updateHasilSelectedCount();
       return;
     }
     const rows = res.data || [];
+    window._hasilUjianRows = rows;
     const s = res.summary || res.stats || {};
     if (sum) {
       const autoC = s.auto_closed || 0;
@@ -10669,8 +10684,11 @@ function loadHasilUjianData(ujianId) {
         <span style="background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">✅ Selesai: ${s.selesai||0}</span>
         ${autoC ? `<span style="background:#ffedd5;color:#9a3412;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">🔄 Auto-tutup: ${autoC}</span>` : ''}`;
     }
+    const checkAll = $('hasilCheckAll');
+    if (checkAll) checkAll.checked = false;
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>';
+      updateHasilSelectedCount();
       return;
     }
     function fmtSisa(sec) {
@@ -10696,17 +10714,9 @@ function loadHasilUjianData(ujianId) {
         waktuCol = (r.selesai_at || r.mulai_at || '').replace('T',' ').substring(0,19) || '-';
       }
       const skor = (r.skor != null ? r.skor : '-') + '/' + (r.skor_max != null ? r.skor_max : '-');
-      let aksi = `<button class="btn-edit" title="Detail" onclick="lihatDetailHasil('${r.id}')">👁️</button> `;
-      if (r.status === 'berlangsung' || r.status === 'timeout') {
-        aksi += `<button class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Selesaikan / kirim jawaban tersimpan" onclick="paksaSelesaiUjianSiswa('${r.id}','${(r.nama||r.nisn||'').replace(/'/g,"\'")}')">✅</button> `;
-      }
-      if (r.status === 'berlangsung') {
-        aksi += `<button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Perpanjang waktu" onclick="perpanjangUjianSiswa('${r.id}')">⏱️+</button> `;
-      }
-      // Buka kembali: tersedia untuk SEMUA status (berlangsung, timeout, selesai)
-      aksi += `<button class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Buka kembali / lanjutkan (jawaban tetap tersimpan)" onclick="bukaKembaliUjianSiswa('${r.id}')">🔓</button> `;
-      aksi += `<button class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 6px;cursor:pointer;" title="Reset sesi (mulai dari nol)" onclick="resetPengerjaanUjian('${r.id}','${(r.nama||r.nisn||'').replace(/'/g,"\'")}')">↺</button>`;
+      const idSafe = String(r.id || '').replace(/'/g, "\\'");
       return `<tr>
+        <td style="text-align:center;"><input type="checkbox" class="hasil-row-check" data-id="${idSafe}" data-status="${r.status||''}" data-nama="${String(r.nama||r.nisn||'').replace(/"/g,'&quot;')}" onchange="updateHasilSelectedCount()"></td>
         <td>${i+1}</td>
         <td>${r.nisn||''}</td>
         <td>${r.nama||'-'}</td>
@@ -10714,10 +10724,117 @@ function loadHasilUjianData(ujianId) {
         <td><b>${skor}</b></td>
         <td>${statusBadge(r.status, r.lewat_waktu)}</td>
         <td style="font-size:11px;">${waktuCol}</td>
-        <td style="white-space:nowrap;">${aksi}</td>
+        <td style="text-align:center;"><button class="btn-edit" title="Detail jawaban" onclick="lihatDetailHasil('${idSafe}')">👁️</button></td>
       </tr>`;
     }).join('');
+    updateHasilSelectedCount();
   });
+}
+
+function getSelectedHasilRows() {
+  const checks = document.querySelectorAll('.hasil-row-check:checked');
+  const list = [];
+  checks.forEach(ch => {
+    list.push({
+      id: ch.getAttribute('data-id'),
+      status: ch.getAttribute('data-status') || '',
+      nama: ch.getAttribute('data-nama') || '',
+    });
+  });
+  return list;
+}
+
+function updateHasilSelectedCount() {
+  const n = document.querySelectorAll('.hasil-row-check:checked').length;
+  const el = $('hasilSelectedCount');
+  if (el) el.textContent = n + ' dipilih';
+  const all = document.querySelectorAll('.hasil-row-check');
+  const checkAll = $('hasilCheckAll');
+  if (checkAll && all.length) {
+    checkAll.checked = n === all.length && n > 0;
+    checkAll.indeterminate = n > 0 && n < all.length;
+  }
+}
+
+function toggleHasilCheckAll(checked) {
+  document.querySelectorAll('.hasil-row-check').forEach(ch => { ch.checked = !!checked; });
+  updateHasilSelectedCount();
+}
+
+function clearHasilSelection() {
+  document.querySelectorAll('.hasil-row-check').forEach(ch => { ch.checked = false; });
+  const checkAll = $('hasilCheckAll');
+  if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+  updateHasilSelectedCount();
+}
+
+/** Jalankan aksi berurutan untuk banyak pengerjaan_id */
+function runBulkHasilAction(items, buildPayload, label, onDone) {
+  if (!items.length) return showBigPopup('warning', 'Info', 'Centang minimal satu siswa terlebih dahulu.');
+  let ok = 0, fail = 0, i = 0;
+  showBigPopup('info', label, '⏳ Memproses 0/' + items.length + '...', 0);
+  function next() {
+    if (i >= items.length) {
+      closeBigPopup();
+      showBigPopup('success', label, 'Selesai: ' + ok + ' berhasil' + (fail ? ', ' + fail + ' gagal' : '') + '.');
+      if (typeof onDone === 'function') onDone();
+      setTimeout(function () { refreshHasilUjian(); }, 400);
+      return;
+    }
+    const item = items[i++];
+    const payload = buildPayload(item);
+    if (!payload) { next(); return; }
+    sendRequest(payload, res => {
+      if (res && res.status === 'success') ok++; else fail++;
+      const msgEl = $('bigPopupMessage');
+      if (msgEl) msgEl.textContent = '⏳ Memproses ' + i + '/' + items.length + '...';
+      next();
+    });
+  }
+  next();
+}
+
+function bulkBukaKembaliHasil() {
+  const items = getSelectedHasilRows();
+  if (!items.length) return showBigPopup('warning', 'Info', 'Centang minimal satu siswa.');
+  const menit = prompt('Buka kembali ' + items.length + ' sesi & beri waktu berapa menit?\n(Jawaban tetap tersimpan)', '30');
+  if (menit == null) return;
+  const n = parseInt(menit, 10);
+  if (!n || n < 1) return showBigPopup('warning', 'Info', 'Menit tidak valid.');
+  runBulkHasilAction(items, function (item) {
+    return { action: 'ujian_buka_kembali', pengerjaan_id: item.id, tambah_menit: n };
+  }, 'Buka Kembali');
+}
+
+function bulkPaksaSelesaiHasil() {
+  const items = getSelectedHasilRows();
+  if (!items.length) return showBigPopup('warning', 'Info', 'Centang minimal satu siswa.');
+  // Hanya berlangsung/timeout yang relevan; tetap kirim semua terpilih (server akan handle)
+  if (!confirm('Selesaikan / kirim jawaban untuk ' + items.length + ' sesi terpilih?\n\nJawaban tersimpan akan dinilai.')) return;
+  runBulkHasilAction(items, function (item) {
+    return { action: 'ujian_paksa_selesai', pengerjaan_id: item.id };
+  }, 'Selesaikan');
+}
+
+function bulkPerpanjangHasil() {
+  const items = getSelectedHasilRows().filter(x => x.status === 'berlangsung');
+  if (!items.length) return showBigPopup('warning', 'Info', 'Pilih siswa berstatus SEDANG UJIAN untuk perpanjang waktu.');
+  const menit = prompt('Perpanjang ' + items.length + ' sesi berapa menit?', '15');
+  if (menit == null) return;
+  const n = parseInt(menit, 10);
+  if (!n || n < 1) return showBigPopup('warning', 'Info', 'Menit tidak valid.');
+  runBulkHasilAction(items, function (item) {
+    return { action: 'ujian_perpanjang', pengerjaan_id: item.id, tambah_menit: n };
+  }, 'Perpanjang');
+}
+
+function bulkResetHasil() {
+  const items = getSelectedHasilRows();
+  if (!items.length) return showBigPopup('warning', 'Info', 'Centang minimal satu siswa.');
+  if (!confirm('RESET ' + items.length + ' sesi terpilih?\n\nJawaban akan DIHAPUS. Siswa mengerjakan dari awal.\n\nPilih "Buka kembali" jika ingin mempertahankan jawaban.')) return;
+  runBulkHasilAction(items, function (item) {
+    return { action: 'ujian_reset_pengerjaan', pengerjaan_id: item.id };
+  }, 'Reset Sesi');
 }
 
 function paksaSelesaiUjianSiswa(pengerjaanId, nama) {
