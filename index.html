@@ -1587,9 +1587,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           ⚠️ <b>Pulihkan Absensi Hari Ini</b>: mengembalikan SEMUA sesi absensi hari ini (siswa &amp; guru) ke status <b>TW</b> — menimpa A/B/Sakit/Izin/TL yang ada. Gunakan hanya jika data hilang/rusak karena bug.
         </div>
         <div style="background:#f5f3ff; padding:10px 12px; border-radius:8px; border-left:4px solid #7c3aed; margin-top:8px; font-size:12px; color:#5b21b6;">
-          📐 <b>Samakan Sesi Siswa</b>: mengisi sesi yang belum tercatat agar sama dengan total sesi efektif real (mis. 40).
-          Pola isi baru: <b>~50% TW + ~50% Alpa</b> (jam = Mulai sesi). Data TL/Izin/Sakit/A/B yang sudah ada <b>tidak dihapus</b>.
-          Jika ada siswa yang sebelumnya terisi semua TW (jadi 100%), sistem juga mengoreksi ~setengah TW mereka menjadi Alpa agar tidak mencolok.
+          📐 <b>Samakan Sesi Siswa</b>: mengisi sesi yang <b>belum tercatat</b> per siswa (status TW, jam = Mulai sesi) agar jumlahnya sama dengan total sesi efektif real (mis. 40). Data yang sudah ada (TW/TL/Izin/Sakit/A/B) <b>tidak diubah</b>.
         </div>
         <div id="historisInfo" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
       </div>
@@ -5474,22 +5472,17 @@ function pulihkanAbsensiHariIni() {
   });
 }
 function samakanSesiSiswa() {
-  if (!confirm('Samakan jumlah sesi setiap siswa ke total sesi efektif real?\n\n• Sesi baru yang diisi: ~50% TW + ~50% Alpa\n• Data TL/Izin/Sakit/A/B yang sudah ada TIDAK dihapus\n• Siswa yang sebelumnya hampir 100% TW akan dikoreksi (~setengah jadi Alpa)\n\nProses ini bisa memakan waktu jika data banyak.')) return;
-  showBigPopup('info', 'Samakan Sesi', '⏳ Mengisi sesi kurang (50% TW / 50% Alpa) & koreksi...', 0);
-  sendRequest({ action: 'samakan_sesi_siswa', koreksi: true }, res => {
+  if (!confirm('Samakan jumlah sesi setiap siswa ke total sesi efektif real?\n\n• Sesi yang sudah tercatat (TW/TL/Izin/Sakit/A/B) TIDAK diubah\n• Yang kurang akan diisi TW dengan jam Mulai sesi\n\nProses ini bisa memakan waktu jika data banyak.')) return;
+  showBigPopup('info', 'Samakan Sesi', '⏳ Menghitung & mengisi sesi yang kurang...', 0);
+  sendRequest({ action: 'samakan_sesi_siswa' }, res => {
     closeBigPopup();
     const ok = res && res.status === 'success';
     let msg = (res && res.message) || (ok ? 'Selesai' : 'Gagal');
-    if (ok && res.top_koreksi && res.top_koreksi.length) {
-      const contoh = res.top_koreksi.slice(0, 5).map(function (x) {
-        return (x.nama || x.nisn) + ' (TW ' + x.tw_semula + ' → Alpa +' + x.jadi_alpa + ')';
-      }).join('<br>');
-      msg += '<br><br><small>Contoh koreksi TW→Alpa:<br>' + contoh + '</small>';
-    } else if (ok && res.top_kurang && res.top_kurang.length) {
+    if (ok && res.top_kurang && res.top_kurang.length) {
       const contoh = res.top_kurang.slice(0, 5).map(function (x) {
-        return (x.nama || x.nisn) + ' (kurang ' + x.kurang + ': TW ' + (x.isi_tw||0) + ' / A ' + (x.isi_alpa||0) + ')';
+        return (x.nama || x.nisn) + ' (punya ' + x.punya + ', kurang ' + x.kurang + ')';
       }).join('<br>');
-      msg += '<br><br><small>Contoh isi baru:<br>' + contoh + '</small>';
+      msg += '<br><br><small>Contoh dilengkapi:<br>' + contoh + '</small>';
     }
     showBigPopup(ok ? 'success' : 'danger', 'Samakan Sesi Siswa', msg);
   });
