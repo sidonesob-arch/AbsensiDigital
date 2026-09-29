@@ -1868,6 +1868,21 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="btn-primary btn-sm" style="background:#1d6f42;" onclick="syncHasilUjianKeNilai()" title="Masukkan skor (skor/skor_max × 100) ke Daftar Nilai">📋 Sinkronkan ke Daftar Nilai</button>
       </div>
       <div id="ujianHasilSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:700;color:var(--primary);">Filter Kelas:</label>
+        <select id="hasilFilterKelas" onchange="renderHasilUjianTable()" style="padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;min-width:120px;">
+          <option value="">Semua Kelas</option>
+        </select>
+        <label style="font-size:12px;font-weight:700;color:var(--primary);margin-left:4px;">Status:</label>
+        <select id="hasilFilterStatus" onchange="renderHasilUjianTable()" style="padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;">
+          <option value="">Semua Status</option>
+          <option value="berlangsung">Sedang ujian</option>
+          <option value="timeout">Timeout</option>
+          <option value="selesai">Selesai</option>
+        </select>
+        <input type="text" id="hasilFilterCari" placeholder="Cari nama / NISN..." oninput="renderHasilUjianTable()" style="padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;min-width:160px;flex:1;">
+        <span id="hasilFilterInfo" style="font-size:11px;color:#64748b;"></span>
+      </div>
       <p style="font-size:11px; color:#666; margin:0 0 8px;">
         💡 Centang siswa di tabel, lalu gunakan tombol aksi di atas.
         <b>Buka kembali</b> = lanjut (jawaban tetap). <b>Selesaikan</b> = kirim jawaban tersimpan.
@@ -11039,51 +11054,101 @@ function loadHasilUjianData(ujianId) {
         <span style="background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">✅ Selesai: ${s.selesai||0}</span>
         ${autoC ? `<span style="background:#ffedd5;color:#9a3412;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;">🔄 Auto-tutup: ${autoC}</span>` : ''}`;
     }
-    const checkAll = $('hasilCheckAll');
-    if (checkAll) checkAll.checked = false;
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>';
-      updateHasilSelectedCount();
-      return;
+    // Isi opsi filter kelas dari data
+    const selKelas = $('hasilFilterKelas');
+    if (selKelas) {
+      const prev = selKelas.value || '';
+      const kelasSet = [...new Set(rows.map(r => String(r.kelas || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+      selKelas.innerHTML = '<option value="">Semua Kelas</option>' +
+        kelasSet.map(k => `<option value="${k.replace(/"/g, '&quot;')}">${k.replace(/</g, '&lt;')}</option>`).join('');
+      if (prev && kelasSet.includes(prev)) selKelas.value = prev;
+      else selKelas.value = '';
     }
-    function fmtSisa(sec) {
-      if (sec == null || sec < 0) return '-';
-      const m = Math.floor(sec / 60), s = sec % 60;
-      return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-    }
-    function statusBadge(st, lewat) {
-      if (st === 'berlangsung') {
-        if (lewat) return '<span style="background:#f97316;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏳ LEWAT WAKTU</span>';
-        return '<span style="background:#eab308;color:#111;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏳ SEDANG UJIAN</span>';
-      }
-      if (st === 'timeout') return '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏰ TIMEOUT</span>';
-      if (st === 'selesai') return '<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ SELESAI</span>';
-      return st || '-';
-    }
-    tbody.innerHTML = rows.map((r, i) => {
-      let waktuCol = '-';
-      if (r.status === 'berlangsung') {
-        waktuCol = r.lewat_waktu ? '<span style="color:#dc2626;font-weight:700;">Habis</span>' : ('Sisa ' + fmtSisa(r.sisa_detik));
-        if (r.batas_at) waktuCol += '<br><small style="color:#666;">batas ' + String(r.batas_at).replace('T',' ').substring(0,19) + '</small>';
-      } else {
-        waktuCol = (r.selesai_at || r.mulai_at || '').replace('T',' ').substring(0,19) || '-';
-      }
-      const skor = (r.skor != null ? r.skor : '-') + '/' + (r.skor_max != null ? r.skor_max : '-');
-      const idSafe = String(r.id || '').replace(/'/g, "\\'");
-      return `<tr>
-        <td style="text-align:center;"><input type="checkbox" class="hasil-row-check" data-id="${idSafe}" data-status="${r.status||''}" data-nama="${String(r.nama||r.nisn||'').replace(/"/g,'&quot;')}" onchange="updateHasilSelectedCount()"></td>
-        <td>${i+1}</td>
-        <td>${r.nisn||''}</td>
-        <td>${r.nama||'-'}</td>
-        <td>${r.kelas||'-'}</td>
-        <td><b>${skor}</b></td>
-        <td>${statusBadge(r.status, r.lewat_waktu)}</td>
-        <td style="font-size:11px;">${waktuCol}</td>
-        <td style="text-align:center;"><button class="btn-edit" title="Detail jawaban" onclick="lihatDetailHasil('${idSafe}')">👁️</button></td>
-      </tr>`;
-    }).join('');
-    updateHasilSelectedCount();
+    const selSt = $('hasilFilterStatus');
+    if (selSt && !selSt.dataset.ready) { selSt.dataset.ready = '1'; }
+    const cari = $('hasilFilterCari');
+    if (cari) cari.value = '';
+    renderHasilUjianTable();
   });
+}
+
+function renderHasilUjianTable() {
+  const tbody = $('tableUjianHasilBody');
+  if (!tbody) return;
+  const rowsAll = window._hasilUjianRows || [];
+  const filterKelas = ($('hasilFilterKelas') && $('hasilFilterKelas').value) || '';
+  const filterStatus = ($('hasilFilterStatus') && $('hasilFilterStatus').value) || '';
+  const cari = (($('hasilFilterCari') && $('hasilFilterCari').value) || '').trim().toLowerCase();
+
+  let rows = rowsAll.slice();
+  if (filterKelas) rows = rows.filter(r => String(r.kelas || '').trim() === filterKelas);
+  if (filterStatus) rows = rows.filter(r => String(r.status || '') === filterStatus);
+  if (cari) {
+    rows = rows.filter(r =>
+      String(r.nama || '').toLowerCase().includes(cari) ||
+      String(r.nisn || '').toLowerCase().includes(cari)
+    );
+  }
+
+  const info = $('hasilFilterInfo');
+  if (info) {
+    info.textContent = (filterKelas || filterStatus || cari)
+      ? ('Menampilkan ' + rows.length + ' dari ' + rowsAll.length)
+      : '';
+  }
+
+  const checkAll = $('hasilCheckAll');
+  if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+
+  if (!rowsAll.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>';
+    updateHasilSelectedCount();
+    return;
+  }
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;">Tidak ada data pada filter ini.</td></tr>';
+    updateHasilSelectedCount();
+    return;
+  }
+
+  function fmtSisa(sec) {
+    if (sec == null || sec < 0) return '-';
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+  function statusBadge(st, lewat) {
+    if (st === 'berlangsung') {
+      if (lewat) return '<span style="background:#f97316;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏳ LEWAT WAKTU</span>';
+      return '<span style="background:#eab308;color:#111;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏳ SEDANG UJIAN</span>';
+    }
+    if (st === 'timeout') return '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏰ TIMEOUT</span>';
+    if (st === 'selesai') return '<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ SELESAI</span>';
+    return st || '-';
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    let waktuCol = '-';
+    if (r.status === 'berlangsung') {
+      waktuCol = r.lewat_waktu ? '<span style="color:#dc2626;font-weight:700;">Habis</span>' : ('Sisa ' + fmtSisa(r.sisa_detik));
+      if (r.batas_at) waktuCol += '<br><small style="color:#666;">batas ' + String(r.batas_at).replace('T', ' ').substring(0, 19) + '</small>';
+    } else {
+      waktuCol = (r.selesai_at || r.mulai_at || '').replace('T', ' ').substring(0, 19) || '-';
+    }
+    const skor = (r.skor != null ? r.skor : '-') + '/' + (r.skor_max != null ? r.skor_max : '-');
+    const idSafe = String(r.id || '').replace(/'/g, "\\'");
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="hasil-row-check" data-id="${idSafe}" data-status="${r.status || ''}" data-nama="${String(r.nama || r.nisn || '').replace(/"/g, '&quot;')}" onchange="updateHasilSelectedCount()"></td>
+      <td>${i + 1}</td>
+      <td>${r.nisn || ''}</td>
+      <td>${r.nama || '-'}</td>
+      <td>${r.kelas || '-'}</td>
+      <td><b>${skor}</b></td>
+      <td>${statusBadge(r.status, r.lewat_waktu)}</td>
+      <td style="font-size:11px;">${waktuCol}</td>
+      <td style="text-align:center;"><button class="btn-edit" title="Detail jawaban" onclick="lihatDetailHasil('${idSafe}')">👁️</button></td>
+    </tr>`;
+  }).join('');
+  updateHasilSelectedCount();
 }
 
 function getSelectedHasilRows() {
