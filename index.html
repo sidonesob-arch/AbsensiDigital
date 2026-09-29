@@ -2287,7 +2287,67 @@ function getSavedActiveMenu() {
 function saveActiveMenu(menuName) {
   sessionStorage.setItem('activeMenu', menuName);
 }
+
+/** Tombol kembali HP: menu → dashboard; dashboard → konfirmasi keluar */
+function initBackButtonHandler() {
+  if (window._backHandlerReady) return;
+  window._backHandlerReady = true;
+  window._currentMenu = window._currentMenu || (sessionStorage.getItem('activeMenu') || 'dashboard');
+  window._navFromPopstate = false;
+  window._exitConfirmOpen = false;
+
+  try {
+    // Ganti state awal agar ada "lapisan" history di dalam app
+    history.replaceState({ menu: window._currentMenu, root: true }, '', '#' + encodeURIComponent(window._currentMenu));
+  } catch (e) { /* ignore */ }
+
+  window.addEventListener('popstate', function (ev) {
+    const cur = window._currentMenu || 'dashboard';
+
+    // Sedang di submenu / halaman lain → kembali ke dashboard (jangan keluar app)
+    if (cur !== 'dashboard') {
+      window._navFromPopstate = true;
+      const nav = document.querySelector('.sidebar .nav-item[data-menu="dashboard"]');
+      switchMenu('dashboard', nav, true);
+      try {
+        history.pushState({ menu: 'dashboard', t: Date.now() }, '', '#dashboard');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    // Sudah di dashboard → tanya dulu sebelum keluar
+    if (window._exitConfirmOpen) return;
+    window._exitConfirmOpen = true;
+    const ok = window.confirm('Yakin ingin keluar dari aplikasi?');
+    window._exitConfirmOpen = false;
+    if (ok) {
+      // Izinkan keluar: mundur lagi dari history (keluar PWA/tab jika memungkinkan)
+      try {
+        history.back();
+      } catch (e) { /* ignore */ }
+      // Fallback: jika masih di halaman yang sama setelah sebentar, arahkan blank (beberapa browser blokir)
+      setTimeout(function () {
+        if (document.visibilityState === 'visible') {
+          try {
+            // Untuk PWA / Android WebView kadang membantu
+            if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
+              window.navigator.app.exitApp();
+            }
+          } catch (e2) { /* ignore */ }
+        }
+      }, 200);
+    } else {
+      // Batal keluar: kembalikan state dashboard di history
+      try {
+        history.pushState({ menu: 'dashboard', t: Date.now() }, '', '#dashboard');
+      } catch (e) { /* ignore */ }
+    }
+  });
+}
+try { if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(function(){ try{initBackButtonHandler();}catch(e){} }, 0); } catch(e) {}
+window.addEventListener('load', function () { try { initBackButtonHandler(); } catch (e) {} });
 function restoreActiveMenu() {
+  try { initBackButtonHandler(); } catch (e) {}
   const savedMenu = getSavedActiveMenu();
   const navItem = document.querySelector(`.nav-item[data-menu="${savedMenu}"]`);
   const guestMenus = ['dashboard', 'cari', 'cek-syarat', 'siswa-fingerprint', 'validasi-lulusan', 'kelulusan'];
@@ -3097,9 +3157,26 @@ function switchMenu(menuName, el, isRestoring = false) {
   $$('.sidebar .nav-item').forEach(b => b.classList.remove('active'));
   $$('.section').forEach(s => s.classList.remove('active'));
   if (el) el.classList.add('active');
+  // Highlight parent nav for sub-menu (ujian-hasil, ujian-soal, dll.)
+  if (!el && menuName) {
+    const parentMap = { 'ujian-hasil': 'ujian-kelola', 'ujian-soal': 'ujian-kelola' };
+    const parent = parentMap[menuName] || menuName;
+    const navEl = document.querySelector('.sidebar .nav-item[data-menu="' + parent + '"]');
+    if (navEl) navEl.classList.add('active');
+  }
   const target = $(`menu-${menuName}`);
   if (target) target.classList.add('active');
   saveActiveMenu(menuName);
+
+  // Riwayat browser: tombol kembali HP
+  const prevMenu = window._currentMenu || 'dashboard';
+  window._currentMenu = menuName || 'dashboard';
+  if (!window._navFromPopstate && !isRestoring && prevMenu !== window._currentMenu) {
+    try {
+      history.pushState({ menu: window._currentMenu, t: Date.now() }, '', '#' + encodeURIComponent(window._currentMenu));
+    } catch (e) { /* ignore */ }
+  }
+  window._navFromPopstate = false;
   // Sinkronkan filter periode di form dengan pengaturan aktif
   if (typeof applyPeriodeToInputs === 'function') applyPeriodeToInputs();
 
@@ -7875,7 +7952,7 @@ function bukaBankSoal(ujianId) {
   const u = ujianListCache.find(x => String(x.id) === String(ujianId));
   setText('ujianSoalJudul', u ? u.judul : 'Ujian');
   setText('ujianSoalMapel', u ? `(${u.mapel})` : '');
-  switchMenu('ujian-soal', null, true);
+  switchMenu('ujian-soal', null, false);
   loadUjianSoalList();
 }
 
@@ -11007,7 +11084,7 @@ function bukaHasilUjian(ujianId) {
   _hasilUjianIdAktif = ujianId;
   const u = ujianListCache.find(x => String(x.id) === String(ujianId));
   setText('ujianHasilJudul', u ? (u.judul + (u.mapel ? ' · ' + u.mapel : '')) : '');
-  switchMenu('ujian-hasil', null, true);
+  switchMenu('ujian-hasil', null, false);
   loadHasilUjianData(ujianId);
 }
 
