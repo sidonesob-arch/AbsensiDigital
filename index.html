@@ -2289,59 +2289,86 @@ function saveActiveMenu(menuName) {
 }
 
 /** Tombol kembali HP: menu → dashboard; dashboard → konfirmasi keluar */
+function pushAppHistory(menu, extra) {
+  try {
+    const st = Object.assign({ menu: menu || 'dashboard', t: Date.now() }, extra || {});
+    history.pushState(st, '', '#' + encodeURIComponent(st.menu));
+  } catch (e) { /* ignore */ }
+}
+
+function armDashboardExitGuard() {
+  // Lapisan ekstra di history agar tombol kembali TIDAK langsung keluar dari dokumen
+  pushAppHistory('dashboard', { guard: true });
+}
+
 function initBackButtonHandler() {
   if (window._backHandlerReady) return;
   window._backHandlerReady = true;
   window._currentMenu = window._currentMenu || (sessionStorage.getItem('activeMenu') || 'dashboard');
   window._navFromPopstate = false;
   window._exitConfirmOpen = false;
+  window._allowAppExit = false;
 
   try {
-    // Ganti state awal agar ada "lapisan" history di dalam app
     history.replaceState({ menu: window._currentMenu, root: true }, '', '#' + encodeURIComponent(window._currentMenu));
   } catch (e) { /* ignore */ }
+  // Selalu sediakan 1 lapisan guard di dashboard agar back memicu popstate di halaman yang sama
+  if ((window._currentMenu || 'dashboard') === 'dashboard') {
+    armDashboardExitGuard();
+  }
 
   window.addEventListener('popstate', function (ev) {
+    // Setelah user setuju keluar, biarkan browser benar-benar mundur
+    if (window._allowAppExit) {
+      window._allowAppExit = false;
+      return;
+    }
+
     const cur = window._currentMenu || 'dashboard';
 
-    // Sedang di submenu / halaman lain → kembali ke dashboard (jangan keluar app)
+    // Submenu / halaman lain → ke dashboard + pasang guard lagi
     if (cur !== 'dashboard') {
       window._navFromPopstate = true;
       const nav = document.querySelector('.sidebar .nav-item[data-menu="dashboard"]');
       switchMenu('dashboard', nav, true);
-      try {
-        history.pushState({ menu: 'dashboard', t: Date.now() }, '', '#dashboard');
-      } catch (e) { /* ignore */ }
+      armDashboardExitGuard();
       return;
     }
 
-    // Sudah di dashboard → tanya dulu sebelum keluar
-    if (window._exitConfirmOpen) return;
-    window._exitConfirmOpen = true;
-    const ok = window.confirm('Yakin ingin keluar dari aplikasi?');
-    window._exitConfirmOpen = false;
-    if (ok) {
-      // Izinkan keluar: mundur lagi dari history (keluar PWA/tab jika memungkinkan)
-      try {
-        history.back();
-      } catch (e) { /* ignore */ }
-      // Fallback: jika masih di halaman yang sama setelah sebentar, arahkan blank (beberapa browser blokir)
-      setTimeout(function () {
-        if (document.visibilityState === 'visible') {
-          try {
-            // Untuk PWA / Android WebView kadang membantu
-            if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
-              window.navigator.app.exitApp();
-            }
-          } catch (e2) { /* ignore */ }
-        }
-      }, 200);
-    } else {
-      // Batal keluar: kembalikan state dashboard di history
-      try {
-        history.pushState({ menu: 'dashboard', t: Date.now() }, '', '#dashboard');
-      } catch (e) { /* ignore */ }
+    // Di dashboard: konfirmasi dulu (jangan biarkan langsung keluar)
+    if (window._exitConfirmOpen) {
+      armDashboardExitGuard();
+      return;
     }
+    window._exitConfirmOpen = true;
+    let ok = false;
+    try {
+      ok = window.confirm('Yakin ingin keluar dari aplikasi?');
+    } catch (e) {
+      ok = false;
+    }
+    window._exitConfirmOpen = false;
+
+    if (!ok) {
+      // Batal → pasang lagi guard agar back berikutnya tetap di app
+      armDashboardExitGuard();
+      return;
+    }
+
+    // OK keluar
+    window._allowAppExit = true;
+    try {
+      // Mundur melewati root app (ke halaman sebelumnya / tutup jika PWA)
+      history.back();
+    } catch (e) { /* ignore */ }
+
+    setTimeout(function () {
+      try {
+        if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
+          window.navigator.app.exitApp();
+        }
+      } catch (e2) { /* ignore */ }
+    }, 150);
   });
 }
 try { if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(function(){ try{initBackButtonHandler();}catch(e){} }, 0); } catch(e) {}
@@ -3175,6 +3202,10 @@ function switchMenu(menuName, el, isRestoring = false) {
     try {
       history.pushState({ menu: window._currentMenu, t: Date.now() }, '', '#' + encodeURIComponent(window._currentMenu));
     } catch (e) { /* ignore */ }
+    // Jika tiba di dashboard, pasang guard agar back berikutnya minta konfirmasi
+    if (window._currentMenu === 'dashboard' && typeof armDashboardExitGuard === 'function') {
+      armDashboardExitGuard();
+    }
   }
   window._navFromPopstate = false;
   // Sinkronkan filter periode di form dengan pengaturan aktif
