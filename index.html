@@ -5474,25 +5474,61 @@ function pulihkanAbsensiHariIni() {
   });
 }
 function samakanSesiSiswa() {
-  if (!confirm('Samakan jumlah sesi setiap siswa ke total sesi efektif real?\n\n• Sesi baru yang diisi: ~80% TW + ~20% Alpa\n• Data TL/Izin/Sakit/A/B yang sudah ada TIDAK dihapus\n• Siswa yang sebelumnya hampir 100% TW akan dikoreksi (~20% jadi Alpa)\n\nProses ini bisa memakan waktu jika data banyak.')) return;
-  showBigPopup('info', 'Samakan Sesi', '⏳ Mengisi sesi kurang (80% TW / 20% Alpa) & koreksi...', 0);
-  sendRequest({ action: 'samakan_sesi_siswa', koreksi: true }, res => {
-    closeBigPopup();
-    const ok = res && res.status === 'success';
-    let msg = (res && res.message) || (ok ? 'Selesai' : 'Gagal');
-    if (ok && res.top_koreksi && res.top_koreksi.length) {
-      const contoh = res.top_koreksi.slice(0, 5).map(function (x) {
-        return (x.nama || x.nisn) + ' (TW ' + x.tw_semula + ' → Alpa +' + x.jadi_alpa + ')';
-      }).join('<br>');
-      msg += '<br><br><small>Contoh koreksi TW→Alpa:<br>' + contoh + '</small>';
-    } else if (ok && res.top_kurang && res.top_kurang.length) {
-      const contoh = res.top_kurang.slice(0, 5).map(function (x) {
-        return (x.nama || x.nisn) + ' (kurang ' + x.kurang + ': TW ' + (x.isi_tw||0) + ' / A ' + (x.isi_alpa||0) + ')';
-      }).join('<br>');
-      msg += '<br><br><small>Contoh isi baru:<br>' + contoh + '</small>';
-    }
-    showBigPopup(ok ? 'success' : 'danger', 'Samakan Sesi Siswa', msg);
-  });
+  if (!confirm('Samakan jumlah sesi setiap siswa ke total sesi efektif real?\n\n• Sesi baru: ~80% TW + ~20% Alpa\n• Data TL/Izin/Sakit/B tidak dihapus\n• Diproses per batch (otomatis lanjut) agar tidak timeout\n\nProses bisa 1–3 menit jika siswa banyak.')) return;
+  const state = {
+    offset: 0,
+    batch: 20,
+    totalInserted: 0,
+    totalKoreksi: 0,
+    totalSiswa: 0,
+    logs: [],
+  };
+  function step() {
+    showBigPopup('info', 'Samakan Sesi',
+      '⏳ Batch offset ' + state.offset +
+      (state.totalSiswa ? ' / ' + state.totalSiswa : '') +
+      ' siswa...\nJangan tutup halaman.', 0);
+    sendRequest({
+      action: 'samakan_sesi_siswa',
+      koreksi: true,
+      offset_siswa: state.offset,
+      batch_siswa: state.batch,
+    }, res => {
+      if (!res || res.status !== 'success') {
+        closeBigPopup();
+        const errMsg = (res && res.message) || 'Gagal / timeout';
+        // Jika timeout di tengah jalan, tawarkan lanjut
+        if (state.offset > 0 && /compute|timeout|resource|failed/i.test(errMsg)) {
+          if (confirm('Batch gagal (resource). Lanjutkan dari offset ' + state.offset + '?')) {
+            // kecilkan batch
+            state.batch = Math.max(8, Math.floor(state.batch * 0.6));
+            setTimeout(step, 800);
+            return;
+          }
+        }
+        showBigPopup('danger', 'Samakan Sesi Siswa', errMsg +
+          (state.offset ? '<br><br>Progress terakhir offset: ' + state.offset : ''));
+        return;
+      }
+      if (res.total_siswa) state.totalSiswa = res.total_siswa;
+      state.totalInserted += (res.inserted_kehadiran || 0) + (res.inserted_historis || 0);
+      state.totalKoreksi += (res.koreksi_tw_ke_alpa || 0) + (res.koreksi_alpa_ke_tw || 0);
+      if (res.message) state.logs.push(res.message);
+
+      if (res.has_more) {
+        state.offset = res.next_offset || (state.offset + (res.processed || state.batch));
+        setTimeout(step, 400);
+        return;
+      }
+      closeBigPopup();
+      showBigPopup('success', 'Samakan Sesi Siswa',
+        'Selesai untuk ' + (state.totalSiswa || 'semua') + ' siswa.\n' +
+        'Baris baru: ' + state.totalInserted + ', koreksi status: ' + state.totalKoreksi + '.\n' +
+        'Target sesi efektif: ' + (res.total_sesi_efektif || '—') + '.' +
+        (state.logs.length ? '<br><br><small>' + state.logs.slice(-3).join('<br>') + '</small>' : ''));
+    });
+  }
+  step();
 }
 function setupTriggerHistoris() {
   if (!confirm('Simpan preferensi Trigger 23:59 dan jalankan verifikasi (auto-absen + pindah historis)?')) return;
