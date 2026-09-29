@@ -755,6 +755,19 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   </div>
 </div>
 
+
+<!-- Konfirmasi keluar (tombol kembali HP) — login & tamu -->
+<div id="exitConfirmModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+  <div style="background:#fff;border-radius:14px;max-width:340px;width:100%;padding:22px 20px;box-shadow:0 12px 40px rgba(0,0,0,0.35);text-align:center;">
+    <div style="font-size:28px;margin-bottom:8px;">🚪</div>
+    <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px;">Keluar Aplikasi?</div>
+    <p style="font-size:13px;color:#64748b;margin:0 0 18px;line-height:1.45;">Yakin ingin keluar dari Sistem Informasi Terpadu?</p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button type="button" id="exitConfirmCancelBtn" style="flex:1;padding:12px 10px;border-radius:10px;border:1px solid #cbd5e1;background:#f8fafc;font-weight:700;font-size:14px;cursor:pointer;color:#334155;">Batal</button>
+      <button type="button" id="exitConfirmOkBtn" style="flex:1;padding:12px 10px;border-radius:10px;border:none;background:#dc2626;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Keluar</button>
+    </div>
+  </div>
+</div>
 <div id="bigPopup" class="modal-popup">
   <div class="modal-popup-box" id="bigPopupBox">
     <div class="modal-popup-icon" id="bigPopupIcon">ℹ️</div>
@@ -2289,9 +2302,9 @@ function saveActiveMenu(menuName) {
 }
 
 /**
- * Tombol kembali HP — berlaku untuk SEMUA user (login / tamu).
- * Pola: setiap popstate langsung pushState lagi agar TIDAK pernah keluar
- * dari dokumen sebelum user menekan OK pada konfirmasi.
+ * Tombol kembali HP — SEMUA user (tamu & login).
+ * Pakai modal kustom (bukan window.confirm — sering gagal di Android Chrome).
+ * Setiap popstate: kunci history dulu, baru aksi.
  */
 function getActiveMenuName() {
   try {
@@ -2305,105 +2318,176 @@ function getActiveMenuName() {
 
 function lockAppHistory() {
   try {
-    history.pushState({ sit: 1, menu: getActiveMenuName(), t: Date.now() }, '', location.href);
+    history.pushState({ sit: 1, t: Date.now() }, '', location.href);
   } catch (e) { /* ignore */ }
+}
+
+function ensureHistoryLocked() {
+  lockAppHistory();
+  // Lapisan kedua: beberapa Android "menelan" 1 back tanpa dialog
+  setTimeout(function () {
+    try { lockAppHistory(); } catch (e) {}
+  }, 0);
 }
 
 function goDashboardFromBack() {
   window._navFromPopstate = true;
-  const nav = document.querySelector('.sidebar .nav-item[data-menu="dashboard"]');
-  if (typeof switchMenu === 'function') {
-    switchMenu('dashboard', nav, true);
-  } else {
+  window._currentMenu = 'dashboard';
+  try {
+    const nav = document.querySelector('.sidebar .nav-item[data-menu="dashboard"]');
+    if (typeof switchMenu === 'function') {
+      switchMenu('dashboard', nav, true);
+    } else {
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      const d = document.getElementById('menu-dashboard');
+      if (d) d.classList.add('active');
+      document.querySelectorAll('.sidebar .nav-item').forEach(function (b) { b.classList.remove('active'); });
+      if (nav) nav.classList.add('active');
+    }
+  } catch (e) {
     window._currentMenu = 'dashboard';
   }
   window._navFromPopstate = false;
 }
 
+function showExitConfirmModal() {
+  const modal = document.getElementById('exitConfirmModal');
+  if (!modal) {
+    // Fallback jika modal belum ada di DOM
+    const ok = window.confirm('Yakin ingin keluar dari aplikasi?');
+    if (ok) confirmExitApp();
+    else {
+      window._exitConfirmOpen = false;
+      ensureHistoryLocked();
+    }
+    return;
+  }
+  modal.style.display = 'flex';
+  window._exitConfirmOpen = true;
+}
+
+function hideExitConfirmModal() {
+  const modal = document.getElementById('exitConfirmModal');
+  if (modal) modal.style.display = 'none';
+  window._exitConfirmOpen = false;
+}
+
+function confirmExitApp() {
+  hideExitConfirmModal();
+  window._allowAppExit = true;
+  try {
+    if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
+      window.navigator.app.exitApp();
+      return;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    // Mundur beberapa langkah agar keluar dari “kunci” history app
+    history.go(-3);
+  } catch (e2) {
+    try { history.back(); } catch (e3) {}
+  }
+  setTimeout(function () {
+    if (document.visibilityState === 'visible') {
+      window._allowAppExit = false;
+      ensureHistoryLocked();
+      hideExitConfirmModal();
+    }
+  }, 400);
+}
+
+function cancelExitApp() {
+  hideExitConfirmModal();
+  window._allowAppExit = false;
+  ensureHistoryLocked();
+  if (getActiveMenuName() !== 'dashboard') goDashboardFromBack();
+}
+
+function bindExitConfirmButtons() {
+  const ok = document.getElementById('exitConfirmOkBtn');
+  const cancel = document.getElementById('exitConfirmCancelBtn');
+  if (ok && !ok._bound) {
+    ok._bound = true;
+    ok.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmExitApp();
+    });
+  }
+  if (cancel && !cancel._bound) {
+    cancel._bound = true;
+    cancel.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelExitApp();
+    });
+  }
+  // Klik backdrop = batal
+  const modal = document.getElementById('exitConfirmModal');
+  if (modal && !modal._bound) {
+    modal._bound = true;
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) cancelExitApp();
+    });
+  }
+}
+
 function initBackButtonHandler() {
   if (window._backHandlerReady) return;
   window._backHandlerReady = true;
-  window._currentMenu = window._currentMenu || (sessionStorage.getItem('activeMenu') || 'dashboard');
+  window._currentMenu = window._currentMenu || sessionStorage.getItem('activeMenu') || 'dashboard';
   window._navFromPopstate = false;
   window._exitConfirmOpen = false;
   window._allowAppExit = false;
 
-  // Kunci history sejak awal (login maupun tamu)
+  bindExitConfirmButtons();
+
   try {
-    history.replaceState({ sit: 1, menu: window._currentMenu, root: true }, '', location.href);
+    history.replaceState({ sit: 1, root: true, t: Date.now() }, '', location.href);
   } catch (e) { /* ignore */ }
-  lockAppHistory();
+  ensureHistoryLocked();
 
   window.addEventListener('popstate', function () {
-    // User sudah setuju keluar → jangan kunci lagi
-    if (window._allowAppExit) {
-      return;
-    }
+    if (window._allowAppExit) return;
 
-    // PENTING: langsung kunci lagi agar tetap di dokumen yang sama
-    lockAppHistory();
+    // Selalu kunci dulu — berlaku tamu & login
+    ensureHistoryLocked();
+
+    // Jika dialog sudah terbuka, jangan buka lagi
+    if (window._exitConfirmOpen) return;
 
     const cur = getActiveMenuName();
-
-    // Bukan dashboard → kembali ke dashboard (tanpa konfirmasi)
     if (cur !== 'dashboard') {
       goDashboardFromBack();
       return;
     }
 
-    // Dashboard → selalu tampilkan peringatan (login / tidak login sama)
-    if (window._exitConfirmOpen) return;
-    window._exitConfirmOpen = true;
+    // Dashboard: tampilkan modal kustom (selalu)
+    showExitConfirmModal();
+  });
 
-    // Pakai setTimeout agar pushState selesai dulu di beberapa browser Android
-    setTimeout(function () {
-      let ok = false;
-      try {
-        ok = window.confirm('Yakin ingin keluar dari aplikasi?');
-      } catch (e) {
-        ok = false;
-      }
-      window._exitConfirmOpen = false;
-
-      if (!ok) {
-        // Batal: history sudah terkunci, cukup pastikan menu dashboard
-        if (getActiveMenuName() !== 'dashboard') goDashboardFromBack();
-        return;
-      }
-
-      // OK: lepas kunci dan keluar
-      window._allowAppExit = true;
-      try {
-        // Hapus listener agar back berikutnya tidak terkunci lagi
-        // (tetap biarkan flag _allowAppExit)
-        history.back();
-      } catch (e) { /* ignore */ }
-
-      setTimeout(function () {
-        try {
-          if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
-            window.navigator.app.exitApp();
-          }
-        } catch (e2) { /* ignore */ }
-        // Jika masih di halaman yang sama (browser memblokir), kunci lagi
-        if (document.visibilityState === 'visible') {
-          window._allowAppExit = false;
-          lockAppHistory();
-        }
-      }, 300);
-    }, 10);
+  // pageshow: setelah back dari bfcache, kunci lagi
+  window.addEventListener('pageshow', function (ev) {
+    if (window._allowAppExit) return;
+    ensureHistoryLocked();
+    bindExitConfirmButtons();
   });
 }
 
-// Inisialisasi secepat mungkin — tidak tergantung status login
+// Boot seawal mungkin — tidak tergantung login
 (function bootBackHandler() {
-  function run() { try { initBackButtonHandler(); } catch (e) {} }
+  function run() {
+    try { initBackButtonHandler(); } catch (e) {}
+    try { bindExitConfirmButtons(); } catch (e) {}
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run);
   } else {
     run();
   }
   window.addEventListener('load', run);
+  // Cadangan: 1 detik kemudian (jika script lain mengganggu history)
+  setTimeout(run, 1000);
 })();
 function restoreActiveMenu() {
   try { initBackButtonHandler(); } catch (e) {}
