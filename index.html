@@ -1754,7 +1754,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <div class="form-group" style="flex:1; min-width:140px;"><label>Kelas:</label><select id="filterInputNilaiKelas"><option value="">-- Semua --</option></select></div>
           <div class="form-group" style="flex:1; min-width:160px;">
             <label>Input Nama Nilai Manual:</label>
-            <input type="text" id="inputNamaJenisNilai" placeholder="Misal: NH1, UH1, PTS (UTS→PTS), PAS (UAS→PAS)">
+            <input type="text" id="inputNamaJenisNilai" placeholder="Misal: NH1 (UH1/UH.1→NH1), PTS (UTS→PTS), PAS (UAS→PAS)">
           </div>
         </div>
         <button class="btn-primary" onclick="loadInputNilaiData()">Muat Data Siswa</button>
@@ -5027,13 +5027,19 @@ function loadInputNilaiData() {
 
 /** Normalisasi input nilai (koma → titik, buang spasi) */
 function normalizeJenisNilaiClient(raw) {
-  let j = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  let j = String(raw || '').trim().toUpperCase().replace(/\s+/g, '').replace(/\./g, '');
   if (!j) return 'NH1';
-  if (/^UTS[-_]?\d*$/i.test(j)) return j.replace(/^UTS/i, 'PTS').replace(/[-_]/g, '');
-  if (/^UAS[-_]?\d*$/i.test(j)) return j.replace(/^UAS/i, 'PAS').replace(/[-_]/g, '');
-  if (j.startsWith('UTS')) return ('PTS' + j.slice(3)).replace(/[-_]/g, '') || 'PTS';
-  if (j.startsWith('UAS')) return ('PAS' + j.slice(3)).replace(/[-_]/g, '') || 'PAS';
-  return String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ') || 'NH1';
+  j = j.replace(/[-_]/g, '');
+  // UH / UH1 / UH.1 → NH1
+  if (j === 'UH') return 'NH1';
+  if (/^UH\d+$/i.test(j)) return j.replace(/^UH/i, 'NH');
+  if (j.startsWith('UH')) return ('NH' + j.slice(2)) || 'NH1';
+  // UTS → PTS, UAS → PAS
+  if (j === 'UTS' || /^UTS\d+$/i.test(j)) return j.replace(/^UTS/i, 'PTS');
+  if (j.startsWith('UTS')) return ('PTS' + j.slice(3)) || 'PTS';
+  if (j === 'UAS' || /^UAS\d+$/i.test(j)) return j.replace(/^UAS/i, 'PAS');
+  if (j.startsWith('UAS')) return ('PAS' + j.slice(3)) || 'PAS';
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ').replace(/\./g, '') || 'NH1';
 }
 
 function normalizeNilaiInput(raw) {
@@ -7598,7 +7604,7 @@ function openFormUjianBaru() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="form-group" style="flex:1;min-width:100px;"><label>Durasi (menit):</label><input type="number" id="fmUjDurasi" value="60" min="5"></div>
-        <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="UH / PTS / PAS (UTS=PTS, UAS=PAS)"></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label>Jenis Nilai:</label><input type="text" id="fmUjJenisNilai" value="UH" placeholder="NH1 / PTS / PAS (UH=NH, UTS=PTS, UAS=PAS)"></div>
         <div class="form-group" style="flex:1;min-width:100px;"><label>Max Attempt:</label><input type="number" id="fmUjAttempt" value="1" min="1"></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
