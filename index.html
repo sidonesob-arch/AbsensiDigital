@@ -1327,33 +1327,48 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <h4 class="panel-title">🔓 Buka Blokir Alpa / Bolos (Akses Ujian)</h4>
         <p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.5;">
           Siswa dengan status <b>Alpa (A)</b> atau <b>Bolos (B)</b> hari ini otomatis <b>tidak bisa mengerjakan ujian</b>.
-          Gunakan menu ini untuk <b>membuka blokir</b> sementara agar siswa tetap boleh ujian (status absensi tidak diubah).
+          Centang siswa lalu gunakan tombol aksi, atau buka/blokir satu per satu.
         </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
           <button class="btn-primary btn-sm" style="width:auto;padding:8px 14px;" onclick="loadSiswaBlokirAlpa()">🔄 Muat Daftar Hari Ini</button>
-          <button class="btn-success btn-sm" style="width:auto;padding:8px 14px;" onclick="bukaBlokirAlpaSemua(true)">✅ Buka Blokir Semua</button>
-          <button class="btn-sm" style="width:auto;padding:8px 14px;background:#64748b;color:#fff;border:none;border-radius:6px;cursor:pointer;" onclick="bukaBlokirAlpaSemua(false)">🔒 Aktifkan Lagi Semua</button>
+          <select id="blokirAlpaFilter" onchange="renderBlokirAlpaTable()" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;">
+            <option value="semua">Tampilkan: Semua</option>
+            <option value="blokir">Hanya masih diblokir</option>
+            <option value="buka">Hanya sudah dibuka</option>
+          </select>
         </div>
-        <div id="blokirAlpaSummary" style="font-size:12px;margin-bottom:10px;color:var(--primary);font-weight:600;"></div>
+        <div id="blokirAlpaSummary" style="font-size:12px;margin-bottom:8px;color:var(--primary);font-weight:600;"></div>
+        <div id="blokirAlpaNamaList" style="font-size:11px;margin-bottom:10px;padding:8px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:none;line-height:1.6;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;padding:10px;background:#f1f5f9;border-radius:10px;border:1px solid #e2e8f0;">
+          <span style="font-size:12px;font-weight:700;color:var(--primary);">Aksi terpilih:</span>
+          <span id="blokirAlpaSelectedCount" style="font-size:11px;color:#64748b;">0 dipilih</span>
+          <button type="button" class="btn-success btn-sm" style="width:auto;padding:7px 12px;" onclick="bukaBlokirAlpaTerpilih(true)">✅ Buka Blokir Terpilih</button>
+          <button type="button" class="btn-sm" style="width:auto;padding:7px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;" onclick="bukaBlokirAlpaTerpilih(false)">🔒 Blokir Terpilih</button>
+          <button type="button" class="btn-success btn-sm" style="width:auto;padding:7px 12px;background:#15803d;" onclick="bukaBlokirAlpaSemua(true)">✅ Buka Semua</button>
+          <button type="button" class="btn-sm" style="width:auto;padding:7px 12px;background:#64748b;color:#fff;border:none;border-radius:6px;cursor:pointer;" onclick="bukaBlokirAlpaSemua(false)">🔒 Blokir Semua</button>
+          <button type="button" class="btn-sm" style="width:auto;padding:7px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;" onclick="clearBlokirAlpaSelection()">✖ Batal pilih</button>
+        </div>
         <div class="table-responsive">
           <table>
             <thead>
               <tr>
+                <th style="width:36px;text-align:center;"><input type="checkbox" id="blokirAlpaCheckAll" title="Pilih semua" onchange="toggleBlokirAlpaCheckAll(this.checked)"></th>
                 <th style="width:40px;">No</th>
                 <th>NISN</th>
-                <th>Nama</th>
+                <th>Nama Siswa</th>
                 <th>Kelas</th>
                 <th>Status Hari Ini</th>
-                <th style="width:140px;text-align:center;">Buka Blokir Ujian</th>
+                <th style="width:120px;text-align:center;">Status Blokir</th>
+                <th style="width:130px;text-align:center;">Aksi</th>
               </tr>
             </thead>
             <tbody id="tableBlokirAlpaBody">
-              <tr><td colspan="6" style="text-align:center;color:#94a3b8;">Klik "Muat Daftar Hari Ini"</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:#94a3b8;">Klik "Muat Daftar Hari Ini"</td></tr>
             </tbody>
           </table>
         </div>
         <p style="font-size:11px;color:var(--muted);margin-top:10px;">
-          ℹ️ Menyalakan <b>Buka Blokir</b> hanya mengizinkan ujian; data Alpa/Bolos di absensi tetap tercatat.
+          ℹ️ <b>Buka Blokir</b> hanya mengizinkan ujian; data Alpa/Bolos di absensi tetap tercatat.
           Untuk blokir manual permanen, gunakan kolom <b>Izin Ujian</b> di tab Izin Sidik Jari.
         </p>
       </div>
@@ -4680,42 +4695,124 @@ function hapusHariLibur(rowIndex) {
 }
 
 
+window._blokirAlpaList = [];
+
 function loadSiswaBlokirAlpa() {
   const tbody = $('tableBlokirAlpaBody');
   const sum = $('blokirAlpaSummary');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">⏳ Memuat...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">⏳ Memuat...</td></tr>';
   sendRequest({ action: 'get_siswa_blokir_alpa' }, res => {
     if (!res || res.status !== 'success') {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#dc2626;">${(res && res.message) || 'Gagal memuat'}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#dc2626;">${(res && res.message) || 'Gagal memuat'}</td></tr>`;
+      window._blokirAlpaList = [];
       return;
     }
     const list = res.data || [];
+    window._blokirAlpaList = list;
     const tgl = res.tanggal || '';
+    const masih = list.filter(s => !s.bypass_alpa_ujian);
+    const dibuka = list.filter(s => !!s.bypass_alpa_ujian);
     if (sum) {
-      sum.innerHTML = `Tanggal: <b>${tgl}</b> · Total Alpa/Bolos: <b>${res.total || 0}</b> · Masih diblokir ujian: <b style="color:#dc2626;">${res.total_blokir != null ? res.total_blokir : 0}</b> · Sudah dibuka: <b style="color:#16a34a;">${(res.sudah_buka || []).length}</b>`;
+      sum.innerHTML = `Tanggal: <b>${tgl}</b> · Total Alpa/Bolos: <b>${list.length}</b> · Masih diblokir: <b style="color:#dc2626;">${masih.length}</b> · Sudah dibuka: <b style="color:#16a34a;">${dibuka.length}</b>`;
     }
-    if (!list.length) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#16a34a;">✅ Tidak ada siswa Alpa/Bolos hari ini.</td></tr>';
-      return;
+    const namaBox = $('blokirAlpaNamaList');
+    if (namaBox) {
+      if (masih.length) {
+        const names = masih.map(s => `<b>${(s.nama || s.user_id || '-').replace(/</g,'&lt;')}</b> (${(s.kelas || '-').replace(/</g,'&lt;')})`).join(', ');
+        namaBox.style.display = 'block';
+        namaBox.innerHTML = `🔒 <b>Siswa masih diblokir ujian (${masih.length}):</b><br>${names}`;
+      } else if (list.length) {
+        namaBox.style.display = 'block';
+        namaBox.style.background = '#f0fdf4';
+        namaBox.style.borderColor = '#bbf7d0';
+        namaBox.innerHTML = `✅ Semua siswa Alpa/Bolos hari ini sudah <b>dibuka</b> akses ujiannya.`;
+      } else {
+        namaBox.style.display = 'none';
+        namaBox.innerHTML = '';
+      }
     }
-    tbody.innerHTML = list.map((s, i) => {
-      const on = !!s.bypass_alpa_ujian;
-      const st = (s.statuses || []).join(', ') || (s.hasAlpa ? 'A' : '') + (s.hasBolos ? ' B' : '');
-      return `<tr>
-        <td>${i + 1}</td>
-        <td>${(s.user_id || '').replace(/</g,'&lt;')}</td>
-        <td>${(s.nama || '-').replace(/</g,'&lt;')}</td>
-        <td>${(s.kelas || '-').replace(/</g,'&lt;')}</td>
-        <td><span style="font-weight:700;color:${s.hasAlpa ? '#dc2626' : '#ea580c'};">${st}</span></td>
-        <td style="text-align:center;">
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700;color:${on ? '#16a34a' : '#64748b'};">
-            <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleBukaBlokirAlpa('${String(s.user_id).replace(/'/g,"\\'")}', this.checked)">
-            ${on ? '🔓 Dibuka' : '🔒 Blokir'}
-          </label>
-        </td>
-      </tr>`;
-    }).join('');
+    renderBlokirAlpaTable();
   });
+}
+
+function renderBlokirAlpaTable() {
+  const tbody = $('tableBlokirAlpaBody');
+  if (!tbody) return;
+  const filter = ($('blokirAlpaFilter') && $('blokirAlpaFilter').value) || 'semua';
+  let list = window._blokirAlpaList || [];
+  if (filter === 'blokir') list = list.filter(s => !s.bypass_alpa_ujian);
+  else if (filter === 'buka') list = list.filter(s => !!s.bypass_alpa_ujian);
+
+  if (!(window._blokirAlpaList || []).length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#16a34a;">✅ Tidak ada siswa Alpa/Bolos hari ini.</td></tr>';
+    updateBlokirAlpaSelectedCount();
+    return;
+  }
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">Tidak ada data pada filter ini.</td></tr>';
+    updateBlokirAlpaSelectedCount();
+    return;
+  }
+
+  const ca = $('blokirAlpaCheckAll');
+  if (ca) { ca.checked = false; ca.indeterminate = false; }
+
+  tbody.innerHTML = list.map((s, i) => {
+    const on = !!s.bypass_alpa_ujian;
+    const st = (s.statuses || []).join(', ') || (s.hasAlpa ? 'A' : '') + (s.hasBolos ? ' B' : '');
+    const uid = String(s.user_id || '').replace(/'/g, "\\'");
+    const uidAttr = String(s.user_id || '').replace(/"/g, '&quot;');
+    const nama = (s.nama || '-').replace(/</g, '&lt;');
+    const statusBadge = on
+      ? '<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:800;">🔓 DIBUKA</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:800;">🔒 BLOKIR</span>';
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="blokir-alpa-check" data-id="${uidAttr}" data-nama="${nama.replace(/"/g,'&quot;')}" onchange="updateBlokirAlpaSelectedCount()"></td>
+      <td>${i + 1}</td>
+      <td>${uidAttr}</td>
+      <td style="font-weight:700;color:var(--primary);">${nama}</td>
+      <td>${(s.kelas || '-').replace(/</g,'&lt;')}</td>
+      <td><span style="font-weight:700;color:${s.hasAlpa ? '#dc2626' : '#ea580c'};">${st}</span></td>
+      <td style="text-align:center;">${statusBadge}</td>
+      <td style="text-align:center;white-space:nowrap;">
+        ${on
+          ? `<button type="button" class="btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;" onclick="toggleBukaBlokirAlpa('${uid}', false)">🔒 Blokir</button>`
+          : `<button type="button" class="btn-sm" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;" onclick="toggleBukaBlokirAlpa('${uid}', true)">🔓 Buka</button>`
+        }
+      </td>
+    </tr>`;
+  }).join('');
+  updateBlokirAlpaSelectedCount();
+}
+
+function updateBlokirAlpaSelectedCount() {
+  const n = document.querySelectorAll('.blokir-alpa-check:checked').length;
+  const el = $('blokirAlpaSelectedCount');
+  if (el) el.textContent = n + ' dipilih';
+  const all = document.querySelectorAll('.blokir-alpa-check');
+  const ca = $('blokirAlpaCheckAll');
+  if (ca && all.length) {
+    ca.checked = n === all.length && n > 0;
+    ca.indeterminate = n > 0 && n < all.length;
+  }
+}
+
+function toggleBlokirAlpaCheckAll(checked) {
+  document.querySelectorAll('.blokir-alpa-check').forEach(ch => { ch.checked = !!checked; });
+  updateBlokirAlpaSelectedCount();
+}
+
+function clearBlokirAlpaSelection() {
+  document.querySelectorAll('.blokir-alpa-check').forEach(ch => { ch.checked = false; });
+  const ca = $('blokirAlpaCheckAll');
+  if (ca) { ca.checked = false; ca.indeterminate = false; }
+  updateBlokirAlpaSelectedCount();
+}
+
+function getSelectedBlokirAlpaIds() {
+  return Array.from(document.querySelectorAll('.blokir-alpa-check:checked'))
+    .map(ch => ch.getAttribute('data-id'))
+    .filter(Boolean);
 }
 
 function toggleBukaBlokirAlpa(userId, buka) {
@@ -4725,10 +4822,30 @@ function toggleBukaBlokirAlpa(userId, buka) {
   });
 }
 
+function bukaBlokirAlpaTerpilih(buka) {
+  const ids = getSelectedBlokirAlpaIds();
+  if (!ids.length) return showBigPopup('warning', 'Info', 'Centang minimal satu siswa terlebih dahulu.');
+  const names = Array.from(document.querySelectorAll('.blokir-alpa-check:checked'))
+    .map(ch => ch.getAttribute('data-nama') || ch.getAttribute('data-id'))
+    .slice(0, 8);
+  const more = ids.length > 8 ? ' (+' + (ids.length - 8) + ' lainnya)' : '';
+  const msg = (buka ? 'Buka blokir ujian untuk ' : 'Blokir kembali akses ujian untuk ') +
+    ids.length + ' siswa terpilih?\n\n' + names.join(', ') + more;
+  if (!confirm(msg)) return;
+  showBigPopup('info', 'Memproses', '⏳ Menyimpan ' + ids.length + ' siswa...', 0);
+  sendRequest({ action: 'buka_blokir_alpa', user_ids: ids, buka: !!buka }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Buka Blokir Alpa', res.message || 'Selesai');
+    if (res.status === 'success') loadSiswaBlokirAlpa();
+  });
+}
+
 function bukaBlokirAlpaSemua(buka) {
+  const list = window._blokirAlpaList || [];
+  if (!list.length) return showBigPopup('warning', 'Info', 'Tidak ada data. Klik Muat Daftar dulu.');
   const msg = buka
-    ? 'Buka blokir Alpa/Bolos untuk SEMUA siswa yang Alpa/Bolos hari ini?\nMereka akan boleh mengerjakan ujian.'
-    : 'Aktifkan kembali blokir Alpa/Bolos untuk SEMUA siswa yang sebelumnya dibuka?';
+    ? 'Buka blokir Alpa/Bolos untuk SEMUA ' + list.length + ' siswa yang Alpa/Bolos hari ini?\nMereka akan boleh mengerjakan ujian.'
+    : 'Aktifkan kembali blokir Alpa/Bolos untuk SEMUA siswa di daftar?';
   if (!confirm(msg)) return;
   showBigPopup('info', 'Memproses', '⏳ Menyimpan...', 0);
   sendRequest({ action: 'buka_blokir_alpa', semua: true, buka: !!buka }, res => {
