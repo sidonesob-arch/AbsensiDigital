@@ -754,19 +754,38 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     var modal = document.getElementById("exitConfirmModal");
     if (ok) ok.onclick = function (e) {
       e && e.preventDefault();
+      e && e.stopPropagation();
       window.__sitExitOpen = false;
+      window._exitConfirmOpen = false;
       if (modal) modal.style.display = "none";
+      // Izinkan navigasi keluar — jangan kunci history lagi
       window.__sitAllowExit = true;
+      window._allowAppExit = true;
       try {
-        if (navigator.app && navigator.app.exitApp) navigator.app.exitApp();
-        else history.go(-5);
-      } catch (err) {}
-      setTimeout(function () {
-        if (document.visibilityState === "visible") {
-          window.__sitAllowExit = false;
-          lock2();
+        if (navigator.app && typeof navigator.app.exitApp === "function") {
+          navigator.app.exitApp();
+          return;
         }
-      }, 500);
+      } catch (err) {}
+      try {
+        if (window.Capacitor && window.Capacitor.App && typeof window.Capacitor.App.exitApp === "function") {
+          window.Capacitor.App.exitApp();
+          return;
+        }
+      } catch (err) {}
+      try { window.close(); } catch (err) {}
+      // Browser/PWA: ganti halaman kosong agar tidak kembali ke dashboard SPA
+      try {
+        window.location.replace("about:blank");
+      } catch (err) {
+        try {
+          var n = (history.length || 1);
+          if (n > 1) history.go(-(n - 1));
+          else window.location.href = "about:blank";
+        } catch (e2) {
+          try { window.location.href = "about:blank"; } catch (e3) {}
+        }
+      }
     };
     if (cancel) cancel.onclick = function (e) {
       e && e.preventDefault();
@@ -1561,6 +1580,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Data Lama</button>
           <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="jalankanAutoAbsenManual()">⚡ Jalankan Auto Absen</button>
           <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger 23:59</button>
+          <button class="btn-primary" style="width:auto; padding:8px 18px; background:#dc2626;" onclick="pulihkanAbsensiHariIni()">🔄 Pulihkan Absensi Hari Ini → TW</button>
+        </div>
+        <div style="background:#fef2f2; padding:10px 12px; border-radius:8px; border-left:4px solid #dc2626; margin-top:10px; font-size:12px; color:#991b1b;">
+          ⚠️ <b>Pulihkan Absensi Hari Ini</b>: mengembalikan SEMUA sesi absensi hari ini (siswa &amp; guru) ke status <b>TW</b> — menimpa A/B/Sakit/Izin/TL yang ada. Gunakan hanya jika data hilang/rusak karena bug.
         </div>
         <div id="historisInfo" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
       </div>
@@ -2488,6 +2511,9 @@ function confirmExitApp() {
   hideExitConfirmModal();
   window._allowAppExit = true;
   window.__sitAllowExit = true;
+  window.__sitExitOpen = false;
+  window._exitConfirmOpen = false;
+  // Native (Cordova / Capacitor)
   try {
     if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
       window.navigator.app.exitApp();
@@ -2495,18 +2521,25 @@ function confirmExitApp() {
     }
   } catch (e) { /* ignore */ }
   try {
-    // Mundur beberapa langkah agar keluar dari “kunci” history app
-    history.go(-3);
-  } catch (e2) {
-    try { history.back(); } catch (e3) {}
-  }
-  setTimeout(function () {
-    if (document.visibilityState === 'visible') {
-      window._allowAppExit = false;
-      ensureHistoryLocked();
-      hideExitConfirmModal();
+    if (window.Capacitor && window.Capacitor.App && typeof window.Capacitor.App.exitApp === 'function') {
+      window.Capacitor.App.exitApp();
+      return;
     }
-  }, 400);
+  } catch (e) { /* ignore */ }
+  try { window.close(); } catch (e) { /* ignore */ }
+  // Web / PWA: jangan history.go (sering hanya kembali ke dashboard SPA).
+  // Ganti ke halaman kosong agar aplikasi "keluar" dari sudut pandang user.
+  try {
+    window.location.replace('about:blank');
+  } catch (e2) {
+    try {
+      var n = (history.length || 1);
+      if (n > 1) history.go(-(n - 1));
+      else window.location.href = 'about:blank';
+    } catch (e3) {
+      try { window.location.href = 'about:blank'; } catch (e4) {}
+    }
+  }
 }
 
 function cancelExitApp() {
@@ -2514,10 +2547,11 @@ function cancelExitApp() {
   window._allowAppExit = false;
   window.__sitAllowExit = false;
   window.__sitExitOpen = false;
+  window._exitConfirmOpen = false;
+  // Tetap di halaman saat ini (biasanya dashboard); kunci history lagi
   ensureHistoryLocked();
   try { history.pushState({ sit: 1, t: Date.now() }, '', location.href); } catch (e) {}
   try { history.pushState({ sit: 1, t: Date.now() }, '', location.href); } catch (e) {}
-  if (getActiveMenuName() !== 'dashboard') goDashboardFromBack();
 }
 
 function bindExitConfirmButtons() {
@@ -5419,6 +5453,17 @@ function jalankanAutoAbsenManual() {
     closeBigPopup();
     const ok = res && res.status === 'success';
     showBigPopup(ok ? 'success' : 'danger', 'Auto Absen', (res && res.message) || (ok ? 'Selesai' : 'Gagal'));
+    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
+  });
+}
+function pulihkanAbsensiHariIni() {
+  if (!confirm('PULIHKAN absensi HARI INI?\n\nSemua sesi siswa & guru hari ini akan di-set ke status TW (termasuk yang Alpa/Bolos/Sakit/Izin/TL).\n\nTindakan ini tidak bisa dibatalkan otomatis.')) return;
+  if (!confirm('Konfirmasi sekali lagi: set SEMUA absensi hari ini → TW?')) return;
+  showBigPopup('info', 'Pemulihan', '⏳ Memulihkan absensi hari ini ke TW...', 0);
+  sendRequest({ action: 'pulihkan_absensi_hari_ini' }, res => {
+    closeBigPopup();
+    const ok = res && res.status === 'success';
+    showBigPopup(ok ? 'success' : 'danger', 'Pemulihan Absensi', (res && res.message) || (ok ? 'Selesai' : 'Gagal'));
     if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
   });
 }
