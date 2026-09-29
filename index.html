@@ -230,7 +230,7 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .profile-avatar:hover { border-color: #fff; transform: scale(1.05); }
 
 /* LOGIN NOTIF bell near profile */
-.login-notif-wrap { position: relative; margin-right: 4px; }
+.login-notif-wrap { position: relative; margin-right: 8px; }
 .login-notif-btn {
   width: 36px; height: 36px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.25);
@@ -250,8 +250,8 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 }
 .login-notif-badge.show { display: block; }
 .login-notif-panel {
-  position: absolute; top: 44px; right: 0;
-  width: min(400px, 94vw); max-height: 520px;
+  position: absolute; top: 44px; right: -8px;
+  width: min(420px, 92vw); max-height: 540px;
   background: #fff; border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.28);
   border: 1px solid var(--border, #d0dbe8);
@@ -265,17 +265,19 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }
 .login-notif-header small { font-weight: 500; opacity: 0.9; font-size: 11px; }
-.login-notif-body { overflow-y: auto; max-height: 340px; padding: 6px 0; }
+.login-notif-body { overflow-y: auto; max-height: 320px; padding: 4px 0; }
 .login-notif-item {
-  padding: 8px 10px; border-bottom: 1px solid #f1f5f9;
-  font-size: 12px; display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 12px 10px 14px; border-bottom: 1px solid #f1f5f9;
+  font-size: 12px; display: flex; gap: 10px; align-items: flex-start;
+  box-sizing: border-box; width: 100%;
 }
-.login-notif-item .login-notif-check { width: 16px; height: 16px; cursor: pointer; }
+.login-notif-item .login-notif-check { width: 16px; height: 16px; cursor: pointer; margin-top: 8px; flex-shrink: 0; }
 .login-notif-item:hover { background: #f8fafc; }
 .login-notif-item .ln-icon {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 34px; height: 34px; min-width: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; flex-shrink: 0; font-weight: 800; color: #fff;
+  font-size: 15px; flex-shrink: 0; font-weight: 800; color: #fff;
+  overflow: visible; line-height: 1;
 }
 .login-notif-item .ln-icon.guru { background: #16a34a; }
 .login-notif-item .ln-icon.siswa { background: #2563eb; }
@@ -707,6 +709,13 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <button type="button" onclick="loadLoginNotif()" style="font-size:11px;padding:4px 8px;border:none;border-radius:6px;background:var(--primary,#05285e);color:#fff;cursor:pointer;font-weight:700;">Tampil</button>
             </span>
             <button type="button" onclick="exportLoginNotifCsv()" title="Export CSV" style="margin-left:auto;font-size:11px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">⬇ CSV</button>
+          </div>
+          <div id="loginNotifActionBar" style="padding:8px 12px;background:#fff7ed;border-bottom:1px solid #fed7aa;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;">
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#9a3412;">
+              <input type="checkbox" id="loginNotifCheckAll" onchange="toggleLoginNotifCheckAll(this.checked)"> Pilih semua
+            </label>
+            <span id="loginNotifSelectedCount" style="color:#9a3412;">0 dipilih</span>
+            <button type="button" onclick="bulkDeleteLoginNotif()" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:800;">🗑️ Hapus terpilih</button>
           </div>
           <div class="login-notif-body" id="loginNotifBody">
             <div class="login-notif-empty">Memuat...</div>
@@ -2827,16 +2836,27 @@ function loadLoginNotif() {
         const roleLabel = String(r.role || '').replace('_', ' ');
         const kelas = r.kelas ? ' · ' + r.kelas : '';
         const waktu = showFullDate ? formatLoginDateTime(r.login_at) : formatLoginTime(r.login_at);
-        return `<div class="login-notif-item">
+        const rid = String(r.id != null ? r.id : (r._fid || (r.user_id + '|' + r.login_at)));
+        const ridEsc = rid.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const ridAttr = rid.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+        return `<div class="login-notif-item" data-log-id="${ridAttr}">
+          <input type="checkbox" class="login-notif-check" data-id="${ridAttr}" onchange="updateLoginNotifSelectedCount()">
           <div class="ln-icon ${ic.cls}">${ic.icon}</div>
           <div style="min-width:0;flex:1;">
             <div class="ln-name">${(r.nama || r.user_id || '-').replace(/</g,'&lt;')}</div>
             <div class="ln-meta">${roleLabel}${kelas} · ID ${(r.user_id || '-').toString().replace(/</g,'&lt;')}</div>
             <div class="ln-meta">🕐 ${waktu}</div>
           </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+            <button type="button" title="Edit log" onclick="event.stopPropagation();editLoginNotifItem('${ridEsc}')" style="border:none;background:#e2e8f0;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:12px;">✏️</button>
+            <button type="button" title="Hapus log" onclick="event.stopPropagation();deleteLoginNotifItem('${ridEsc}')" style="border:none;background:#fee2e2;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:12px;">🗑️</button>
+          </div>
         </div>`;
       }).join('');
     }
+    const ca = $('loginNotifCheckAll');
+    if (ca) { ca.checked = false; ca.indeterminate = false; }
+    updateLoginNotifSelectedCount();
     const c = res.count_by_role || {};
     const parts = [];
     if (c.guru) parts.push(c.guru + ' guru');
