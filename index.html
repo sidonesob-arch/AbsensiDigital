@@ -267,9 +267,10 @@ body { background: var(--bg); margin: 0; padding: 0; display: flex; flex-directi
 .login-notif-header small { font-weight: 500; opacity: 0.9; font-size: 11px; }
 .login-notif-body { overflow-y: auto; max-height: 340px; padding: 6px 0; }
 .login-notif-item {
-  padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
-  font-size: 12px; display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 10px; border-bottom: 1px solid #f1f5f9;
+  font-size: 12px; display: flex; gap: 8px; align-items: flex-start;
 }
+.login-notif-item .login-notif-check { width: 16px; height: 16px; cursor: pointer; }
 .login-notif-item:hover { background: #f8fafc; }
 .login-notif-item .ln-icon {
   width: 32px; height: 32px; border-radius: 50%;
@@ -2875,6 +2876,95 @@ function exportLoginNotifCsv() {
   a.download = 'log_login_' + new Date().toISOString().substring(0, 10) + '.csv';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function updateLoginNotifSelectedCount() {
+  const n = document.querySelectorAll('.login-notif-check:checked').length;
+  const el = $('loginNotifSelectedCount');
+  if (el) el.textContent = n + ' dipilih';
+  const all = document.querySelectorAll('.login-notif-check');
+  const ca = $('loginNotifCheckAll');
+  if (ca && all.length) {
+    ca.checked = n === all.length && n > 0;
+    ca.indeterminate = n > 0 && n < all.length;
+  }
+}
+
+function toggleLoginNotifCheckAll(checked) {
+  document.querySelectorAll('.login-notif-check').forEach(ch => { ch.checked = !!checked; });
+  updateLoginNotifSelectedCount();
+}
+
+function getSelectedLoginNotifIds() {
+  return Array.from(document.querySelectorAll('.login-notif-check:checked')).map(ch => ch.getAttribute('data-id')).filter(Boolean);
+}
+
+function deleteLoginNotifItem(id) {
+  if (!id) return;
+  if (!confirm('Hapus log login ini?')) return;
+  sendRequest({ action: 'delete_login_log', ids: [id] }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hapus Log', res.message || 'Selesai');
+    if (res.status === 'success') {
+      loadLoginNotif();
+      refreshLoginNotifBadge();
+    }
+  });
+}
+
+function bulkDeleteLoginNotif() {
+  const ids = getSelectedLoginNotifIds();
+  if (!ids.length) return showBigPopup('warning', 'Info', 'Centang minimal satu log.');
+  if (!confirm('Hapus ' + ids.length + ' log login terpilih?')) return;
+  showBigPopup('info', 'Menghapus', '⏳ Menghapus ' + ids.length + ' log...', 0);
+  sendRequest({ action: 'delete_login_log', ids: ids }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hapus Log', res.message || 'Selesai');
+    if (res.status === 'success') {
+      loadLoginNotif();
+      refreshLoginNotifBadge();
+    }
+  });
+}
+
+function editLoginNotifItem(id) {
+  const rows = window._loginNotifLastRows || [];
+  const r = rows.find(x => String(x.id) === String(id) || String(x._fid) === String(id));
+  if (!r) return showBigPopup('warning', 'Info', 'Data log tidak ditemukan di cache. Muat ulang dulu.');
+  const formHtml = `
+    <div class="form-group"><label>Nama:</label>
+      <input type="text" id="fmLogNama" value="${String(r.nama || '').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="form-group"><label>Role:</label>
+      <select id="fmLogRole">
+        <option value="siswa" ${String(r.role) === 'siswa' ? 'selected' : ''}>siswa</option>
+        <option value="guru" ${String(r.role) === 'guru' ? 'selected' : ''}>guru</option>
+      </select>
+    </div>
+    <div class="form-group"><label>User ID (NISN/NIP):</label>
+      <input type="text" id="fmLogUserId" value="${String(r.user_id || '').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="form-group"><label>Kelas:</label>
+      <input type="text" id="fmLogKelas" value="${String(r.kelas || '').replace(/"/g, '&quot;')}" placeholder="opsional">
+    </div>
+    <p style="font-size:11px;color:#64748b;margin:0;">Waktu login tidak diubah. Hanya metadata yang bisa diedit.</p>
+  `;
+  openFormModal('✏️ Edit Log Login', formHtml, () => {
+    const payload = {
+      action: 'update_login_log',
+      id: id,
+      nama: $('fmLogNama')?.value?.trim(),
+      role: $('fmLogRole')?.value,
+      user_id: $('fmLogUserId')?.value?.trim(),
+      kelas: $('fmLogKelas')?.value?.trim(),
+    };
+    sendRequest(payload, res => {
+      showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Edit Log', res.message || 'Selesai');
+      if (res.status === 'success') {
+        closeFormModal();
+        loadLoginNotif();
+      }
+    });
+  });
 }
 
 function refreshLoginNotifBadge() {
