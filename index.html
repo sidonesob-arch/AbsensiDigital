@@ -674,12 +674,15 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 </head>
 <body>
 <script>
-/* Penanganan tombol kembali — dijalankan paling awal, login/tamu sama */
+/* Penanganan tombol kembali — pola "klik sekali lagi untuk keluar"
+   Berlaku untuk tamu & user login. Tidak mengandalkan exitApp native. */
 (function () {
   if (window.__sitBackEarly) return;
   window.__sitBackEarly = true;
   window.__sitAllowExit = false;
-  window.__sitExitOpen = false;
+  window.__sitLastBackAt = 0;
+  window.__sitBackToastTimer = null;
+  var EXIT_WINDOW_MS = 2200;
 
   function lock() {
     try { history.pushState({ sit: 1, t: Date.now() }, "", location.href); } catch (e) {}
@@ -708,39 +711,136 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       var d = document.getElementById("menu-dashboard");
       if (d) d.classList.add("active");
       window._currentMenu = "dashboard";
+      document.querySelectorAll(".sidebar .nav-item").forEach(function (b) { b.classList.remove("active"); });
+      var nav = document.querySelector('[data-menu="dashboard"]');
+      if (nav) nav.classList.add("active");
     } catch (e2) {}
   }
 
-  function showExit() {
-    if (window.__sitExitOpen) return;
-    window.__sitExitOpen = true;
-    var m = document.getElementById("exitConfirmModal");
-    if (m) {
-      m.style.display = "flex";
-      return;
-    }
-    // fallback
-    var ok = false;
-    try { ok = window.confirm("Yakin ingin keluar dari aplikasi?"); } catch (e) {}
-    window.__sitExitOpen = false;
-    if (ok) {
-      window.__sitAllowExit = true;
-      try { history.go(-5); } catch (e) {}
-    } else {
-      lock2();
-    }
+  function ensureToastEl() {
+    var el = document.getElementById("sitBackToast");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "sitBackToast";
+    el.setAttribute("role", "status");
+    el.style.cssText = [
+      "position:fixed", "left:50%", "bottom:72px", "transform:translateX(-50%) translateY(12px)",
+      "max-width:92vw", "width:auto", "padding:12px 18px", "border-radius:24px",
+      "background:rgba(15,23,42,0.92)", "color:#fff", "font-size:13px", "font-weight:700",
+      "line-height:1.35", "text-align:center", "z-index:100000",
+      "box-shadow:0 8px 28px rgba(0,0,0,0.35)", "opacity:0", "pointer-events:none",
+      "transition:opacity .2s ease, transform .2s ease", "font-family:Segoe UI,Roboto,sans-serif"
+    ].join(";");
+    el.textContent = "Klik sekali lagi untuk keluar";
+    (document.body || document.documentElement).appendChild(el);
+    return el;
   }
 
+  function showBackToast(msg) {
+    var el = ensureToastEl();
+    el.textContent = msg || "Klik sekali lagi untuk keluar";
+    el.style.opacity = "1";
+    el.style.transform = "translateX(-50%) translateY(0)";
+    if (window.__sitBackToastTimer) clearTimeout(window.__sitBackToastTimer);
+    window.__sitBackToastTimer = setTimeout(function () {
+      el.style.opacity = "0";
+      el.style.transform = "translateX(-50%) translateY(12px)";
+    }, EXIT_WINDOW_MS);
+  }
+
+  function hideBackToast() {
+    var el = document.getElementById("sitBackToast");
+    if (!el) return;
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) translateY(12px)";
+  }
+
+  function tryNativeExit() {
+    try {
+      if (navigator.app && typeof navigator.app.exitApp === "function") {
+        navigator.app.exitApp();
+        return true;
+      }
+    } catch (e) {}
+    try {
+      var Cap = window.Capacitor;
+      if (Cap) {
+        if (Cap.Plugins && Cap.Plugins.App && typeof Cap.Plugins.App.exitApp === "function") {
+          Cap.Plugins.App.exitApp();
+          return true;
+        }
+        if (Cap.App && typeof Cap.App.exitApp === "function") {
+          Cap.App.exitApp();
+          return true;
+        }
+      }
+    } catch (e) {}
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.exitApp === "function") {
+        window.AndroidBridge.exitApp();
+        return true;
+      }
+    } catch (e) {}
+    try {
+      if (window.Android && typeof window.Android.exitApp === "function") {
+        window.Android.exitApp();
+        return true;
+      }
+    } catch (e) {}
+    try { window.close(); } catch (e) {}
+    return false;
+  }
+
+  function exitNow() {
+    window.__sitAllowExit = true;
+    window._allowAppExit = true;
+    hideBackToast();
+    if (tryNativeExit()) return;
+    // Web / PWA non-native: lepaskan perangkap history agar browser keluar dari SPA
+    try {
+      var n = history.length || 1;
+      if (n > 1) {
+        history.go(-(n - 1));
+        return;
+      }
+    } catch (e) {}
+    try {
+      if (document.referrer && document.referrer !== location.href) {
+        location.replace(document.referrer);
+        return;
+      }
+    } catch (e) {}
+    // Cadangan: biarkan popstate berikutnya keluar (jangan lock lagi)
+  }
+
+  window.doExitApp = exitNow;
+
   function onPop() {
-    if (window.__sitAllowExit) return;
-    lock2();
-    if (window.__sitExitOpen) return;
+    if (window.__sitAllowExit || window._allowAppExit) return;
+
     var cur = menuNow();
+    // Bukan dashboard → kembali ke dashboard (1x back)
     if (cur !== "dashboard") {
+      lock2();
+      window.__sitLastBackAt = 0;
+      hideBackToast();
       toDash();
       return;
     }
-    showExit();
+
+    // Dashboard: pola double-back
+    var now = Date.now();
+    if (window.__sitLastBackAt && (now - window.__sitLastBackAt) < EXIT_WINDOW_MS) {
+      // Klik kedua dalam jendela waktu → keluar
+      window.__sitLastBackAt = 0;
+      exitNow();
+      return;
+    }
+
+    // Klik pertama → toast + kunci history lagi
+    window.__sitLastBackAt = now;
+    lock2();
+    showBackToast("Klik sekali lagi untuk keluar");
   }
 
   try { history.replaceState({ sit: 1, root: 1 }, "", location.href); } catch (e) {}
@@ -749,76 +849,34 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
   window.addEventListener("DOMContentLoaded", function () {
     lock2();
+    ensureToastEl();
+    // Modal lama (jika masih ada di DOM) — arahkan ke pola yang sama
     var ok = document.getElementById("exitConfirmOkBtn");
     var cancel = document.getElementById("exitConfirmCancelBtn");
     var modal = document.getElementById("exitConfirmModal");
     if (ok) ok.onclick = function (e) {
       e && e.preventDefault();
-      e && e.stopPropagation();
-      window.__sitExitOpen = false;
-      window._exitConfirmOpen = false;
       if (modal) modal.style.display = "none";
-      // Izinkan keluar — tutup aplikasi (native), jangan arahkan ke halaman kosong
-      window.__sitAllowExit = true;
-      window._allowAppExit = true;
-      if (typeof window.doExitApp === "function") {
-        window.doExitApp();
-        return;
-      }
-      try {
-        if (navigator.app && typeof navigator.app.exitApp === "function") {
-          navigator.app.exitApp();
-          return;
-        }
-      } catch (err) {}
-      try {
-        var Cap = window.Capacitor;
-        if (Cap) {
-          if (Cap.Plugins && Cap.Plugins.App && typeof Cap.Plugins.App.exitApp === "function") {
-            Cap.Plugins.App.exitApp();
-            return;
-          }
-          if (Cap.App && typeof Cap.App.exitApp === "function") {
-            Cap.App.exitApp();
-            return;
-          }
-        }
-      } catch (err) {}
-      try {
-        if (window.AndroidBridge && typeof window.AndroidBridge.exitApp === "function") {
-          window.AndroidBridge.exitApp();
-          return;
-        }
-      } catch (err) {}
-      try {
-        if (window.Android && typeof window.Android.exitApp === "function") {
-          window.Android.exitApp();
-          return;
-        }
-      } catch (err) {}
-      try { window.close(); } catch (err) {}
-      // Fallback web: jangan ganti ke about:blank
-      try {
-        if (window.opener) { window.close(); return; }
-      } catch (err) {}
-      try {
-        var n = (history.length || 1);
-        if (n > 1) history.go(-(n - 1));
-      } catch (err) {}
+      exitNow();
     };
     if (cancel) cancel.onclick = function (e) {
       e && e.preventDefault();
-      window.__sitExitOpen = false;
       if (modal) modal.style.display = "none";
+      window.__sitLastBackAt = 0;
       lock2();
     };
     if (modal) modal.addEventListener("click", function (e) {
       if (e.target === modal) {
-        window.__sitExitOpen = false;
         modal.style.display = "none";
+        window.__sitLastBackAt = 0;
         lock2();
       }
     });
+  });
+
+  window.addEventListener("pageshow", function () {
+    if (window.__sitAllowExit) return;
+    lock2();
   });
 })();
 </script>
@@ -2583,7 +2641,8 @@ window.doExitApp = doExitApp;
 
 function confirmExitApp() {
   hideExitConfirmModal();
-  doExitApp();
+  if (typeof window.doExitApp === 'function') window.doExitApp();
+  else doExitApp();
 }
 
 function cancelExitApp() {
@@ -2628,7 +2687,8 @@ function bindExitConfirmButtons() {
 }
 
 function initBackButtonHandler() {
-  // Handler utama ada di script awal (__sitBackEarly). Ini hanya mengikat tombol modal.
+  // Handler utama: script awal (__sitBackEarly) — pola "klik sekali lagi untuk keluar".
+  // Di sini hanya sinkron flag; jangan pasang popstate kedua.
   try {
     if (typeof bindExitConfirmButtons === 'function') bindExitConfirmButtons();
   } catch (e) {}
