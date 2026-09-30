@@ -758,9 +758,13 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       window.__sitExitOpen = false;
       window._exitConfirmOpen = false;
       if (modal) modal.style.display = "none";
-      // Izinkan navigasi keluar — jangan kunci history lagi
+      // Izinkan keluar — tutup aplikasi (native), jangan arahkan ke halaman kosong
       window.__sitAllowExit = true;
       window._allowAppExit = true;
+      if (typeof window.doExitApp === "function") {
+        window.doExitApp();
+        return;
+      }
       try {
         if (navigator.app && typeof navigator.app.exitApp === "function") {
           navigator.app.exitApp();
@@ -768,24 +772,39 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         }
       } catch (err) {}
       try {
-        if (window.Capacitor && window.Capacitor.App && typeof window.Capacitor.App.exitApp === "function") {
-          window.Capacitor.App.exitApp();
+        var Cap = window.Capacitor;
+        if (Cap) {
+          if (Cap.Plugins && Cap.Plugins.App && typeof Cap.Plugins.App.exitApp === "function") {
+            Cap.Plugins.App.exitApp();
+            return;
+          }
+          if (Cap.App && typeof Cap.App.exitApp === "function") {
+            Cap.App.exitApp();
+            return;
+          }
+        }
+      } catch (err) {}
+      try {
+        if (window.AndroidBridge && typeof window.AndroidBridge.exitApp === "function") {
+          window.AndroidBridge.exitApp();
+          return;
+        }
+      } catch (err) {}
+      try {
+        if (window.Android && typeof window.Android.exitApp === "function") {
+          window.Android.exitApp();
           return;
         }
       } catch (err) {}
       try { window.close(); } catch (err) {}
-      // Browser/PWA: ganti halaman kosong agar tidak kembali ke dashboard SPA
+      // Fallback web: jangan ganti ke about:blank
       try {
-        window.location.replace("about:blank");
-      } catch (err) {
-        try {
-          var n = (history.length || 1);
-          if (n > 1) history.go(-(n - 1));
-          else window.location.href = "about:blank";
-        } catch (e2) {
-          try { window.location.href = "about:blank"; } catch (e3) {}
-        }
-      }
+        if (window.opener) { window.close(); return; }
+      } catch (err) {}
+      try {
+        var n = (history.length || 1);
+        if (n > 1) history.go(-(n - 1));
+      } catch (err) {}
     };
     if (cancel) cancel.onclick = function (e) {
       e && e.preventDefault();
@@ -2513,39 +2532,58 @@ function hideExitConfirmModal() {
   window._exitConfirmOpen = false;
 }
 
-function confirmExitApp() {
-  hideExitConfirmModal();
+function doExitApp() {
+  // Tutup aplikasi native; jangan arahkan ke about:blank
   window._allowAppExit = true;
   window.__sitAllowExit = true;
   window.__sitExitOpen = false;
   window._exitConfirmOpen = false;
-  // Native (Cordova / Capacitor)
   try {
     if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
       window.navigator.app.exitApp();
-      return;
+      return true;
     }
   } catch (e) { /* ignore */ }
   try {
-    if (window.Capacitor && window.Capacitor.App && typeof window.Capacitor.App.exitApp === 'function') {
-      window.Capacitor.App.exitApp();
-      return;
+    var Cap = window.Capacitor;
+    if (Cap) {
+      if (Cap.Plugins && Cap.Plugins.App && typeof Cap.Plugins.App.exitApp === 'function') {
+        Cap.Plugins.App.exitApp();
+        return true;
+      }
+      if (Cap.App && typeof Cap.App.exitApp === 'function') {
+        Cap.App.exitApp();
+        return true;
+      }
     }
   } catch (e) { /* ignore */ }
-  try { window.close(); } catch (e) { /* ignore */ }
-  // Web / PWA: jangan history.go (sering hanya kembali ke dashboard SPA).
-  // Ganti ke halaman kosong agar aplikasi "keluar" dari sudut pandang user.
   try {
-    window.location.replace('about:blank');
-  } catch (e2) {
-    try {
-      var n = (history.length || 1);
-      if (n > 1) history.go(-(n - 1));
-      else window.location.href = 'about:blank';
-    } catch (e3) {
-      try { window.location.href = 'about:blank'; } catch (e4) {}
+    if (window.AndroidBridge && typeof window.AndroidBridge.exitApp === 'function') {
+      window.AndroidBridge.exitApp();
+      return true;
     }
-  }
+  } catch (e) { /* ignore */ }
+  try {
+    if (window.Android && typeof window.Android.exitApp === 'function') {
+      window.Android.exitApp();
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  try { window.close(); return true; } catch (e) { /* ignore */ }
+  try {
+    if (window.opener) { window.close(); return true; }
+  } catch (e) { /* ignore */ }
+  try {
+    var n = (history.length || 1);
+    if (n > 1) { history.go(-(n - 1)); return true; }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+window.doExitApp = doExitApp;
+
+function confirmExitApp() {
+  hideExitConfirmModal();
+  doExitApp();
 }
 
 function cancelExitApp() {
@@ -4305,6 +4343,20 @@ function loadMapelUnik(callback) {
   });
 }
 
+/** Bobot nilai hadir: TW=1, TL=0.8, Sakit=0.75, Izin=0.5, Alpa/Bolos=0 */
+function hitungNilaiHadirDariStatus(tw, tl, sakit, izin) {
+  const t = Number(tw) || 0;
+  const l = Number(tl) || 0;
+  const s = Number(sakit) || 0;
+  const i = Number(izin) || 0;
+  return t * 1 + l * 0.8 + s * 0.75 + i * 0.5;
+}
+function hitungPersenHadir(nilaiHadir, totalSesi) {
+  const tot = Number(totalSesi) || 0;
+  if (tot <= 0) return 0;
+  return Math.round((Number(nilaiHadir) / tot) * 10000) / 100;
+}
+
 function loadRekap() {
   let tglMulai = ($('rekapTglMulai').value || '').trim();
   let tglSelesai = ($('rekapTglSelesai').value || '').trim();
@@ -4326,12 +4378,19 @@ function loadRekap() {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Tidak ada data.</td></tr>';
       return;
     }
-    tbody.innerHTML = res.data.map(s => `
+    tbody.innerHTML = res.data.map(s => {
+      // TW=1, TL=0.8 (override bobot lama TL=1 dari server bila ada)
+      const nilaiHadir = hitungNilaiHadirDariStatus(s.tw, s.tl, s.sakit, s.izin);
+      const totalEfektif = Number(res.totalSesiEfektif) || Number(s.totalSesiEfektif) || 0;
+      const denom = totalEfektif > 0 ? totalEfektif : (Number(s.totalSesiTercatat) || 0);
+      const persen = hitungPersenHadir(nilaiHadir, denom);
+      return `
       <tr>
         <td>${s.id}</td><td>${s.nama}</td><td>${s.unit}</td>
         <td>${s.tw}</td><td>${s.tl}</td><td>${s.izin}</td><td>${s.sakit}</td><td>${s.alpa}</td><td>${s.bolos}</td>
-        <td><b>${s.totalSesiTercatat}</b></td><td><b>${Number(s.nilaiHadir).toFixed(2)}</b></td><td><b>${s.persentase}%</b></td>
-      </tr>`).join('');
+        <td><b>${s.totalSesiTercatat}</b></td><td><b>${Number(nilaiHadir).toFixed(2)}</b></td><td><b>${persen}%</b></td>
+      </tr>`;
+    }).join('');
   });
 }
 function toggleRekapFilter() {
@@ -4522,6 +4581,27 @@ function loadCekSyarat() {
 }
 function renderSyaratResult(d) {
   const container = $('syaratResult');
+  // Override bobot: TW=1, TL=0.8 (sebelumnya TL=1 di server)
+  if (d && typeof hitungNilaiHadirDariStatus === 'function') {
+    const nh = hitungNilaiHadirDariStatus(d.tw, d.tl, d.sakit, d.izin);
+    d.nilaiHadir = Math.round(nh * 100) / 100;
+    const tot = Number(d.totalSesiEfektif) || 0;
+    d.persen = tot > 0 ? Math.round((nh / tot) * 10000) / 100 : 0;
+    const batas = Number(d.batasPersen);
+    if (!isNaN(batas) && tot > 0) {
+      d.memenuhi = d.persen >= batas;
+      d.warna = d.memenuhi ? 'hijau' : (d.persen >= batas - 2 ? 'kuning' : 'merah');
+      if (d.memenuhi) {
+        d.pesan = d.isKelas9
+          ? (d.pesan && /lulus|naik|memenuhi/i.test(d.pesan) ? d.pesan : 'MEMENUHI SYARAT LULUS')
+          : (d.pesan && /naik|memenuhi/i.test(d.pesan) ? d.pesan : 'MEMENUHI SYARAT NAIK KELAS');
+      } else {
+        d.pesan = d.isKelas9
+          ? 'TIDAK MEMENUHI SYARAT LULUS'
+          : 'TIDAK MEMENUHI SYARAT NAIK KELAS';
+      }
+    }
+  }
   const statusIcon = d.memenuhi ? (d.isKelas9 ? '🎓' : '✅') : '❌';
   container.innerHTML = `
     <div class="syarat-card ${d.warna}" id="syaratCard">
@@ -4536,8 +4616,8 @@ function renderSyaratResult(d) {
         <div style="font-size:10px; color:#64748b; padding:0 0 4px;">(akumulasi unik tanggal+sesi dari data kehadiran & historis; jumlah sesi per hari bisa berbeda)</div>
       </div>
       <ul class="syarat-list">
-        <li><span>Tepat Waktu (TW)</span><b>${d.tw}</b></li>
-        <li><span>Terlambat (TL)</span><b>${d.tl}</b></li>
+        <li><span>Tepat Waktu (TW = 1)</span><b>${d.tw}</b></li>
+        <li><span>Terlambat (TL = 0.8)</span><b>${d.tl}</b></li>
         <li><span>Sakit (0.75 hadir)</span><b>${d.sakit}</b></li>
         <li><span>Izin (0.5 hadir)</span><b>${d.izin}</b></li>
         <li><span>Alpa</span><b>${d.alpa}</b></li>
@@ -4546,7 +4626,7 @@ function renderSyaratResult(d) {
       <div class="syarat-total">
         <div class="total-label">Persentase Kehadiran Akurat</div>
         <div class="total-value">${d.persen}%</div>
-        <div style="font-size:11px; color:#666; margin-top:4px;">Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%)</div>
+        <div style="font-size:11px; color:#666; margin-top:4px;">Nilai Hadir: ${d.nilaiHadir} / ${d.totalSesiEfektif} (Batas: ${d.batasPersen}%) · TW=1 · TL=0.8</div>
       </div>
       <div class="syarat-status ${d.warna}">${statusIcon} ${d.pesan}</div>
       <div class="syarat-actions">
