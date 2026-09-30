@@ -1707,10 +1707,11 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <h4 class="panel-title">📦 Manajemen Historis</h4>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Data Lama</button>
-          <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="jalankanAutoAbsenManual()">⚡ Jalankan Auto Absen</button>
-          <button class="btn-success" style="width:auto; padding:8px 18px;" onclick="setupTriggerHistoris()">⚙️ Pasang Trigger 23:59</button>
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:#dc2626;" onclick="pulihkanAbsensiHariIni()">🔄 Pulihkan Absensi Hari Ini → TW</button>
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:#7c3aed;" onclick="samakanSesiSiswa()">📐 Samakan Sesi Siswa → Target Real</button>
+        </div>
+        <div style="background:#f0fdf4; padding:10px 12px; border-radius:8px; border-left:4px solid #16a34a; margin-top:10px; font-size:12px; color:#166534;">
+          📦 <b>Pindahkan Data Lama</b>: memindahkan data kehadiran <b>sebelum hari ini</b> ke tabel Historis. Jalankan manual bila data harian sudah final.
         </div>
         <div style="background:#fef2f2; padding:10px 12px; border-radius:8px; border-left:4px solid #dc2626; margin-top:10px; font-size:12px; color:#991b1b;">
           ⚠️ <b>Pulihkan Absensi Hari Ini</b>: mengembalikan SEMUA sesi absensi hari ini (siswa &amp; guru) ke status <b>TW</b> — menimpa A/B/Sakit/Izin/TL yang ada. Gunakan hanya jika data hilang/rusak karena bug.
@@ -5629,7 +5630,7 @@ function simpanPinGuru(userId) {
 }
 
 function loadHistorisInfo() {
-  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke Historis. Tombol di atas: pindah manual, jalankan auto-absen, atau pasang preferensi jadwal 23:59.');
+  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke Historis lewat tombol "Pindahkan Data Lama". Fitur Jalankan Auto Absen & Pasang Trigger telah dinonaktifkan untuk mencegah pengisian status massal yang tidak disengaja.');
 }
 function moveToHistorisManual() {
   if (!confirm('Pindahkan semua data kehadiran SEBELUM hari ini ke Historis?')) return;
@@ -5638,16 +5639,6 @@ function moveToHistorisManual() {
     closeBigPopup();
     const ok = res && res.status === 'success';
     showBigPopup(ok ? 'success' : 'danger', 'Historis', (res && res.message) ? String(res.message).replace(/\n/g, '<br>') : (ok ? 'Selesai' : 'Gagal'));
-    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
-  });
-}
-function jalankanAutoAbsenManual() {
-  if (!confirm('Jalankan Auto Absen sekarang untuk sesi hari ini?')) return;
-  showBigPopup('info', 'Auto Absen', '⏳ Memproses auto absen...', 0);
-  sendRequest({ action: 'manual_auto_absen' }, res => {
-    closeBigPopup();
-    const ok = res && res.status === 'success';
-    showBigPopup(ok ? 'success' : 'danger', 'Auto Absen', (res && res.message) || (ok ? 'Selesai' : 'Gagal'));
     if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
   });
 }
@@ -5718,17 +5709,6 @@ function samakanSesiSiswa() {
     });
   }
   step();
-}
-function setupTriggerHistoris() {
-  if (!confirm('Simpan preferensi Trigger 23:59 dan jalankan verifikasi (auto-absen + pindah historis)?')) return;
-  showBigPopup('info', 'Trigger', '⏳ Memasang preferensi & verifikasi...', 0);
-  sendRequest({ action: 'setup_trigger' }, res => {
-    closeBigPopup();
-    const ok = res && res.status === 'success';
-    const msg = (res && res.message) ? String(res.message).replace(/\n/g, '<br>') : (ok ? 'Selesai' : 'Gagal — pastikan Edge Function sudah di-deploy ulang');
-    showBigPopup(ok ? 'success' : 'danger', 'Trigger 23:59', msg);
-    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
-  });
 }
 
 function loadJadwalMapel() {
