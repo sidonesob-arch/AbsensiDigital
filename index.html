@@ -2020,16 +2020,102 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     <!-- JADWAL MAPEL -->
     <div id="menu-jadwal-mapel" class="section">
       <h3 style="color:var(--primary); font-size:15px;">📅 Jadwal Mapel</h3>
-      <div class="jadwal-header">
-        <h4>Hari: <span id="jadwalHariText">-</span></h4>
-        <div class="sub" id="jadwalInfoDisplay">Menampilkan jadwal mapel Anda</div>
+      <div class="jadwal-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          <h4 style="margin:0;">Jadwal Pelajaran</h4>
+          <div class="sub" id="jadwalInfoDisplay" style="font-size:12px; color:#64748b; margin-top:4px;">PDF dari aSc Timetables atau tabel manual</div>
+        </div>
+        <div id="jadwalAdminBtns" style="display:none; gap:6px; flex-wrap:wrap;">
+          <button class="btn-sm" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="openUploadJadwalPdfModal()">📤 Upload PDF Guru</button>
+          <button class="btn-success btn-sm" onclick="openFormJadwalMapel()">➕ Tambah Baris</button>
+          <button class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="downloadTemplateJadwalMapel()">📄 Template Excel</button>
+          <button class="btn-sm" style="background:#1d6f42;color:#fff;border:none;border-radius:5px;cursor:pointer;" onclick="openImportJadwalMapelModal()">📥 Import Excel</button>
+          <button class="btn-excel btn-sm" style="width:auto;" onclick="exportJadwalMapelExcel()">⬇️ Export</button>
+        </div>
       </div>
-      <div class="table-responsive">
-        <table>
-          <thead><tr><th>No</th><th>Waktu</th><th>Mapel</th><th>Kelas</th></tr></thead>
-          <tbody id="tableJadwalBody"><tr><td colspan="4" style="text-align:center;">Memuat...</td></tr></tbody>
-        </table>
+
+      <!-- PDF VIEWER (utama untuk guru) -->
+      <div id="jadwalPdfPanel" style="margin:12px 0; display:none;">
+        <div style="background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <div style="padding:10px 14px; background:linear-gradient(135deg,#05285e,#0a3a7a); color:#fff; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-weight:800; font-size:13px;" id="jadwalPdfTitle">Jadwal PDF</div>
+              <div style="font-size:11px; opacity:0.9;" id="jadwalPdfMeta"></div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <a id="jadwalPdfOpenBtn" href="#" target="_blank" rel="noopener" class="btn-sm" style="background:#fff;color:#05285e;text-decoration:none;padding:6px 12px;border-radius:6px;font-weight:700;">↗ Buka tab baru</a>
+              <a id="jadwalPdfDownloadBtn" href="#" download class="btn-sm" style="background:#16a34a;color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;font-weight:700;">⬇️ Unduh PDF</a>
+            </div>
+          </div>
+          <div id="jadwalPdfFrameWrap" style="height:min(75vh, 820px); background:#e2e8f0;">
+            <iframe id="jadwalPdfFrame" title="Jadwal Mapel PDF" style="width:100%;height:100%;border:none;"></iframe>
+          </div>
+        </div>
       </div>
+      <div id="jadwalPdfEmpty" style="display:none; background:#fff7ed; border:1px solid #fdba74; border-radius:10px; padding:16px; margin:12px 0; font-size:13px; color:#9a3412;">
+        📄 Belum ada file jadwal PDF untuk akun Anda. Hubungi admin untuk mengunggah hasil export aSc Timetables.
+      </div>
+
+      <!-- ADMIN: daftar PDF per guru -->
+      <div id="jadwalPdfAdminList" style="display:none; margin:12px 0;">
+        <div style="font-weight:700; color:var(--primary); margin-bottom:8px; font-size:13px;">📁 Daftar PDF Jadwal per Guru</div>
+        <div class="table-responsive">
+          <table>
+            <thead><tr><th>No</th><th>NIP / ID</th><th>Nama Guru</th><th>File</th><th>Periode</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody id="tableJadwalPdfBody"><tr><td colspan="7" style="text-align:center;">Memuat...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <details id="jadwalTabelDetails" style="margin-top:14px; background:#fff; border-radius:10px; border:1px solid var(--border); padding:10px 12px;">
+        <summary style="cursor:pointer; font-weight:700; color:var(--primary); font-size:13px;">📋 Jadwal berbentuk tabel (opsional / Excel)</summary>
+        <div style="margin-top:10px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 8px; align-items:flex-end;">
+            <div class="form-group" style="margin:0; min-width:130px;">
+              <label>Hari</label>
+              <select id="jadwalFilterHari" onchange="loadJadwalMapel()">
+                <option value="Semua">Semua Hari</option>
+                <option value="Senin">Senin</option>
+                <option value="Selasa">Selasa</option>
+                <option value="Rabu">Rabu</option>
+                <option value="Kamis">Kamis</option>
+                <option value="Jumat">Jumat</option>
+                <option value="Sabtu">Sabtu</option>
+                <option value="Minggu">Minggu</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0; min-width:120px;">
+              <label>Kelas</label>
+              <select id="jadwalFilterKelas" onchange="loadJadwalMapel()">
+                <option value="">-- Semua --</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0; flex:1; min-width:140px;">
+              <label>Cari</label>
+              <input type="text" id="jadwalSearch" placeholder="Mapel / guru / kelas..." oninput="loadJadwalMapelDebounced()">
+            </div>
+            <button class="btn-primary btn-sm" style="width:auto;" onclick="loadJadwalMapel()">🔄 Muat</button>
+          </div>
+          <div id="jadwalTotalInfo" style="font-size:12px; color:#64748b; margin-bottom:6px;"></div>
+          <div id="jadwalHariText" style="display:none;"></div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Hari</th>
+                  <th>Waktu</th>
+                  <th>Mapel</th>
+                  <th>Kelas</th>
+                  <th>Guru</th>
+                  <th class="no-print" id="jadwalThAksi" style="display:none;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tableJadwalBody"><tr><td colspan="7" style="text-align:center;">Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
     </div>
 
     <!-- INPUT NILAI -->
@@ -3668,7 +3754,7 @@ function switchMenu(menuName, el, isRestoring = false) {
       refreshPeriodeAktif(function () { loadUjianTersediaSiswa(); });
     } else loadUjianTersediaSiswa();
   }
-  if (menuName === 'jadwal-mapel') loadJadwalMapel();
+  if (menuName === 'jadwal-mapel') initJadwalMapelPage();
   if (menuName === 'cek-syarat') loadCekSyarat();
   if (menuName === 'lihat-nilai-saya') loadNilaiSaya();
   if (menuName === 'kelulusan') loadPengumumanKelulusan();
@@ -4721,7 +4807,7 @@ function renderSyaratResult(d) {
         <div class="syarat-periode">📅 ${d.periodeMulai} s/d ${d.periodeAkhir}</div>
       </div>
       <div style="background:#e8f0fe; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px;">
-        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Absensi Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
+        <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>📅 Hari Sekolah Berjalan</span><b>${d.jumlahHariEfektif} hari</b></div>
         <div style="display:flex; justify-content:space-between; padding:3px 0;"><span>🕐 Akumulasi Sesi Efektif</span><b>${d.totalSesiEfektif} sesi</b></div>
         <div style="font-size:10px; color:#64748b; padding:0 0 4px;">(akumulasi unik tanggal+sesi dari data kehadiran & historis; jumlah sesi per hari bisa berbeda)</div>
       </div>
@@ -5711,19 +5797,522 @@ function samakanSesiSiswa() {
   step();
 }
 
-function loadJadwalMapel() {
+// ===================== JADWAL MAPEL =====================
+let _jadwalCache = [];
+let _jadwalDebounce = null;
+const HARI_JADWAL = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+
+function isJadwalAdmin() {
+  return userRole === 'super_admin' || userRole === 'admin';
+}
+
+function initJadwalMapelPage() {
+  const adminBtns = $('jadwalAdminBtns');
+  const thAksi = $('jadwalThAksi');
+  const pdfAdmin = $('jadwalPdfAdminList');
+  if (adminBtns) adminBtns.style.display = isJadwalAdmin() ? 'flex' : 'none';
+  if (thAksi) thAksi.style.display = isJadwalAdmin() ? '' : 'none';
+  if (pdfAdmin) pdfAdmin.style.display = isJadwalAdmin() ? 'block' : 'none';
+
   const now = new Date();
-  const hariIni = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][now.getDay()];
-  setText('jadwalHariText', hariIni);
-  const pinGuru = userRole === 'guru' && userData ? (userData.nip || '') : '';
-  sendRequest({ action: 'get_jadwal_mapel', hari: hariIni, pin: pinGuru }, res => {
-    const tbody = $('tableJadwalBody');
-    if (res.status === 'success' && res.data.length > 0) {
-      tbody.innerHTML = res.data.map((item, idx) => `<tr><td>${idx + 1}</td><td>${item.waktu}</td><td><b>${item.mapel}</b></td><td>${item.kelas}</td></tr>`).join('');
-    } else tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tidak ada jadwal mapel untuk Anda hari ini.</td></tr>';
+  const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const todayName = days[now.getDay()];
+  const sel = $('jadwalFilterHari');
+  if (sel && !sel.dataset.inited) {
+    sel.value = todayName === 'Minggu' ? 'Senin' : todayName;
+    sel.dataset.inited = '1';
+  }
+  if ($('jadwalHariText')) setText('jadwalHariText', (sel && sel.value) ? sel.value : todayName);
+  setText('jadwalInfoDisplay', isJadwalAdmin()
+    ? 'Upload PDF hasil aSc Timetables per guru, atau kelola jadwal tabel (Excel).'
+    : (userRole === 'guru' ? 'Jadwal Anda ditampilkan dari file PDF yang diunggah admin.' : 'Jadwal pelajaran sekolah.'));
+
+  // PDF: guru lihat milik sendiri; admin lihat daftar
+  loadJadwalPdfView();
+  if (isJadwalAdmin()) loadJadwalPdfAdminList();
+
+  // tabel opsional
+  sendRequest({ action: 'get_kelas' }, res => {
+    const s = $('jadwalFilterKelas');
+    if (!s) return;
+    const cur = s.value;
+    s.innerHTML = '<option value="">-- Semua --</option>';
+    (res.data || []).forEach(k => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = k;
+      s.appendChild(o);
+    });
+    if (userRole === 'siswa' && userData && userData.kelas) s.value = userData.kelas;
+    else if (cur) s.value = cur;
+    loadJadwalMapel();
+  });
+  setTimeout(function () { if (!_jadwalCache.length) loadJadwalMapel(); }, 400);
+}
+
+function showJadwalPdf(url, meta) {
+  const panel = $('jadwalPdfPanel');
+  const empty = $('jadwalPdfEmpty');
+  if (empty) empty.style.display = 'none';
+  if (!panel) return;
+  panel.style.display = 'block';
+  const frame = $('jadwalPdfFrame');
+  // Chrome/Android sering butuh #toolbar=1
+  const src = url + (url.indexOf('#') >= 0 ? '' : '#toolbar=1&navpanes=0');
+  if (frame) frame.src = src;
+  if ($('jadwalPdfOpenBtn')) { $('jadwalPdfOpenBtn').href = url; }
+  if ($('jadwalPdfDownloadBtn')) { $('jadwalPdfDownloadBtn').href = url; }
+  if ($('jadwalPdfTitle')) setText('jadwalPdfTitle', (meta && meta.nama_guru) ? ('Jadwal · ' + meta.nama_guru) : 'Jadwal PDF');
+  if ($('jadwalPdfMeta')) {
+    const bits = [];
+    if (meta && meta.file_name) bits.push(meta.file_name);
+    if (meta && meta.tahun_ajaran) bits.push(meta.tahun_ajaran);
+    if (meta && meta.semester) bits.push(meta.semester);
+    if (meta && meta.uploaded_at) bits.push(String(meta.uploaded_at).substring(0, 16).replace('T', ' '));
+    setText('jadwalPdfMeta', bits.join(' · '));
+  }
+}
+
+function hideJadwalPdf(showEmpty) {
+  if ($('jadwalPdfPanel')) $('jadwalPdfPanel').style.display = 'none';
+  if ($('jadwalPdfFrame')) $('jadwalPdfFrame').src = 'about:blank';
+  if ($('jadwalPdfEmpty')) $('jadwalPdfEmpty').style.display = showEmpty ? 'block' : 'none';
+}
+
+function loadJadwalPdfView() {
+  // Admin: tidak auto-tampilkan satu PDF (pakai daftar)
+  if (isJadwalAdmin()) {
+    hideJadwalPdf(false);
+    return;
+  }
+  if (userRole !== 'guru' || !userData) {
+    hideJadwalPdf(false);
+    return;
+  }
+  const guruId = userData.nip || userData.id || '';
+  const nama = userData.nama || '';
+  sendRequest({ action: 'get_jadwal_pdf', guru_id: guruId, nama: nama }, res => {
+    if (res.status === 'success' && res.found && res.data && res.data.file_url) {
+      showJadwalPdf(res.data.file_url, res.data);
+    } else {
+      hideJadwalPdf(true);
+    }
   });
 }
-function loadJadwalMapelForGuru() { loadJadwalMapel(); }
+
+function loadJadwalPdfAdminList() {
+  const tbody = $('tableJadwalPdfBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">⏳ Memuat...</td></tr>';
+  sendRequest({ action: 'list_jadwal_pdf' }, res => {
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal'}</td></tr>`;
+      return;
+    }
+    const rows = res.data || [];
+    window._jadwalPdfList = rows;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada data guru.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((r, i) => {
+      const status = r.has_pdf
+        ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">PDF ada</span>'
+        : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">Belum upload</span>';
+      const fileCell = r.has_pdf
+        ? `<a href="${r.file_url}" target="_blank" rel="noopener" style="color:#05285e;font-weight:600;">${r.file_name || 'Lihat PDF'}</a>`
+        : '-';
+      const periode = [r.tahun_ajaran, r.semester].filter(Boolean).join(' · ') || '-';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${r.guru_id || ''}</td>
+        <td><b>${r.nama_guru || ''}</b></td>
+        <td>${fileCell}</td>
+        <td style="font-size:11px;">${periode}</td>
+        <td>${status}</td>
+        <td style="white-space:nowrap;text-align:center;">
+          <button class="btn-sm" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;" onclick='openUploadJadwalPdfModal(${JSON.stringify(String(r.guru_id||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>${r.has_pdf ? '🔄 Ganti' : '📤 Upload'}</button>
+          ${r.has_pdf ? `<button class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;margin-left:4px;" onclick='previewJadwalPdfAdmin(${JSON.stringify(String(r.file_url||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>👁</button>
+          <button class="btn-danger" title="Hapus PDF" onclick='hapusJadwalPdf(${JSON.stringify(String(r.guru_id||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>🗑️</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  });
+}
+
+function previewJadwalPdfAdmin(url, nama) {
+  if (!url) return;
+  showJadwalPdf(url, { nama_guru: nama });
+  try { $('jadwalPdfPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+}
+
+function openUploadJadwalPdfModal(preGuruId, preNama) {
+  if (!isJadwalAdmin()) return showBigPopup('warning', 'Akses', 'Hanya admin yang dapat upload PDF jadwal.');
+  const list = window._jadwalPdfList || [];
+  const opts = list.map(g => {
+    const sel = preGuruId && String(g.guru_id) === String(preGuruId) ? 'selected' : '';
+    return `<option value="${String(g.guru_id).replace(/"/g,'&quot;')}" data-nama="${String(g.nama_guru||'').replace(/"/g,'&quot;')}" ${sel}>${g.nama_guru || g.guru_id}${g.has_pdf ? ' ✓' : ''}</option>`;
+  }).join('');
+  const p = window.periodeAktif || {};
+  const html = `
+    <p style="font-size:12px;color:#666;margin:0 0 10px;">Unggah PDF jadwal guru dari <b>aSc Timetables</b> (export PDF per guru). File akan tampil otomatis saat guru login.</p>
+    <div class="form-group"><label>Guru *</label>
+      <select id="fmJadwalPdfGuru">${opts || '<option value="">-- Tidak ada data guru --</option>'}</select>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;min-width:120px;"><label>Tahun Ajaran</label>
+        <input type="text" id="fmJadwalPdfTA" value="${(p.tahun_ajaran||'').replace(/"/g,'&quot;')}" placeholder="2025/2026">
+      </div>
+      <div class="form-group" style="flex:1;min-width:120px;"><label>Semester</label>
+        <select id="fmJadwalPdfSem">
+          <option value="ganjil" ${(p.semester||'')==='ganjil'?'selected':''}>Ganjil</option>
+          <option value="genap" ${(p.semester||'')==='genap'?'selected':''}>Genap</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label>File PDF *</label>
+      <input type="file" id="fmJadwalPdfFile" accept="application/pdf,.pdf">
+    </div>
+    <div id="fmJadwalPdfInfo" style="font-size:12px;color:var(--primary);"></div>
+  `;
+  openFormModal('📤 Upload PDF Jadwal Guru', html, submitUploadJadwalPdf);
+  setTimeout(() => {
+    if (preGuruId && $('fmJadwalPdfGuru')) $('fmJadwalPdfGuru').value = preGuruId;
+    const inp = $('fmJadwalPdfFile');
+    if (inp) inp.onchange = function () {
+      const f = inp.files && inp.files[0];
+      const info = $('fmJadwalPdfInfo');
+      if (!f || !info) return;
+      info.innerHTML = '📎 ' + f.name + ' (' + Math.round(f.size/1024) + ' KB)';
+    };
+  }, 60);
+}
+
+function submitUploadJadwalPdf() {
+  const sel = $('fmJadwalPdfGuru');
+  const guruId = sel && sel.value;
+  if (!guruId) return showBigPopup('warning', 'Peringatan', 'Pilih guru terlebih dahulu.');
+  const opt = sel.options[sel.selectedIndex];
+  const nama = opt ? (opt.getAttribute('data-nama') || opt.textContent || '') : '';
+  const fileInp = $('fmJadwalPdfFile');
+  const file = fileInp && fileInp.files && fileInp.files[0];
+  if (!file) return showBigPopup('warning', 'Peringatan', 'Pilih file PDF.');
+  if (file.type && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    return showBigPopup('warning', 'Peringatan', 'File harus PDF.');
+  }
+  if (file.size > 15 * 1024 * 1024) return showBigPopup('warning', 'Peringatan', 'Maksimal 15 MB.');
+
+  showBigPopup('info', 'Upload', '⏳ Mengunggah PDF jadwal...', 0);
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const dataUrl = String(e.target.result || '');
+    sendRequest({
+      action: 'upload_jadwal_pdf',
+      guru_id: guruId,
+      nama_guru: nama.replace(/\s*✓\s*$/, '').trim(),
+      fileName: file.name,
+      dataBase64: dataUrl,
+      tahun_ajaran: $('fmJadwalPdfTA')?.value || '',
+      semester: $('fmJadwalPdfSem')?.value || '',
+    }, res => {
+      closeBigPopup();
+      showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Upload PDF', res.message || 'Selesai');
+      if (res.status === 'success') {
+        closeFormModal();
+        loadJadwalPdfAdminList();
+        if (res.url) showJadwalPdf(res.url, { nama_guru: nama, file_name: file.name });
+      }
+    });
+  };
+  reader.onerror = function () {
+    closeBigPopup();
+    showBigPopup('danger', 'Error', 'Gagal membaca file.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function hapusJadwalPdf(guruId, nama) {
+  if (!isJadwalAdmin()) return;
+  if (!confirm('Hapus PDF jadwal ' + (nama || guruId) + '?')) return;
+  sendRequest({ action: 'delete_jadwal_pdf', guru_id: guruId }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Hapus PDF', res.message || 'Selesai');
+    if (res.status === 'success') {
+      loadJadwalPdfAdminList();
+      hideJadwalPdf(false);
+    }
+  });
+}
+
+
+function loadJadwalMapelDebounced() {
+  clearTimeout(_jadwalDebounce);
+  _jadwalDebounce = setTimeout(loadJadwalMapel, 350);
+}
+
+function loadJadwalMapel() {
+  const hari = ($('jadwalFilterHari') && $('jadwalFilterHari').value) || 'Semua';
+  const kelas = ($('jadwalFilterKelas') && $('jadwalFilterKelas').value) || '';
+  const search = ($('jadwalSearch') && $('jadwalSearch').value) || '';
+  setText('jadwalHariText', hari);
+
+  const payload = {
+    action: 'get_jadwal_mapel',
+    hari: hari === 'Semua' ? 'Semua' : hari,
+    semua: hari === 'Semua',
+    kelas: kelas,
+    search: search,
+  };
+  if (userRole === 'guru' && userData) {
+    payload.pin = userData.nip || userData.id || '';
+    payload.guru_id = userData.nip || userData.id || '';
+  }
+  if (userRole === 'siswa' && userData && userData.kelas && !kelas) {
+    payload.kelas = userData.kelas;
+  }
+
+  const tbody = $('tableJadwalBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">⏳ Memuat...</td></tr>';
+
+  sendRequest(payload, res => {
+    if (!tbody) return;
+    if (res.status !== 'success') {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#b91c1c;text-align:center;">${res.message || 'Gagal memuat jadwal'}</td></tr>`;
+      if ($('jadwalTotalInfo')) $('jadwalTotalInfo').textContent = '';
+      return;
+    }
+    _jadwalCache = res.data || [];
+    if ($('jadwalTotalInfo')) {
+      $('jadwalTotalInfo').textContent = 'Total: ' + _jadwalCache.length + ' jadwal' +
+        (hari && hari !== 'Semua' ? ' · ' + hari : '');
+    }
+    const canEdit = isJadwalAdmin();
+    if (!_jadwalCache.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada jadwal. ' +
+        (canEdit ? 'Klik <b>Tambah Jadwal</b> atau <b>Import Excel</b>.' : '') + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _jadwalCache.map((item, idx) => {
+      const waktu = item.waktu || (
+        (item.jam_mulai || '') + (item.jam_selesai ? '-' + item.jam_selesai : '')
+      );
+      const aksi = canEdit
+        ? `<td class="no-print" style="text-align:center;white-space:nowrap;">
+            <button class="btn-edit" title="Edit" onclick="openFormJadwalMapel(${JSON.stringify(String(item.id))})">✏️</button>
+            <button class="btn-danger" title="Hapus" onclick="hapusJadwalMapel(${JSON.stringify(String(item.id))}, ${JSON.stringify(String(item.mapel || ''))})">🗑️</button>
+          </td>`
+        : (isJadwalAdmin() ? '<td></td>' : '');
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td><b>${item.hari || ''}</b></td>
+        <td>${waktu}</td>
+        <td><b>${item.mapel || ''}</b></td>
+        <td>${item.kelas || ''}</td>
+        <td>${item.guru || '-'}</td>
+        ${canEdit ? aksi : ''}
+      </tr>`;
+    }).join('');
+  });
+}
+function loadJadwalMapelForGuru() { initJadwalMapelPage(); }
+
+function openFormJadwalMapel(id) {
+  if (!isJadwalAdmin()) return showBigPopup('warning', 'Akses', 'Hanya admin yang dapat mengubah jadwal.');
+  const row = id != null && id !== '' ? (_jadwalCache || []).find(x => String(x.id) === String(id)) : null;
+  let jamMulai = row ? (row.jam_mulai || '') : '';
+  let jamSelesai = row ? (row.jam_selesai || '') : '';
+  if (row && row.waktu && (!jamMulai || !jamSelesai) && String(row.waktu).includes('-')) {
+    const p = String(row.waktu).split('-').map(x => x.trim());
+    if (!jamMulai) jamMulai = (p[0] || '').substring(0, 5);
+    if (!jamSelesai) jamSelesai = (p[1] || '').substring(0, 5);
+  }
+  const hariOpts = HARI_JADWAL.map(h =>
+    `<option value="${h}" ${row && row.hari === h ? 'selected' : ''}>${h}</option>`
+  ).join('');
+  const html = `
+    <div class="form-group"><label>Hari *</label>
+      <select id="fmJadwalHari">${hariOpts}</select>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="form-group" style="flex:1; min-width:120px;"><label>Jam Mulai *</label>
+        <input type="time" id="fmJadwalMulai" value="${jamMulai}">
+      </div>
+      <div class="form-group" style="flex:1; min-width:120px;"><label>Jam Selesai</label>
+        <input type="time" id="fmJadwalSelesai" value="${jamSelesai}">
+      </div>
+    </div>
+    <div class="form-group"><label>Mata Pelajaran *</label>
+      <input type="text" id="fmJadwalMapel" list="fmJadwalMapelList" value="${row ? String(row.mapel || '').replace(/"/g, '&quot;') : ''}" placeholder="Contoh: Matematika">
+      <datalist id="fmJadwalMapelList"></datalist>
+    </div>
+    <div class="form-group"><label>Kelas *</label>
+      <input type="text" id="fmJadwalKelas" list="fmJadwalKelasList" value="${row ? String(row.kelas || '').replace(/"/g, '&quot;') : ''}" placeholder="Contoh: 7A">
+      <datalist id="fmJadwalKelasList"></datalist>
+    </div>
+    <div class="form-group"><label>Guru (opsional)</label>
+      <input type="text" id="fmJadwalGuru" value="${row ? String(row.guru || '').replace(/"/g, '&quot;') : ''}" placeholder="Nama guru pengampu">
+    </div>
+  `;
+  openFormModal(row ? '✏️ Edit Jadwal Mapel' : '➕ Tambah Jadwal Mapel', html, () => {
+    const payload = {
+      action: 'save_jadwal_mapel',
+      id: row ? row.id : null,
+      hari: $('fmJadwalHari')?.value,
+      jam_mulai: $('fmJadwalMulai')?.value,
+      jam_selesai: $('fmJadwalSelesai')?.value,
+      mapel: $('fmJadwalMapel')?.value?.trim(),
+      kelas: $('fmJadwalKelas')?.value?.trim(),
+      guru: $('fmJadwalGuru')?.value?.trim(),
+    };
+    if (!payload.hari || !payload.mapel || !payload.kelas || !payload.jam_mulai) {
+      return showBigPopup('warning', 'Peringatan', 'Hari, jam mulai, mapel, dan kelas wajib diisi.');
+    }
+    sendRequest(payload, res => {
+      showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Jadwal', res.message || 'Selesai');
+      if (res.status === 'success') { closeFormModal(); loadJadwalMapel(); }
+    });
+  });
+  // isi datalist mapel & kelas
+  setTimeout(() => {
+    sendRequest({ action: 'get_mapel_unik' }, res => {
+      const dl = $('fmJadwalMapelList');
+      if (!dl) return;
+      (res.data || []).forEach(m => {
+        const o = document.createElement('option');
+        o.value = m;
+        dl.appendChild(o);
+      });
+    });
+    sendRequest({ action: 'get_kelas' }, res => {
+      const dl = $('fmJadwalKelasList');
+      if (!dl) return;
+      (res.data || []).forEach(k => {
+        const o = document.createElement('option');
+        o.value = k;
+        dl.appendChild(o);
+      });
+    });
+  }, 50);
+}
+
+function hapusJadwalMapel(id, mapel) {
+  if (!isJadwalAdmin()) return;
+  if (!confirm('Hapus jadwal ' + (mapel || id) + '?')) return;
+  sendRequest({ action: 'delete_jadwal_mapel', id }, res => {
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Jadwal', res.message || 'Selesai');
+    if (res.status === 'success') loadJadwalMapel();
+  });
+}
+
+function downloadTemplateJadwalMapel() {
+  if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
+  const sample = [
+    { Hari: 'Senin', 'Jam Mulai': '07:00', 'Jam Selesai': '07:40', Mapel: 'Pendidikan Agama', Kelas: '7A', Guru: 'Ahmad S.Pd' },
+    { Hari: 'Senin', 'Jam Mulai': '07:40', 'Jam Selesai': '08:20', Mapel: 'Matematika', Kelas: '7A', Guru: 'Siti S.Pd' },
+    { Hari: 'Senin', 'Jam Mulai': '08:20', 'Jam Selesai': '09:00', Mapel: 'Bahasa Indonesia', Kelas: '7A', Guru: 'Budi S.Pd' },
+    { Hari: 'Selasa', 'Jam Mulai': '07:00', 'Jam Selesai': '07:40', Mapel: 'IPA', Kelas: '7A', Guru: 'Rina S.Pd' },
+    { Hari: 'Selasa', 'Jam Mulai': '07:40', 'Jam Selesai': '08:20', Mapel: 'IPS', Kelas: '7B', Guru: 'Andi S.Pd' },
+    { Hari: 'Rabu', 'Jam Mulai': '07:00', 'Jam Selesai': '07:40', Mapel: 'Bahasa Inggris', Kelas: '8A', Guru: 'Dewi S.Pd' },
+    { Hari: 'Kamis', 'Jam Mulai': '07:00', 'Jam Selesai': '07:40', Mapel: 'PJOK', Kelas: '8A', Guru: 'Joko S.Pd' },
+    { Hari: 'Jumat', 'Jam Mulai': '07:00', 'Jam Selesai': '07:40', Mapel: 'Seni Budaya', Kelas: '9A', Guru: 'Lina S.Pd' },
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  ws['!cols'] = [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 10 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Jadwal');
+  XLSX.writeFile(wb, 'Template_Jadwal_Mapel.xlsx');
+  showBigPopup('success', 'Template', 'Template Jadwal Mapel diunduh. Isi sesuai format, lalu Import.', 2500);
+}
+
+let importJadwalData = [];
+function openImportJadwalMapelModal() {
+  if (!isJadwalAdmin()) return;
+  importJadwalData = [];
+  const html = `
+    <p style="font-size:12px;color:#666;margin:0 0 10px;">Unggah Excel sesuai template. Kolom: <b>Hari, Jam Mulai, Jam Selesai, Mapel, Kelas, Guru</b>.</p>
+    <div class="form-group">
+      <label>File Excel (.xlsx):</label>
+      <input type="file" id="fmImportJadwalFile" accept=".xlsx,.xls,.csv">
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+        <input type="checkbox" id="fmImportJadwalGanti" style="width:16px;height:16px;">
+        Ganti semua jadwal lama (hapus dulu, lalu isi dari file)
+      </label>
+      <small style="color:#b45309;">Centang hanya jika ingin mengganti seluruh jadwal. Tanpa centang = menambah data baru.</small>
+    </div>
+    <div id="fmImportJadwalPreview" style="font-size:12px;color:var(--primary);margin-top:8px;"></div>
+    <button type="button" class="btn-primary btn-sm" style="width:auto;margin-top:8px;background:#0d9488;" onclick="downloadTemplateJadwalMapel()">📄 Unduh Template</button>
+  `;
+  openFormModal('📥 Import Jadwal Mapel', html, submitImportJadwalMapel);
+  setTimeout(() => {
+    const inp = $('fmImportJadwalFile');
+    if (!inp) return;
+    inp.onchange = function () {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          importJadwalData = rows.map(r => ({
+            hari: r.Hari || r.hari || '',
+            jam_mulai: r['Jam Mulai'] || r.jam_mulai || r.Mulai || '',
+            jam_selesai: r['Jam Selesai'] || r.jam_selesai || r.Selesai || '',
+            waktu: r.Waktu || r.waktu || '',
+            mapel: r.Mapel || r.mapel || r['Mata Pelajaran'] || '',
+            kelas: r.Kelas || r.kelas || '',
+            guru: r.Guru || r.guru || '',
+          })).filter(x => x.hari && x.mapel && x.kelas);
+          const prev = $('fmImportJadwalPreview');
+          if (prev) prev.innerHTML = '✅ Siap import: <b>' + importJadwalData.length + '</b> baris valid.';
+        } catch (err) {
+          showBigPopup('danger', 'Error', 'Gagal membaca file: ' + (err.message || err));
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+  }, 80);
+}
+
+function submitImportJadwalMapel() {
+  if (!importJadwalData.length) return showBigPopup('warning', 'Peringatan', 'Pilih file Excel terlebih dahulu / tidak ada baris valid.');
+  const ganti = !!( $('fmImportJadwalGanti') && $('fmImportJadwalGanti').checked );
+  const msg = ganti
+    ? 'GANTI SEMUA jadwal lama dengan ' + importJadwalData.length + ' baris dari file? Data jadwal saat ini akan dihapus.'
+    : 'Import / tambah ' + importJadwalData.length + ' baris jadwal?';
+  if (!confirm(msg)) return;
+  showBigPopup('info', 'Import', '⏳ Mengimpor jadwal...', 0);
+  sendRequest({ action: 'import_jadwal_mapel', list: importJadwalData, ganti_semua: ganti }, res => {
+    closeBigPopup();
+    let m = res.message || 'Selesai';
+    if (res.detail && res.detail.length) m += '<br><small>' + res.detail.slice(0, 8).join('<br>') + '</small>';
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Import Jadwal', m);
+    if (res.status === 'success') { closeFormModal(); loadJadwalMapel(); }
+  });
+}
+
+function exportJadwalMapelExcel() {
+  const rows = _jadwalCache || [];
+  if (!rows.length) return showBigPopup('warning', 'Info', 'Tidak ada data untuk diekspor.');
+  if (typeof XLSX === 'undefined') return showBigPopup('danger', 'Error', 'Library Excel belum termuat.');
+  const data = rows.map((r, i) => ({
+    No: i + 1,
+    Hari: r.hari,
+    'Jam Mulai': r.jam_mulai || (String(r.waktu || '').split('-')[0] || ''),
+    'Jam Selesai': r.jam_selesai || (String(r.waktu || '').split('-')[1] || ''),
+    Waktu: r.waktu,
+    Mapel: r.mapel,
+    Kelas: r.kelas,
+    Guru: r.guru || '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Jadwal Mapel');
+  XLSX.writeFile(wb, 'Jadwal_Mapel.xlsx');
+}
+
 
 function populateSelect(id, options, includeEmpty = false) {
   const select = $(id);
