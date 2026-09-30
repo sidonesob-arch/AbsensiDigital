@@ -674,27 +674,36 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 </head>
 <body>
 <script>
-/* Penanganan tombol kembali — pola "klik sekali lagi untuk keluar"
-   Berlaku untuk tamu & user login. Tidak mengandalkan exitApp native. */
+/* Penanganan tombol kembali — "Klik sekali lagi untuk keluar"
+   Tamu & user login: 1x back di dashboard = toast, 2x back = keluar. */
 (function () {
   if (window.__sitBackEarly) return;
   window.__sitBackEarly = true;
   window.__sitAllowExit = false;
   window.__sitLastBackAt = 0;
   window.__sitBackToastTimer = null;
-  var EXIT_WINDOW_MS = 2200;
+  window.__sitHandlingPop = false;
+  var EXIT_WINDOW_MS = 2500;
 
   function lock() {
-    try { history.pushState({ sit: 1, t: Date.now() }, "", location.href); } catch (e) {}
+    try {
+      history.pushState({ sit: 1, t: Date.now() }, "", location.href);
+    } catch (e) {}
   }
-  function lock2() { lock(); setTimeout(lock, 0); }
 
   function menuNow() {
     try {
       var s = document.querySelector(".section.active");
       if (s && s.id && s.id.indexOf("menu-") === 0) return s.id.slice(5);
     } catch (e) {}
-    return (window._currentMenu || "dashboard");
+    try {
+      if (window._currentMenu) return String(window._currentMenu);
+    } catch (e) {}
+    try {
+      var saved = sessionStorage.getItem("activeMenu");
+      if (saved) return saved;
+    } catch (e) {}
+    return "dashboard";
   }
 
   function toDash() {
@@ -723,36 +732,47 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     el = document.createElement("div");
     el.id = "sitBackToast";
     el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
     el.style.cssText = [
-      "position:fixed", "left:50%", "bottom:72px", "transform:translateX(-50%) translateY(12px)",
-      "max-width:92vw", "width:auto", "padding:12px 18px", "border-radius:24px",
-      "background:rgba(15,23,42,0.92)", "color:#fff", "font-size:13px", "font-weight:700",
-      "line-height:1.35", "text-align:center", "z-index:100000",
-      "box-shadow:0 8px 28px rgba(0,0,0,0.35)", "opacity:0", "pointer-events:none",
-      "transition:opacity .2s ease, transform .2s ease", "font-family:Segoe UI,Roboto,sans-serif"
+      "position:fixed", "left:50%", "bottom:80px", "transform:translateX(-50%)",
+      "max-width:90vw", "padding:14px 20px", "border-radius:28px",
+      "background:#0f172a", "color:#fff", "font-size:14px", "font-weight:700",
+      "line-height:1.4", "text-align:center", "z-index:2147483646",
+      "box-shadow:0 10px 32px rgba(0,0,0,0.4)", "opacity:0", "pointer-events:none",
+      "transition:opacity .18s ease", "font-family:Segoe UI,Roboto,sans-serif",
+      "display:none"
     ].join(";");
     el.textContent = "Klik sekali lagi untuk keluar";
-    (document.body || document.documentElement).appendChild(el);
+    var parent = document.body || document.documentElement;
+    parent.appendChild(el);
     return el;
   }
 
   function showBackToast(msg) {
-    var el = ensureToastEl();
-    el.textContent = msg || "Klik sekali lagi untuk keluar";
-    el.style.opacity = "1";
-    el.style.transform = "translateX(-50%) translateY(0)";
-    if (window.__sitBackToastTimer) clearTimeout(window.__sitBackToastTimer);
-    window.__sitBackToastTimer = setTimeout(function () {
-      el.style.opacity = "0";
-      el.style.transform = "translateX(-50%) translateY(12px)";
-    }, EXIT_WINDOW_MS);
+    try {
+      var el = ensureToastEl();
+      el.textContent = msg || "Klik sekali lagi untuk keluar";
+      el.style.display = "block";
+      // force reflow then fade in
+      void el.offsetWidth;
+      el.style.opacity = "1";
+      if (window.__sitBackToastTimer) clearTimeout(window.__sitBackToastTimer);
+      window.__sitBackToastTimer = setTimeout(function () {
+        hideBackToast();
+        window.__sitLastBackAt = 0;
+      }, EXIT_WINDOW_MS);
+    } catch (e) {
+      try { console.warn("toast", e); } catch (e2) {}
+    }
   }
 
   function hideBackToast() {
     var el = document.getElementById("sitBackToast");
     if (!el) return;
     el.style.opacity = "0";
-    el.style.transform = "translateX(-50%) translateY(12px)";
+    setTimeout(function () {
+      if (el.style.opacity === "0") el.style.display = "none";
+    }, 200);
   }
 
   function tryNativeExit() {
@@ -794,89 +814,69 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   function exitNow() {
     window.__sitAllowExit = true;
     window._allowAppExit = true;
+    window.__sitLastBackAt = 0;
     hideBackToast();
     if (tryNativeExit()) return;
-    // Web / PWA non-native: lepaskan perangkap history agar browser keluar dari SPA
-    try {
-      var n = history.length || 1;
-      if (n > 1) {
-        history.go(-(n - 1));
-        return;
-      }
-    } catch (e) {}
-    try {
-      if (document.referrer && document.referrer !== location.href) {
-        location.replace(document.referrer);
-        return;
-      }
-    } catch (e) {}
-    // Cadangan: biarkan popstate berikutnya keluar (jangan lock lagi)
+    // Web: jangan kunci history lagi. Mundur 1 langkah agar keluar dari SPA.
+    setTimeout(function () {
+      try { history.back(); } catch (e) {}
+    }, 10);
   }
 
   window.doExitApp = exitNow;
 
-  function onPop() {
-    if (window.__sitAllowExit || window._allowAppExit) return;
-
-    var cur = menuNow();
-    // Bukan dashboard → kembali ke dashboard (1x back)
-    if (cur !== "dashboard") {
-      lock2();
-      window.__sitLastBackAt = 0;
-      hideBackToast();
-      toDash();
+  function onPop(ev) {
+    if (window.__sitAllowExit || window._allowAppExit) {
+      // Sudah diizinkan keluar — jangan tangkap lagi
       return;
     }
+    if (window.__sitHandlingPop) return;
+    window.__sitHandlingPop = true;
+    try {
+      var cur = menuNow();
+      // Bukan dashboard → ke dashboard, reset double-back
+      if (cur && cur !== "dashboard") {
+        window.__sitLastBackAt = 0;
+        hideBackToast();
+        lock();
+        toDash();
+        return;
+      }
 
-    // Dashboard: pola double-back
-    var now = Date.now();
-    if (window.__sitLastBackAt && (now - window.__sitLastBackAt) < EXIT_WINDOW_MS) {
-      // Klik kedua dalam jendela waktu → keluar
-      window.__sitLastBackAt = 0;
-      exitNow();
-      return;
+      var now = Date.now();
+      if (window.__sitLastBackAt && (now - window.__sitLastBackAt) < EXIT_WINDOW_MS) {
+        // Klik ke-2 → keluar (cukup 1x setelah toast)
+        exitNow();
+        return;
+      }
+
+      // Klik ke-1 di dashboard → toast, kunci 1x saja (bukan 2x)
+      window.__sitLastBackAt = now;
+      lock();
+      showBackToast("Klik sekali lagi untuk keluar");
+    } finally {
+      window.__sitHandlingPop = false;
     }
-
-    // Klik pertama → toast + kunci history lagi
-    window.__sitLastBackAt = now;
-    lock2();
-    showBackToast("Klik sekali lagi untuk keluar");
   }
 
   try { history.replaceState({ sit: 1, root: 1 }, "", location.href); } catch (e) {}
-  lock2();
+  lock();
   window.addEventListener("popstate", onPop);
 
-  window.addEventListener("DOMContentLoaded", function () {
-    lock2();
-    ensureToastEl();
-    // Modal lama (jika masih ada di DOM) — arahkan ke pola yang sama
-    var ok = document.getElementById("exitConfirmOkBtn");
-    var cancel = document.getElementById("exitConfirmCancelBtn");
-    var modal = document.getElementById("exitConfirmModal");
-    if (ok) ok.onclick = function (e) {
-      e && e.preventDefault();
-      if (modal) modal.style.display = "none";
-      exitNow();
-    };
-    if (cancel) cancel.onclick = function (e) {
-      e && e.preventDefault();
-      if (modal) modal.style.display = "none";
-      window.__sitLastBackAt = 0;
-      lock2();
-    };
-    if (modal) modal.addEventListener("click", function (e) {
-      if (e.target === modal) {
-        modal.style.display = "none";
-        window.__sitLastBackAt = 0;
-        lock2();
-      }
-    });
-  });
+  function bootToast() {
+    try { ensureToastEl(); } catch (e) {}
+    try { lock(); } catch (e) {}
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootToast);
+  } else {
+    bootToast();
+  }
+  window.addEventListener("load", bootToast);
 
   window.addEventListener("pageshow", function () {
-    if (window.__sitAllowExit) return;
-    lock2();
+    if (window.__sitAllowExit || window._allowAppExit) return;
+    lock();
   });
 })();
 </script>
@@ -976,6 +976,10 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     </div>
   </div>
 </div>
+
+<!-- Toast tombol kembali HP -->
+<div id="sitBackToast" role="status" aria-live="polite" style="position:fixed;left:50%;bottom:80px;transform:translateX(-50%);max-width:90vw;padding:14px 20px;border-radius:28px;background:#0f172a;color:#fff;font-size:14px;font-weight:700;line-height:1.4;text-align:center;z-index:2147483646;box-shadow:0 10px 32px rgba(0,0,0,0.4);opacity:0;pointer-events:none;display:none;font-family:Segoe UI,Roboto,sans-serif;">Klik sekali lagi untuk keluar</div>
+
 <div id="bigPopup" class="modal-popup">
   <div class="modal-popup-box" id="bigPopupBox">
     <div class="modal-popup-icon" id="bigPopupIcon">ℹ️</div>
@@ -2637,7 +2641,8 @@ function doExitApp() {
   } catch (e) { /* ignore */ }
   return false;
 }
-window.doExitApp = doExitApp;
+// Jangan timpa handler awal (pola double-back)
+if (typeof window.doExitApp !== 'function') window.doExitApp = doExitApp;
 
 function confirmExitApp() {
   hideExitConfirmModal();
@@ -2710,24 +2715,20 @@ function initBackButtonHandler() {
   } catch (e) { /* ignore */ }
   ensureHistoryLocked();
 
-  window.addEventListener('popstate', function () {
-    if (window._allowAppExit) return;
-
-    // Selalu kunci dulu — berlaku tamu & login
-    ensureHistoryLocked();
-
-    // Jika dialog sudah terbuka, jangan buka lagi
-    if (window._exitConfirmOpen) return;
-
-    const cur = getActiveMenuName();
-    if (cur !== 'dashboard') {
-      goDashboardFromBack();
-      return;
-    }
-
-    // Dashboard: tampilkan modal kustom (selalu)
-    showExitConfirmModal();
-  });
+  // popstate dikelola script awal (__sitBackEarly) — jangan pasang handler kedua
+  if (!window.__sitBackEarly) {
+    window.addEventListener('popstate', function () {
+      if (window._allowAppExit || window.__sitAllowExit) return;
+      ensureHistoryLocked();
+      if (window._exitConfirmOpen) return;
+      const cur = getActiveMenuName();
+      if (cur !== 'dashboard') {
+        goDashboardFromBack();
+        return;
+      }
+      showExitConfirmModal();
+    });
+  }
 
   // pageshow: setelah back dari bfcache, kunci lagi
   window.addEventListener('pageshow', function (ev) {
