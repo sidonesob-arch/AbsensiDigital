@@ -675,7 +675,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 <body>
 <script>
 /* Penanganan tombol kembali — "Klik sekali lagi untuk keluar"
-   Tamu & user login: 1x back di dashboard = toast, 2x back = keluar. */
+   Tamu & login: sama. Tamu sering history pendek → arm 2 state + listener native. */
 (function () {
   if (window.__sitBackEarly) return;
   window.__sitBackEarly = true;
@@ -685,9 +685,13 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
   window.__sitHandlingPop = false;
   var EXIT_WINDOW_MS = 2500;
 
-  function lock() {
+  /** Selalu siapkan 2 entri history agar 1x back HP tidak menutup Activity (khususnya tamu). */
+  function armHistory() {
     try {
       history.pushState({ sit: 1, t: Date.now() }, "", location.href);
+    } catch (e) {}
+    try {
+      history.pushState({ sit: 1, t: Date.now() + 1 }, "", location.href);
     } catch (e) {}
   }
 
@@ -743,8 +747,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       "display:none"
     ].join(";");
     el.textContent = "Klik sekali lagi untuk keluar";
-    var parent = document.body || document.documentElement;
-    parent.appendChild(el);
+    (document.body || document.documentElement).appendChild(el);
     return el;
   }
 
@@ -753,7 +756,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
       var el = ensureToastEl();
       el.textContent = msg || "Klik sekali lagi untuk keluar";
       el.style.display = "block";
-      // force reflow then fade in
       void el.offsetWidth;
       el.style.opacity = "1";
       if (window.__sitBackToastTimer) clearTimeout(window.__sitBackToastTimer);
@@ -761,9 +763,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         hideBackToast();
         window.__sitLastBackAt = 0;
       }, EXIT_WINDOW_MS);
-    } catch (e) {
-      try { console.warn("toast", e); } catch (e2) {}
-    }
+    } catch (e) {}
   }
 
   function hideBackToast() {
@@ -817,7 +817,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
     window.__sitLastBackAt = 0;
     hideBackToast();
     if (tryNativeExit()) return;
-    // Web: jangan kunci history lagi. Mundur 1 langkah agar keluar dari SPA.
+    // Web: lepas perangkap — mundur bertahap
     setTimeout(function () {
       try { history.back(); } catch (e) {}
     }, 10);
@@ -825,58 +825,106 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
 
   window.doExitApp = exitNow;
 
-  function onPop(ev) {
-    if (window.__sitAllowExit || window._allowAppExit) {
-      // Sudah diizinkan keluar — jangan tangkap lagi
-      return;
-    }
-    if (window.__sitHandlingPop) return;
+  /**
+   * Logika inti (dipakai popstate + backbutton native).
+   * return true = event sudah ditangani (cegah default native).
+   */
+  function handleBackAction() {
+    if (window.__sitAllowExit || window._allowAppExit) return false;
+    if (window.__sitHandlingPop) return true;
     window.__sitHandlingPop = true;
     try {
       var cur = menuNow();
-      // Bukan dashboard → ke dashboard, reset double-back
       if (cur && cur !== "dashboard") {
         window.__sitLastBackAt = 0;
         hideBackToast();
-        lock();
+        armHistory();
         toDash();
-        return;
+        return true;
       }
 
       var now = Date.now();
       if (window.__sitLastBackAt && (now - window.__sitLastBackAt) < EXIT_WINDOW_MS) {
-        // Klik ke-2 → keluar (cukup 1x setelah toast)
         exitNow();
-        return;
+        return true;
       }
 
-      // Klik ke-1 di dashboard → toast, kunci 1x saja (bukan 2x)
+      // Klik pertama (tamu & login) → toast + arm history lagi
       window.__sitLastBackAt = now;
-      lock();
+      armHistory();
       showBackToast("Klik sekali lagi untuk keluar");
+      return true;
     } finally {
       window.__sitHandlingPop = false;
     }
   }
 
+  function onPop(ev) {
+    if (window.__sitAllowExit || window._allowAppExit) return;
+    handleBackAction();
+  }
+
   try { history.replaceState({ sit: 1, root: 1 }, "", location.href); } catch (e) {}
-  lock();
+  armHistory();
   window.addEventListener("popstate", onPop);
 
-  function bootToast() {
+  // Cordova: event backbutton (sering dipakai WebView Android)
+  document.addEventListener("backbutton", function (e) {
+    if (window.__sitAllowExit || window._allowAppExit) return;
+    try { if (e && e.preventDefault) e.preventDefault(); } catch (err) {}
+    handleBackAction();
+  }, false);
+
+  // Capacitor App backButton
+  function bindCapacitorBack() {
+    try {
+      var Cap = window.Capacitor;
+      if (!Cap) return;
+      var App = (Cap.Plugins && Cap.Plugins.App) || Cap.App;
+      if (App && typeof App.addListener === "function") {
+        App.addListener("backButton", function () {
+          if (window.__sitAllowExit || window._allowAppExit) {
+            tryNativeExit();
+            return;
+          }
+          handleBackAction();
+        });
+      }
+    } catch (e) {}
+  }
+
+  function boot() {
     try { ensureToastEl(); } catch (e) {}
-    try { lock(); } catch (e) {}
+    try { armHistory(); } catch (e) {}
+    bindCapacitorBack();
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bootToast);
+    document.addEventListener("DOMContentLoaded", boot);
   } else {
-    bootToast();
+    boot();
   }
-  window.addEventListener("load", bootToast);
+  window.addEventListener("load", function () {
+    boot();
+    // Cadangan: arm lagi setelah load (tamu sering history kosong)
+    setTimeout(armHistory, 300);
+    setTimeout(armHistory, 1000);
+  });
 
   window.addEventListener("pageshow", function () {
     if (window.__sitAllowExit || window._allowAppExit) return;
-    lock();
+    armHistory();
+  });
+
+  // Arm history saat interaksi awal (tamu), dibatasi agar tidak menumpuk state
+  window.__sitArmCount = 0;
+  function armOnGesture() {
+    if (window.__sitAllowExit) return;
+    if (window.__sitArmCount >= 3) return;
+    window.__sitArmCount += 1;
+    armHistory();
+  }
+  ["touchstart", "click"].forEach(function (evt) {
+    window.addEventListener(evt, armOnGesture, { passive: true, once: false });
   });
 })();
 </script>
