@@ -5899,6 +5899,15 @@ function loadJadwalPdfView() {
   });
 }
 
+function escHtmlJadwal(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function loadJadwalPdfAdminList() {
   const tbody = $('tableJadwalPdfBody');
   if (!tbody) return;
@@ -5914,28 +5923,45 @@ function loadJadwalPdfAdminList() {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada data guru.</td></tr>';
       return;
     }
+    // Tombol pakai data-idx (bukan onclick dengan nama) — aman untuk apostrof/karakter khusus di nama
     tbody.innerHTML = rows.map((r, i) => {
       const status = r.has_pdf
         ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">PDF ada</span>'
         : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">Belum upload</span>';
       const fileCell = r.has_pdf
-        ? `<a href="${r.file_url}" target="_blank" rel="noopener" style="color:#05285e;font-weight:600;">${r.file_name || 'Lihat PDF'}</a>`
+        ? `<a href="${escHtmlJadwal(r.file_url)}" target="_blank" rel="noopener" style="color:#05285e;font-weight:600;">${escHtmlJadwal(r.file_name || 'Lihat PDF')}</a>`
         : '-';
       const periode = [r.tahun_ajaran, r.semester].filter(Boolean).join(' · ') || '-';
       return `<tr>
         <td>${i + 1}</td>
-        <td>${r.guru_id || ''}</td>
-        <td><b>${r.nama_guru || ''}</b></td>
+        <td>${escHtmlJadwal(r.guru_id || '')}</td>
+        <td><b>${escHtmlJadwal(r.nama_guru || '')}</b></td>
         <td>${fileCell}</td>
-        <td style="font-size:11px;">${periode}</td>
+        <td style="font-size:11px;">${escHtmlJadwal(periode)}</td>
         <td>${status}</td>
         <td style="white-space:nowrap;text-align:center;">
-          <button class="btn-sm" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;" onclick='openUploadJadwalPdfModal(${JSON.stringify(String(r.guru_id||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>${r.has_pdf ? '🔄 Ganti' : '📤 Upload'}</button>
-          ${r.has_pdf ? `<button class="btn-sm" style="background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;margin-left:4px;" onclick='previewJadwalPdfAdmin(${JSON.stringify(String(r.file_url||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>👁</button>
-          <button class="btn-danger" title="Hapus PDF" onclick='hapusJadwalPdf(${JSON.stringify(String(r.guru_id||""))}, ${JSON.stringify(String(r.nama_guru||""))})'>🗑️</button>` : ''}
+          <button type="button" class="btn-sm btn-jadwal-pdf-upload" data-idx="${i}" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;">${r.has_pdf ? '🔄 Ganti' : '📤 Upload'}</button>
+          ${r.has_pdf ? `<button type="button" class="btn-sm btn-jadwal-pdf-preview" data-idx="${i}" style="background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 8px;margin-left:4px;">👁</button>
+          <button type="button" class="btn-danger btn-jadwal-pdf-del" data-idx="${i}" title="Hapus PDF">🗑️</button>` : ''}
         </td>
       </tr>`;
     }).join('');
+
+    // Event delegation — tidak rusak meski nama berisi tanda kutip / koma / &
+    tbody.onclick = function (ev) {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-idx]') : null;
+      if (!btn) return;
+      const idx = parseInt(btn.getAttribute('data-idx'), 10);
+      const row = (window._jadwalPdfList || [])[idx];
+      if (!row) return;
+      if (btn.classList.contains('btn-jadwal-pdf-upload')) {
+        openUploadJadwalPdfModal(row.guru_id, row.nama_guru);
+      } else if (btn.classList.contains('btn-jadwal-pdf-preview')) {
+        previewJadwalPdfAdmin(row.file_url, row.nama_guru);
+      } else if (btn.classList.contains('btn-jadwal-pdf-del')) {
+        hapusJadwalPdf(row.guru_id, row.nama_guru);
+      }
+    };
   });
 }
 
@@ -5950,7 +5976,8 @@ function openUploadJadwalPdfModal(preGuruId, preNama) {
   const list = window._jadwalPdfList || [];
   const opts = list.map(g => {
     const sel = preGuruId && String(g.guru_id) === String(preGuruId) ? 'selected' : '';
-    return `<option value="${String(g.guru_id).replace(/"/g,'&quot;')}" data-nama="${String(g.nama_guru||'').replace(/"/g,'&quot;')}" ${sel}>${g.nama_guru || g.guru_id}${g.has_pdf ? ' ✓' : ''}</option>`;
+    const label = (g.nama_guru || g.guru_id || '') + (g.has_pdf ? ' ✓' : '');
+    return `<option value="${escHtmlJadwal(g.guru_id)}" data-nama="${escHtmlJadwal(g.nama_guru || '')}" ${sel}>${escHtmlJadwal(label)}</option>`;
   }).join('');
   const p = window.periodeAktif || {};
   const html = `
