@@ -2170,6 +2170,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           <div class="form-group" style="flex:1; min-width:160px;"><label>Kelas:</label><select id="filterDaftarNilaiKelas"><option value="">-- Semua --</option></select></div>
         </div>
         <button class="btn-primary" onclick="loadDaftarNilaiData()">Tampilkan Daftar Nilai</button>
+        <div id="daftarNilaiInfo" style="font-size:12px;color:#64748b;margin-top:8px;width:100%;"></div>
       </div>
       <div class="export-section">
         <button class="btn-excel" onclick="exportDaftarNilaiToExcel()">📊 Export Excel</button>
@@ -6552,35 +6553,72 @@ let daftarNilaiCache = [];
 let daftarNilaiHeaders = [];
 
 function loadDaftarNilaiData() {
-  const mapel = $('filterDaftarNilaiMapel').value;
-  const kelas = $('filterDaftarNilaiKelas').value;
-  let guru = ($('guruNamaDisplayDaftar').innerText || '').trim();
+  const mapel = ($('filterDaftarNilaiMapel') && $('filterDaftarNilaiMapel').value) || '';
+  const kelas = ($('filterDaftarNilaiKelas') && $('filterDaftarNilaiKelas').value) || '';
+  let guru = ($('guruNamaDisplayDaftar') && $('guruNamaDisplayDaftar').innerText || '').trim();
   if (['Admin', 'Administrator', 'Super Admin', '-', ''].includes(guru)) guru = '';
+  // Admin: jangan filter guru ketat kecuali memang dipilih
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    // biarkan guru dari display jika bukan placeholder
+  }
   const ta = ($('daftarNilaiTahunAjaran') && $('daftarNilaiTahunAjaran').value) || (window.periodeAktif && window.periodeAktif.tahun_ajaran) || '';
   const sem = ($('daftarNilaiSemester') && $('daftarNilaiSemester').value) || (window.periodeAktif && window.periodeAktif.semester) || 'ganjil';
+  const infoEl = $('daftarNilaiInfo');
+  if (infoEl) infoEl.textContent = 'Memuat...';
   sendRequest({ action: 'get_daftar_nilai', guru, mapel, kelas, tahun_ajaran: ta, semester: sem }, res => {
     const thead = $('tableDaftarNilaiHead');
     const tbody = $('tableDaftarNilaiBody');
-    if (res.status === 'success' && res.data && res.data.length > 0) {
-      const headers = res.headers || [];
-      daftarNilaiHeaders = headers;
-      daftarNilaiCache = res.data;
+    if (!thead || !tbody) return;
+    if (res.status !== 'success') {
+      daftarNilaiCache = [];
+      daftarNilaiHeaders = [];
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;padding:15px;">${res.message || 'Gagal memuat'}</td></tr>`;
+      if (infoEl) infoEl.textContent = '';
+      return;
+    }
+    const headers = res.headers || [];
+    daftarNilaiHeaders = headers;
+    daftarNilaiCache = res.data || [];
+    // Info filter
+    let info = '';
+    if (res.periode) info += `Periode: ${res.periode.tahun_ajaran || '-'} / ${res.periode.semester || '-'}`;
+    if (typeof res.total_db === 'number') info += ` · DB: ${res.total_db} baris`;
+    if (typeof res.after_filter === 'number') info += ` · Tampil: ${res.after_filter}`;
+    if (res.note) info += ` · ${res.note}`;
+    if (infoEl) infoEl.textContent = info;
+    else {
+      // sisipkan info di atas tabel jika elemen belum ada
+      const wrap = tbody.closest('.table-responsive') || tbody.parentElement;
+      if (wrap && !document.getElementById('daftarNilaiInfo')) {
+        const d = document.createElement('div');
+        d.id = 'daftarNilaiInfo';
+        d.style.cssText = 'font-size:12px;color:#64748b;margin:6px 0;';
+        d.textContent = info;
+        wrap.parentElement.insertBefore(d, wrap);
+      } else if (document.getElementById('daftarNilaiInfo')) {
+        document.getElementById('daftarNilaiInfo').textContent = info;
+      }
+    }
+    if (daftarNilaiCache.length > 0) {
       thead.innerHTML = `<tr>
-        <th style="width:40px;">No</th><th>NISN</th><th>Nama</th><th>Kelas</th>
+        <th style="width:40px;">No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Mapel</th><th>Guru</th>
         ${headers.map(h => `<th style="text-align:center;">${h}</th>`).join('')}
         <th style="text-align:center; background:#fef3c7;">Rata-rata</th>
         <th style="text-align:center; width:110px;" class="no-print">Aksi</th>
       </tr>`;
-      tbody.innerHTML = res.data.map((item, idx) => {
+      tbody.innerHTML = daftarNilaiCache.map((item, idx) => {
         const nilaiCells = headers.map((_, hIdx) => {
-          const v = item.nilaiList[hIdx];
-          return `<td style="text-align:center;">${v !== undefined && v > 0 ? v : '-'}</td>`;
+          const v = item.nilaiList ? item.nilaiList[hIdx] : null;
+          const show = (v !== undefined && v !== null && v !== '') ? v : '-';
+          return `<td style="text-align:center;">${show}</td>`;
         }).join('');
         return `<tr>
           <td>${idx + 1}</td>
-          <td>${item.nisn}</td>
-          <td><b>${item.nama}</b></td>
-          <td>${item.kelas}</td>
+          <td>${item.nisn || ''}</td>
+          <td><b>${item.nama || ''}</b></td>
+          <td>${item.kelas || ''}</td>
+          <td style="font-size:11px;">${item.mapel || ''}</td>
+          <td style="font-size:11px;">${item.guru || ''}</td>
           ${nilaiCells}
           <td style="text-align:center; font-weight:800; color:var(--primary); background:#fffbeb;">${item.rataRata || '0.00'}</td>
           <td style="text-align:center;" class="no-print">
@@ -6595,7 +6633,13 @@ function loadDaftarNilaiData() {
       daftarNilaiCache = [];
       daftarNilaiHeaders = [];
       thead.innerHTML = `<tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Rata-rata</th><th class="no-print">Aksi</th></tr>`;
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:15px;">Belum ada data nilai yang tersinkron.</td></tr>`;
+      let msg = 'Belum ada data nilai untuk filter ini.';
+      if (res.total_db > 0) {
+        msg = `Ada <b>${res.total_db}</b> baris di database, tetapi tidak cocok filter.<br>` +
+          `<small>${res.note || ''}</small><br>` +
+          `<small>Coba: kosongkan Mapel, set Tahun Ajaran sesuai data, atau login sebagai guru yang menginput.</small>`;
+      }
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:15px;">${msg}</td></tr>`;
     }
   });
 }
@@ -11906,6 +11950,7 @@ function openFormSoalEdit(s) {
         <option value="checkbox">Checkbox (banyak jawaban)</option>
         <option value="benar_salah">Benar / Salah</option>
         <option value="esai">Esai</option>
+        <option value="unggah">Unggah File (tugas)</option>
       </select>
     </div>
     <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span>
@@ -12005,6 +12050,7 @@ function openFormSoalBaru() {
         <option value="checkbox">Checkbox (banyak jawaban)</option>
         <option value="benar_salah">Benar / Salah</option>
         <option value="esai">Esai</option>
+        <option value="unggah">Unggah File (tugas)</option>
       </select>
     </div>
     <div class="form-group"><label>Pertanyaan: <span style="font-weight:500;color:#666;font-size:11px;">(gambar, video, rumus Σ)</span>
@@ -12046,7 +12092,7 @@ function toggleSoalOpsiUI() {
   const esaiK = $('fmSoalEsaiKunciArea');
   if (area) area.style.display = (j === 'pg' || j === 'checkbox') ? 'block' : 'none';
   if (bs) bs.style.display = j === 'benar_salah' ? 'block' : 'none';
-  if (esaiK) esaiK.style.display = j === 'esai' ? 'block' : 'none';
+  if (esaiK) esaiK.style.display = j === 'esai' || j === 'unggah' ? 'block' : 'none';
   const lbl = $('fmSoalOpsiLabel');
   if (lbl) {
     lbl.innerHTML = j === 'pg'
@@ -12725,7 +12771,28 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
     const prev = jawabanMap[s.id] || jawabanMap[String(s.id)] || {};
     let body = '';
     if (s.jenis === 'esai') {
-      body = `<textarea class="uji-jawab-teks" data-soal="${s.id}" rows="4" placeholder="Tulis jawaban..." style="width:100%;padding:8px;border:1px solid #d0dbe8;border-radius:8px;box-sizing:border-box;">${prev.teks || ''}</textarea>`;
+      body = `<textarea class="uji-jawab-teks" data-soal="${s.id}" rows="4" placeholder="Tulis jawaban..." style="width:100%;padding:8px;border:1px solid #d0dbe8;border-radius:8px;box-sizing:border-box;">${prev.teks || ''}</textarea>
+        <div style="margin-top:8px;">
+          <label style="font-size:12px;font-weight:600;color:#64748b;">Lampiran file (opsional):</label>
+          <input type="file" class="uji-jawab-file" data-soal="${s.id}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
+            style="display:block;margin-top:4px;font-size:12px;" onchange="uploadJawabanFileSiswa(this)">
+          <div class="uji-file-status" data-soal="${s.id}" style="font-size:11px;color:#64748b;margin-top:4px;">${prev.file_url ? '📎 <a href="'+prev.file_url+'" target="_blank">'+(prev.file_name||'File terunggah')+'</a>' : ''}</div>
+          <input type="hidden" class="uji-jawab-file-url" data-soal="${s.id}" value="${prev.file_url || ''}">
+          <input type="hidden" class="uji-jawab-file-name" data-soal="${s.id}" value="${prev.file_name || ''}">
+          <input type="hidden" class="uji-jawab-file-drive" data-soal="${s.id}" value="${prev.file_drive_id || ''}">
+        </div>`;
+    } else if (s.jenis === 'unggah') {
+      body = `<div style="padding:12px;background:#f8fafc;border:1px dashed #94a3b8;border-radius:8px;">
+          <label style="font-size:13px;font-weight:700;color:var(--primary);">📎 Unggah file jawaban *</label>
+          <p style="font-size:11px;color:#64748b;margin:4px 0 8px;">PDF, Word, gambar, Excel, atau ZIP (maks ~10 MB). Disimpan ke Google Drive jika sudah dikonfigurasi admin.</p>
+          <input type="file" class="uji-jawab-file" data-soal="${s.id}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
+            style="display:block;font-size:12px;" onchange="uploadJawabanFileSiswa(this)">
+          <div class="uji-file-status" data-soal="${s.id}" style="font-size:12px;color:#166534;margin-top:8px;font-weight:600;">${prev.file_url ? '✅ <a href="'+prev.file_url+'" target="_blank" style="color:#05285e;">'+(prev.file_name||'File terunggah')+'</a>' : 'Belum ada file.'}</div>
+          <input type="hidden" class="uji-jawab-file-url" data-soal="${s.id}" value="${prev.file_url || ''}">
+          <input type="hidden" class="uji-jawab-file-name" data-soal="${s.id}" value="${prev.file_name || ''}">
+          <input type="hidden" class="uji-jawab-file-drive" data-soal="${s.id}" value="${prev.file_drive_id || ''}">
+          <textarea class="uji-jawab-teks" data-soal="${s.id}" rows="2" placeholder="Keterangan singkat (opsional)" style="width:100%;margin-top:8px;padding:8px;border:1px solid #d0dbe8;border-radius:8px;box-sizing:border-box;">${prev.teks || ''}</textarea>
+        </div>`;
     } else if (s.jenis === 'checkbox') {
       body = (s.opsi || []).map((o, oi) => {
         const checked = (prev.opsi || []).map(String).includes(String(o.id)) ? 'checked' : '';
@@ -12769,8 +12836,78 @@ function collectJawabanUjian() {
     if (!map[sid]) map[sid] = { soal_id: sid, teks: '', opsi_ids: [] };
     if (el.checked) map[sid].opsi_ids.push(el.value);
   });
+  // File upload answers
+  document.querySelectorAll('.uji-jawab-file-url').forEach(el => {
+    const sid = el.getAttribute('data-soal');
+    if (!map[sid]) map[sid] = { soal_id: sid, teks: '', opsi_ids: [] };
+    map[sid].file_url = el.value || '';
+    const nm = document.querySelector('.uji-jawab-file-name[data-soal="'+sid+'"]');
+    const dr = document.querySelector('.uji-jawab-file-drive[data-soal="'+sid+'"]');
+    map[sid].file_name = nm ? nm.value : '';
+    map[sid].file_drive_id = dr ? dr.value : '';
+  });
   return Object.values(map);
 }
+
+/** Upload file jawaban siswa → Google Drive (jika dikonfigurasi) / Storage */
+function uploadJawabanFileSiswa(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  const sid = inputEl.getAttribute('data-soal');
+  if (!file || !sid) return;
+  if (file.size > 10 * 1024 * 1024) {
+    showBigPopup('warning', 'File besar', 'Maksimal 10 MB.');
+    inputEl.value = '';
+    return;
+  }
+  const status = document.querySelector('.uji-file-status[data-soal="'+sid+'"]');
+  if (status) status.innerHTML = '⏳ Mengunggah ' + file.name + '...';
+  const peng = window.ujianKerjaState || {};
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    sendRequest({
+      action: 'upload_jawaban_file',
+      dataBase64: String(e.target.result || ''),
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      nisn: (siswaUserData && siswaUserData.nisn) || (userData && (userData.nisn || userData.id)) || '',
+      nama: (siswaUserData && siswaUserData.nama) || (userData && userData.nama) || '',
+      ujian_id: peng.ujian_id || '',
+      soal_id: sid,
+      pengerjaan_id: peng.pengerjaan_id || '',
+    }, res => {
+      if (res.status !== 'success' || !res.file_url) {
+        if (status) status.innerHTML = '<span style="color:#b91c1c;">❌ ' + (res.message || 'Upload gagal') + '</span>';
+        return;
+      }
+      const urlEl = document.querySelector('.uji-jawab-file-url[data-soal="'+sid+'"]');
+      const nameEl = document.querySelector('.uji-jawab-file-name[data-soal="'+sid+'"]');
+      const driveEl = document.querySelector('.uji-jawab-file-drive[data-soal="'+sid+'"]');
+      if (urlEl) urlEl.value = res.file_url;
+      if (nameEl) nameEl.value = res.file_name || file.name;
+      if (driveEl) driveEl.value = res.file_drive_id || '';
+      const where = res.storage === 'google_drive' ? 'Google Drive' : 'Storage';
+      if (status) {
+        status.innerHTML = '✅ <a href="'+res.file_url+'" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">' +
+          (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>';
+      }
+      // autosave segera
+      try {
+        if (typeof collectJawabanUjian === 'function' && peng.pengerjaan_id) {
+          sendRequest({
+            action: 'ujian_autosave',
+            pengerjaan_id: peng.pengerjaan_id,
+            jawaban: collectJawabanUjian(),
+          }, function () {});
+        }
+      } catch (err) { /* ignore */ }
+    });
+  };
+  reader.onerror = function () {
+    if (status) status.innerHTML = '<span style="color:#b91c1c;">Gagal membaca file</span>';
+  };
+  reader.readAsDataURL(file);
+}
+
 
 function startUjianTimer(batasAt) {
   if (ujianTimerInterval) clearInterval(ujianTimerInterval);
