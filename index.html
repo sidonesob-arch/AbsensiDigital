@@ -6600,8 +6600,11 @@ function loadDaftarNilaiData() {
       }
     }
     if (daftarNilaiCache.length > 0) {
+      // Guru: sembunyikan kolom Mapel & Guru (kecuali admin / super_admin)
+      const showMapelGuru = (userRole === 'admin' || userRole === 'super_admin');
+      const colMapelGuruHead = showMapelGuru ? '<th>Mapel</th><th>Guru</th>' : '';
       thead.innerHTML = `<tr>
-        <th style="width:40px;">No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Mapel</th><th>Guru</th>
+        <th style="width:40px;">No</th><th>NISN</th><th>Nama</th><th>Kelas</th>${colMapelGuruHead}
         ${headers.map(h => `<th style="text-align:center;">${h}</th>`).join('')}
         <th style="text-align:center; background:#fef3c7;">Rata-rata</th>
         <th style="text-align:center; width:110px;" class="no-print">Aksi</th>
@@ -6612,13 +6615,15 @@ function loadDaftarNilaiData() {
           const show = (v !== undefined && v !== null && v !== '') ? v : '-';
           return `<td style="text-align:center;">${show}</td>`;
         }).join('');
+        const colMapelGuruBody = showMapelGuru
+          ? `<td style="font-size:11px;">${item.mapel || ''}</td><td style="font-size:11px;">${item.guru || ''}</td>`
+          : '';
         return `<tr>
           <td>${idx + 1}</td>
           <td>${item.nisn || ''}</td>
           <td><b>${item.nama || ''}</b></td>
           <td>${item.kelas || ''}</td>
-          <td style="font-size:11px;">${item.mapel || ''}</td>
-          <td style="font-size:11px;">${item.guru || ''}</td>
+          ${colMapelGuruBody}
           ${nilaiCells}
           <td style="text-align:center; font-weight:800; color:var(--primary); background:#fffbeb;">${item.rataRata || '0.00'}</td>
           <td style="text-align:center;" class="no-print">
