@@ -6579,11 +6579,17 @@ function loadDaftarNilaiData() {
     const headers = res.headers || [];
     daftarNilaiHeaders = headers;
     daftarNilaiCache = res.data || [];
-    // Info filter
+    // Info filter + diagnosa (periode/kelas)
     let info = '';
-    if (res.periode) info += `Periode: ${res.periode.tahun_ajaran || '-'} / ${res.periode.semester || '-'}`;
+    if (res.periode) info += `Periode filter: ${res.periode.tahun_ajaran || '-'} / ${res.periode.semester || '-'}`;
     if (typeof res.total_db === 'number') info += ` · DB: ${res.total_db} baris`;
     if (typeof res.after_filter === 'number') info += ` · Tampil: ${res.after_filter}`;
+    if (res.skipped) {
+      const sk = res.skipped;
+      info += ` · Terfilter: periode=${sk.periode||0}, guru=${sk.guru||0}, kelas=${sk.kelas||0}, mapel=${sk.mapel||0}`;
+    }
+    if (res.kelas_di_db && res.kelas_di_db.length) info += ` · Kelas di DB: ${res.kelas_di_db.slice(0,10).join(', ')}`;
+    if (res.periode_di_db && res.periode_di_db.length) info += ` · Periode di DB: ${res.periode_di_db.slice(0,5).join(', ')}`;
     if (res.note) info += ` · ${res.note}`;
     if (infoEl) infoEl.textContent = info;
     else {
