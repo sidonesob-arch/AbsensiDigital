@@ -12984,6 +12984,17 @@ function mulaiUjianSiswa(ujianId) {
     if (ujianKerjaState && !ujianKerjaState.ujian_id && res.ujian && res.ujian.id) {
       ujianKerjaState.ujian_id = res.ujian.id;
     }
+    // Pastikan id selalu ada & disimpan (aman jika refresh / state hilang)
+    if (!ujianKerjaState.pengerjaan_id && res.pengerjaan_id) ujianKerjaState.pengerjaan_id = res.pengerjaan_id;
+    if (!ujianKerjaState.ujian_id && res.ujian_id) ujianKerjaState.ujian_id = res.ujian_id;
+    try {
+      sessionStorage.setItem('ujianKerjaState', JSON.stringify({
+        pengerjaan_id: ujianKerjaState.pengerjaan_id || '',
+        ujian_id: ujianKerjaState.ujian_id || (res.ujian && res.ujian.id) || '',
+        batas_at: ujianKerjaState.batas_at || res.batas_at || '',
+        nisn: (siswaUserData && siswaUserData.nisn) || '',
+      }));
+    } catch (e) {}
     ujianSubmitInFlight = false;
     $('ujianSiswaList').innerHTML = '';
     $('ujianKerjaArea').style.display = 'block';
@@ -13014,6 +13025,8 @@ function mulaiUjianSiswa(ujianId) {
 
 function renderSoalUjianKerja(soalList, jawabanMap) {
   const box = $('ujiKerjaSoal');
+  const pidAttr = (window.ujianKerjaState && window.ujianKerjaState.pengerjaan_id) || '';
+  const uidAttr = (window.ujianKerjaState && window.ujianKerjaState.ujian_id) || '';
   box.innerHTML = (soalList || []).map((s, i) => {
     const prev = jawabanMap[s.id] || jawabanMap[String(s.id)] || {};
     let body = '';
@@ -13021,7 +13034,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
       body = `<textarea class="uji-jawab-teks" data-soal="${s.id}" rows="4" placeholder="Tulis jawaban..." style="width:100%;padding:8px;border:1px solid #d0dbe8;border-radius:8px;box-sizing:border-box;">${prev.teks || ''}</textarea>
         <div style="margin-top:8px;">
           <label style="font-size:12px;font-weight:600;color:#64748b;">Lampiran file (opsional):</label>
-          <input type="file" class="uji-jawab-file" data-soal="${s.id}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
+          <input type="file" class="uji-jawab-file" data-soal="${s.id}" data-pengerjaan="${pidAttr}" data-ujian="${uidAttr}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
             style="display:block;margin-top:4px;font-size:12px;" onchange="uploadJawabanFileSiswa(this)">
           <div class="uji-file-status" data-soal="${s.id}" style="font-size:11px;color:#64748b;margin-top:4px;">${prev.file_url ? '📎 <a href="'+prev.file_url+'" target="_blank">'+(prev.file_name||'File terunggah')+'</a>' : ''}</div>
           <input type="hidden" class="uji-jawab-file-url" data-soal="${s.id}" value="${prev.file_url || ''}">
@@ -13032,7 +13045,7 @@ function renderSoalUjianKerja(soalList, jawabanMap) {
       body = `<div style="padding:12px;background:#f8fafc;border:1px dashed #94a3b8;border-radius:8px;">
           <label style="font-size:13px;font-weight:700;color:var(--primary);">📎 Unggah file jawaban *</label>
           <p style="font-size:11px;color:#64748b;margin:4px 0 8px;">PDF, Word, gambar, Excel, atau ZIP (maks ~10 MB). Disimpan ke Google Drive jika sudah dikonfigurasi admin.</p>
-          <input type="file" class="uji-jawab-file" data-soal="${s.id}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
+          <input type="file" class="uji-jawab-file" data-soal="${s.id}" data-pengerjaan="${pidAttr}" data-ujian="${uidAttr}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.txt,.xls,.xlsx"
             style="display:block;font-size:12px;" onchange="uploadJawabanFileSiswa(this)">
           <div class="uji-file-status" data-soal="${s.id}" style="font-size:12px;color:#166534;margin-top:8px;font-weight:600;">${prev.file_url ? '✅ <a href="'+prev.file_url+'" target="_blank" style="color:#05285e;">'+(prev.file_name||'File terunggah')+'</a>' : 'Belum ada file.'}</div>
           <input type="hidden" class="uji-jawab-file-url" data-soal="${s.id}" value="${prev.file_url || ''}">
@@ -13123,7 +13136,25 @@ function uploadJawabanFileSiswa(inputEl) {
   }
   const status = document.querySelector('.uji-file-status[data-soal="'+sid+'"]');
   if (status) status.innerHTML = '⏳ Mengunggah ' + file.name + '...';
-  const peng = window.ujianKerjaState || {};
+  // Ambil pengerjaan_id dari state / DOM / sessionStorage (jangan sampai kosong)
+  let peng = window.ujianKerjaState || {};
+  let pengerjaanId = String(peng.pengerjaan_id || inputEl.getAttribute('data-pengerjaan') || '').trim();
+  let ujianId = String(peng.ujian_id || inputEl.getAttribute('data-ujian') || '').trim();
+  if (!pengerjaanId || !ujianId) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('ujianKerjaState') || '{}');
+      if (!pengerjaanId && saved.pengerjaan_id) pengerjaanId = String(saved.pengerjaan_id);
+      if (!ujianId && saved.ujian_id) ujianId = String(saved.ujian_id);
+      if (!window.ujianKerjaState) window.ujianKerjaState = {};
+      if (pengerjaanId) window.ujianKerjaState.pengerjaan_id = pengerjaanId;
+      if (ujianId) window.ujianKerjaState.ujian_id = ujianId;
+      peng = window.ujianKerjaState;
+    } catch (e) {}
+  }
+  if (!pengerjaanId) {
+    if (status) status.innerHTML = '<span style="color:#b91c1c;">❌ Sesi ujian tidak ditemukan (pengerjaan_id kosong). Kembali ke daftar ujian lalu klik <b>Lanjutkan</b>.</span>';
+    return;
+  }
   const reader = new FileReader();
   reader.onload = function (e) {
     sendRequest({
@@ -13133,9 +13164,9 @@ function uploadJawabanFileSiswa(inputEl) {
       contentType: file.type || 'application/octet-stream',
       nisn: (siswaUserData && siswaUserData.nisn) || (userData && (userData.nisn || userData.id)) || '',
       nama: (siswaUserData && siswaUserData.nama) || (userData && userData.nama) || '',
-      ujian_id: peng.ujian_id || '',
+      ujian_id: ujianId || peng.ujian_id || '',
       soal_id: sid,
-      pengerjaan_id: peng.pengerjaan_id || '',
+      pengerjaan_id: pengerjaanId,
     }, res => {
       if (res.status !== 'success' || !res.file_url) {
         if (status) status.innerHTML = '<span style="color:#b91c1c;">❌ ' + (res.message || 'Upload gagal') + '</span>';
@@ -13149,7 +13180,7 @@ function uploadJawabanFileSiswa(inputEl) {
       if (driveEl) driveEl.value = res.file_drive_id || '';
       // Backup lokal agar submit tetap bawa file_url
       try {
-        const key = 'ujian_file_' + (peng.pengerjaan_id || 'x') + '_' + sid;
+        const key = 'ujian_file_' + (pengerjaanId || peng.pengerjaan_id || 'x') + '_' + sid;
         localStorage.setItem(key, JSON.stringify({
           file_url: res.file_url,
           file_name: res.file_name || file.name,
@@ -13167,9 +13198,9 @@ function uploadJawabanFileSiswa(inputEl) {
       }
       // autosave segera — kirim file_url eksplisit agar tidak hilang
       try {
-        if (peng.pengerjaan_id) {
+        const pidSave = pengerjaanId || peng.pengerjaan_id || (res.pengerjaan_id || '');
+        if (pidSave) {
           const jawaban = (typeof collectJawabanUjian === 'function') ? collectJawabanUjian() : [];
-          // pastikan soal ini punya file_url
           let found = false;
           for (const j of jawaban) {
             if (String(j.soal_id) === String(sid)) {
@@ -13189,7 +13220,7 @@ function uploadJawabanFileSiswa(inputEl) {
           }
           sendRequest({
             action: 'ujian_autosave',
-            pengerjaan_id: peng.pengerjaan_id,
+            pengerjaan_id: pidSave,
             jawaban,
           }, function (ar) {
             if (ar && ar.status !== 'success' && status) {
