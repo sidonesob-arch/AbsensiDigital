@@ -12785,11 +12785,28 @@ function lihatDetailHasil(pengerjaanId) {
         <b>#${i+1}</b> [${s.jenis}] ${s.pertanyaan}<br>`;
       if (s.jenis === 'esai' || s.jenis === 'unggah') {
         if (s.jenis === 'unggah') {
-          const fUrl = (j && (j.file_url || j.fileUrl)) || '';
-          const fName = (j && (j.file_name || j.fileName)) || 'File jawaban';
-          if (fUrl) html += `<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">📎 <a href="${fUrl}" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">${fName}</a></div>`;
-          else html += `<div style="background:#fef2f2;padding:6px;border-radius:4px;margin:4px 0;color:#991b1b;"><i>Belum ada file diunggah</i></div>`;
-          if (j && j.jawaban_teks) html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;font-size:11px;">Keterangan: ${j.jawaban_teks}</div>`;
+          let fUrl = (j && (j.file_url || j.fileUrl)) || '';
+          let fName = (j && (j.file_name || j.fileName)) || 'File jawaban';
+          let ket = (j && (j.jawaban_teks_display || j.jawaban_teks)) || '';
+          // Fallback parse marker / URL mentah dari jawaban_teks (schema tanpa kolom file_url)
+          if (!fUrl && j && j.jawaban_teks) {
+            const raw = String(j.jawaban_teks);
+            const mUrl = raw.match(/__FILE_URL__:(.+)/);
+            const mName = raw.match(/__FILE_NAME__:(.+)/);
+            if (mUrl) fUrl = mUrl[1].trim().split(/\r?\n/)[0].trim();
+            if (mName) fName = mName[1].trim().split(/\r?\n/)[0].trim() || fName;
+            if (!fUrl) {
+              const m = raw.match(/https?:\/\/[^\s"'<>]+/i);
+              if (m) fUrl = m[0];
+            }
+            ket = raw.replace(/__FILE_(URL|NAME|DRIVE)__:[^\n]*/g, '').trim();
+          }
+          if (fUrl) {
+            html += `<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">📎 <a href="${fUrl}" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">${fName || 'File jawaban'}</a></div>`;
+          } else {
+            html += `<div style="background:#fef2f2;padding:6px;border-radius:4px;margin:4px 0;color:#991b1b;"><i>Belum ada file diunggah</i></div>`;
+          }
+          if (ket) html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;font-size:11px;">Keterangan: ${ket}</div>`;
         } else {
           html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;">${(j && j.jawaban_teks) || '<i>Tidak dijawab</i>'}</div>`;
         }
