@@ -1512,6 +1512,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <button class="pengaturan-tab-btn" data-tab="periode" onclick="togglePengaturanPanel('periode')"><span class="tab-icon">📆</span>Tahun Ajaran</button>
         <button class="pengaturan-tab-btn" data-tab="naik-kelas" onclick="togglePengaturanPanel('naik-kelas')"><span class="tab-icon">⬆️</span>Naik Kelas</button>
         <button class="pengaturan-tab-btn" data-tab="data-lulusan" onclick="togglePengaturanPanel('data-lulusan')"><span class="tab-icon">🎓</span>Data Lulusan</button>
+        <button class="pengaturan-tab-btn" data-tab="integrasi-drive" onclick="togglePengaturanPanel('integrasi-drive')"><span class="tab-icon">☁️</span>Integrasi Drive</button>
       </div>
 
       <!-- PANEL: SESI -->
@@ -1969,6 +1970,49 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
               <tr><td colspan="12" style="text-align:center;">Memuat data...</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+
+      <!-- PANEL: INTEGRASI GOOGLE DRIVE / STORAGE -->
+      <div class="pengaturan-panel" id="panel-integrasi-drive">
+        <h4 class="panel-title">☁️ Integrasi Google Drive (Jawaban Ujian)</h4>
+        <div style="background:#e8f0fe;padding:10px 12px;border-radius:8px;border-left:4px solid var(--primary);margin-bottom:12px;font-size:12px;color:var(--primary);line-height:1.45;">
+          File jawaban soal <b>Unggah File</b> disimpan ke Google Drive jika URL di bawah terisi.
+          Jika kosong / gagal → fallback ke <b>Supabase Storage</b> (bucket <code>ujian-jawaban</code>).
+          <br>Prioritas: <b>1)</b> Google Apps Script → <b>2)</b> Service Account (env server) → <b>3)</b> Supabase Storage.
+        </div>
+        <div id="driveConfigStatus" style="display:none;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:12px;font-weight:600;"></div>
+        <div class="form-group">
+          <label>Key: <code>GOOGLE_DRIVE_UPLOAD_URL</code></label>
+          <input type="url" id="driveGasUrl" placeholder="https://script.google.com/macros/s/XXXX/exec" autocomplete="off" spellcheck="false">
+          <small style="color:#666;font-size:11px;display:block;margin-top:4px;">
+            URL Web App Google Apps Script (deploy sebagai Web App, akses <b>Anyone</b>).
+            Setelah re-deploy GAS, salin URL baru ke sini lalu Simpan.
+          </small>
+        </div>
+        <div class="form-group">
+          <label>Key: <code>GOOGLE_DRIVE_FOLDER_ID</code> <span style="font-weight:500;color:#64748b;">(opsional)</span></label>
+          <input type="text" id="driveFolderId" placeholder="ID folder Google Drive" autocomplete="off" spellcheck="false">
+          <small style="color:#666;font-size:11px;display:block;margin-top:4px;">
+            Dipakai mode Service Account. Dari URL folder: drive.google.com/drive/folders/<b>ID_INI</b>
+          </small>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+          <button type="button" class="btn-primary" style="width:auto;padding:8px 18px;" onclick="saveDriveUploadConfig()">💾 Simpan</button>
+          <button type="button" class="btn-sm" style="background:#0d9488;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:700;" onclick="loadDriveUploadConfig()">🔄 Muat ulang</button>
+          <button type="button" class="btn-sm" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:700;" onclick="testDriveUploadConfig()">🧪 Cek status</button>
+          <button type="button" class="btn-sm" style="background:#64748b;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:700;" onclick="clearDriveGasUrl()">🗑️ Kosongkan URL</button>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;color:#475569;line-height:1.5;">
+          <b style="color:var(--primary);">Petunjuk Google Apps Script</b>
+          <ol style="margin:6px 0 0;padding-left:18px;">
+            <li>Buat project di script.google.com</li>
+            <li>Implementasikan doPost(e) yang menerima data (base64), name, mime</li>
+            <li>Kembalikan JSON: {"url":"...","id":"..."}</li>
+            <li>Deploy → Web app → Who has access: <b>Anyone</b></li>
+            <li>Salin URL /macros/s/.../exec ke field di atas → Simpan</li>
+          </ol>
         </div>
       </div>
 
@@ -5099,6 +5143,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'periode') loadPeriodeSetting();
   if (tab === 'naik-kelas') initNaikKelasPanel();
   if (tab === 'data-lulusan') loadDataLulusan();
+  if (tab === 'integrasi-drive') loadDriveUploadConfig();
 }
 
 function renderSesiConfig(dataList) {
@@ -5178,6 +5223,84 @@ function savePengaturanConfig(config, successMsg) {
     } else showBigPopup('danger', 'Gagal', res.message);
   });
 }
+
+// ===================== INTEGRASI GOOGLE DRIVE =====================
+function loadDriveUploadConfig() {
+  const statusEl = $('driveConfigStatus');
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#f1f5f9';
+    statusEl.style.color = '#475569';
+    statusEl.style.border = '1px solid #e2e8f0';
+    statusEl.textContent = '⏳ Memuat konfigurasi...';
+  }
+  sendRequest({ action: 'get_drive_upload_config' }, res => {
+    if (res.status !== 'success') {
+      if (statusEl) {
+        statusEl.style.background = '#fef2f2';
+        statusEl.style.color = '#991b1b';
+        statusEl.style.border = '1px solid #fecaca';
+        statusEl.textContent = '❌ ' + (res.message || 'Gagal memuat');
+      }
+      return;
+    }
+    if ($('driveGasUrl')) $('driveGasUrl').value = res.gas_url || '';
+    if ($('driveFolderId')) $('driveFolderId').value = res.folder_id || '';
+    renderDriveConfigStatus(res);
+  });
+}
+function renderDriveConfigStatus(res) {
+  const statusEl = $('driveConfigStatus');
+  if (!statusEl) return;
+  statusEl.style.display = 'block';
+  const mode = res.mode || 'supabase';
+  const hasGas = !!(res.gas_url || '').trim();
+  if (mode === 'google_apps_script') {
+    statusEl.style.background = '#dcfce7'; statusEl.style.color = '#166534'; statusEl.style.border = '1px solid #86efac';
+    statusEl.innerHTML = '✅ Mode aktif: <b>Google Apps Script → Drive</b>. File jawaban unggah akan ke Google Drive.';
+  } else if (mode === 'google_service_account') {
+    statusEl.style.background = '#dcfce7'; statusEl.style.color = '#166534'; statusEl.style.border = '1px solid #86efac';
+    statusEl.innerHTML = '✅ Mode aktif: <b>Service Account → Drive</b>.';
+  } else {
+    statusEl.style.background = '#fff7ed'; statusEl.style.color = '#9a3412'; statusEl.style.border = '1px solid #fed7aa';
+    statusEl.innerHTML = '⚠️ Mode aktif: <b>Supabase Storage</b>. ' + (hasGas ? 'URL terisi — simpan ulang / cek deploy GAS.' : 'Isi URL GAS lalu Simpan agar file ke Drive.');
+  }
+}
+function saveDriveUploadConfig() {
+  const gasUrl = ($('driveGasUrl')?.value || '').trim();
+  const folderId = ($('driveFolderId')?.value || '').trim();
+  if (gasUrl && !/^https:\/\//i.test(gasUrl)) {
+    return showBigPopup('warning', 'Peringatan', 'URL harus diawali https://');
+  }
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan konfigurasi Drive...', 0);
+  sendRequest({ action: 'save_drive_upload_config', gas_url: gasUrl, folder_id: folderId }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Integrasi Drive', res.message || 'Selesai');
+    if (res.status === 'success') loadDriveUploadConfig();
+  });
+}
+function clearDriveGasUrl() {
+  if (!confirm('Kosongkan URL Google Apps Script? File akan ke Supabase Storage.')) return;
+  if ($('driveGasUrl')) $('driveGasUrl').value = '';
+  saveDriveUploadConfig();
+}
+function testDriveUploadConfig() {
+  showBigPopup('info', 'Cek status', '⏳ Memeriksa...', 0);
+  sendRequest({ action: 'get_drive_upload_config' }, res => {
+    closeBigPopup();
+    if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message || 'Error');
+    const modeLabel = { google_apps_script: 'Google Apps Script → Drive', google_service_account: 'Service Account → Drive', supabase: 'Supabase Storage' };
+    showBigPopup('info', 'Status Upload Jawaban',
+      '<b>Mode:</b> ' + (modeLabel[res.mode] || res.mode) +
+      '<br><b>URL GAS:</b> ' + (res.gas_url ? '✅ terisi' : '❌ kosong') +
+      '<br><b>Folder ID:</b> ' + (res.folder_id || '—') +
+      '<br><b>Service Account:</b> ' + (res.has_service_account ? '✅' : '—'));
+    renderDriveConfigStatus(res);
+    if ($('driveGasUrl')) $('driveGasUrl').value = res.gas_url || '';
+    if ($('driveFolderId')) $('driveFolderId').value = res.folder_id || '';
+  });
+}
+
 function loadPengaturanDataFromServer() {
   sendRequest({ action: 'get_pengaturan' }, res => {
     if (res.status === 'success') { renderSesiConfig(res.data); }
@@ -9338,7 +9461,7 @@ function loadUjianSoalList() {
     const list = res.data || [];
     window._ujianSoalCache = list;
     if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">Belum ada soal. Klik "Tambah Soal".</p>'; return; }
-    const jenisLabel = { pg: 'Pilihan Ganda', checkbox: 'Checkbox', esai: 'Esai', benar_salah: 'Benar/Salah' };
+    const jenisLabel = { pg: 'Pilihan Ganda', checkbox: 'Checkbox', esai: 'Esai', benar_salah: 'Benar/Salah', unggah: 'Unggah File' };
     box.innerHTML = list.map((s, i) => {
       const opsiHtml = (s.opsi || []).map((o, oi) =>
         `<div style="font-size:12px;padding:4px 0;display:flex;gap:8px;align-items:flex-start;">
@@ -9982,7 +10105,7 @@ function previewImportSoal(ev) {
       box.innerHTML = '<p style="color:#dc2626;">Tidak ada soal yang terbaca. Pastikan format sesuai template (SOAL, JENIS, PERTANYAAN, opsi A/B/C).</p>';
       return;
     }
-    const jenisLabel = { pg: 'PG', checkbox: 'Checkbox', benar_salah: 'B/S', esai: 'Esai' };
+    const jenisLabel = { pg: 'PG', checkbox: 'Checkbox', benar_salah: 'B/S', esai: 'Esai', unggah: 'Unggah' };
     const mediaCount = parsed.reduce((n, s) => {
       const h = s.pertanyaan || '';
       return n + (h.match(/<img\b/gi) || []).length + (h.match(/<table\b/gi) || []).length;
@@ -12143,7 +12266,18 @@ function toggleSoalOpsiUI() {
   const esaiK = $('fmSoalEsaiKunciArea');
   if (area) area.style.display = (j === 'pg' || j === 'checkbox') ? 'block' : 'none';
   if (bs) bs.style.display = j === 'benar_salah' ? 'block' : 'none';
-  if (esaiK) esaiK.style.display = j === 'esai' || j === 'unggah' ? 'block' : 'none';
+  if (esaiK) esaiK.style.display = j === 'esai' ? 'block' : 'none';
+  let unggahHint = document.getElementById('fmSoalUnggahHint');
+  if (j === 'unggah') {
+    if (!unggahHint && esaiK && esaiK.parentNode) {
+      unggahHint = document.createElement('div');
+      unggahHint.id = 'fmSoalUnggahHint';
+      unggahHint.className = 'form-group';
+      unggahHint.innerHTML = '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;font-size:12px;color:#1e40af;">📎 <b>Soal Unggah File</b> — penilaian tidak otomatis; guru menilai manual dari Hasil Ujian.</div>';
+      esaiK.parentNode.insertBefore(unggahHint, esaiK.nextSibling);
+    }
+    if (unggahHint) unggahHint.style.display = 'block';
+  } else if (unggahHint) unggahHint.style.display = 'none';
   const lbl = $('fmSoalOpsiLabel');
   if (lbl) {
     lbl.innerHTML = j === 'pg'
@@ -12649,10 +12783,19 @@ function lihatDetailHasil(pengerjaanId) {
       const s = d.soal;
       html += `<div style="border-top:1px solid #eee;padding:8px 0;font-size:12px;">
         <b>#${i+1}</b> [${s.jenis}] ${s.pertanyaan}<br>`;
-      if (s.jenis === 'esai') {
-        html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;">${(j && j.jawaban_teks) || '<i>Tidak dijawab</i>'}</div>`;
+      if (s.jenis === 'esai' || s.jenis === 'unggah') {
+        if (s.jenis === 'unggah') {
+          const fUrl = (j && (j.file_url || j.fileUrl)) || '';
+          const fName = (j && (j.file_name || j.fileName)) || 'File jawaban';
+          if (fUrl) html += `<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">📎 <a href="${fUrl}" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">${fName}</a></div>`;
+          else html += `<div style="background:#fef2f2;padding:6px;border-radius:4px;margin:4px 0;color:#991b1b;"><i>Belum ada file diunggah</i></div>`;
+          if (j && j.jawaban_teks) html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;font-size:11px;">Keterangan: ${j.jawaban_teks}</div>`;
+        } else {
+          html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;">${(j && j.jawaban_teks) || '<i>Tidak dijawab</i>'}</div>`;
+        }
         if (j && !j.dinilai_guru) {
-          html += `<div style="display:flex;gap:6px;align-items:center;">Nilai esai: <input type="number" id="esaiPoin_${j.id}" value="0" min="0" max="${s.poin}" step="0.5" style="width:70px;"> / ${s.poin}
+          const labelNilai = s.jenis === 'unggah' ? 'Nilai unggahan' : 'Nilai esai';
+          html += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${labelNilai}: <input type="number" id="esaiPoin_${j.id}" value="${j.poin_diperoleh != null ? j.poin_diperoleh : 0}" min="0" max="${s.poin}" step="0.5" style="width:70px;"> / ${s.poin}
             <button class="btn-sm btn-primary" onclick="simpanNilaiEsai('${j.id}',${s.poin})">Simpan</button></div>`;
         } else if (j) {
           html += `<span style="color:green;">Poin: ${j.poin_diperoleh}</span>`;
