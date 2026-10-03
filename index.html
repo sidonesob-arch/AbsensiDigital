@@ -1715,7 +1715,7 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
           📦 <b>Pindahkan Data Lama</b>: memindahkan data kehadiran <b>sebelum hari ini</b> ke tabel Historis. Jalankan manual bila data harian sudah final.
         </div>
         <div style="background:#fef2f2; padding:10px 12px; border-radius:8px; border-left:4px solid #dc2626; margin-top:10px; font-size:12px; color:#991b1b;">
-          ⏱️ <b>Jalankan Auto Absen Sekarang</b>: mengisi status A/B untuk sesi yang sudah tutup (dan propagasi ke sisa sesi). Auto absen juga berjalan otomatis setiap ada scan barcode.
+          ⏱️ <b>Jalankan Auto Absen Sekarang</b>: mengisi status A/B untuk sesi yang sudah tutup (dan propagasi ke sisa sesi). Berjalan otomatis saat dashboard dibuka/refresh dan saat ada scan barcode (tanpa klik manual).
           <br><br>
           ⚠️ <b>Pulihkan Absensi Hari Ini</b>: mengembalikan SEMUA sesi absensi hari ini (siswa &amp; guru) ke status <b>TW</b> — menimpa A/B/Sakit/Izin/TL yang ada. Gunakan hanya jika data hilang/rusak karena bug.
         </div>
@@ -3181,6 +3181,9 @@ function startRealtimeDashboard() {
   if (dashboardTimer) clearInterval(dashboardTimer);
   dashboardTimer = setInterval(fetchDashboardData, 15000);
 }
+let _dashAutoAbsenRunning = false;
+let _dashAutoAbsenLast = 0;
+
 function fetchDashboardData() {
   sendRequest({ action: 'get_dashboard_data' }, res => {
     if (res.status !== 'success') return;
@@ -3208,6 +3211,30 @@ function fetchDashboardData() {
       updateDashboardTables(res.guruList, res.siswaList, res.sesiList);
     }
     updateStatsUI(res.stats);
+
+    // Auto-absen di background (tidak memblokir tampilan tabel).
+    // Setelah sesi tutup, status A/B terisi tanpa klik manual.
+    // Throttle 90 detik agar tidak menumpuk request.
+    try {
+      const now = Date.now();
+      if (!_dashAutoAbsenRunning && (now - _dashAutoAbsenLast) > 90000) {
+        _dashAutoAbsenRunning = true;
+        _dashAutoAbsenLast = now;
+        sendRequest({ action: 'process_auto_absen' }, function (ar) {
+          _dashAutoAbsenRunning = false;
+          if (ar && ar.status === 'success' && (ar.count || 0) > 0) {
+            // Ada baris baru A/B — refresh tabel sekali
+            sendRequest({ action: 'get_dashboard_data' }, function (res2) {
+              if (!res2 || res2.status !== 'success') return;
+              if (res2.isTabelBolehDitampilkan === false) return;
+              updateDashboardTables(res2.guruList, res2.siswaList, res2.sesiList);
+              updateStatsUI(res2.stats);
+              if (res2.infoPesanSistem) setText('realtimeActiveSesi', res2.infoPesanSistem);
+            });
+          }
+        });
+      }
+    } catch (e) { _dashAutoAbsenRunning = false; }
   });
 }
 function updateStatsUI(stats) {
@@ -5720,7 +5747,7 @@ function simpanPinGuru(userId) {
 }
 
 function loadHistorisInfo() {
-  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke Historis lewat tombol "Pindahkan Data Lama". Auto Absen (isi A/B untuk sesi yang sudah tutup) berjalan otomatis saat ada scan barcode; bisa juga dipaksa lewat tombol "Jalankan Auto Absen Sekarang".');
+  setText('historisInfo', 'Data kehadiran di luar hari ini dapat dipindahkan ke Historis lewat tombol "Pindahkan Data Lama". Auto Absen berjalan otomatis saat dashboard dibuka/refresh (~tiap 90 dtk) dan saat scan barcode. Tombol manual tetap tersedia jika perlu memaksa segera.');
 }
 function jalankanAutoAbsenManual() {
   if (!confirm('Jalankan Auto Absen sekarang?\n\nSesi yang sudah tutup dan belum punya status akan diisi:\n• Belum pernah hadir → A (semua sisa sesi)\n• Sudah hadir sesi sebelumnya → B (sisa sesi)\n\nYang sudah TW/TL/A/B tidak ditimpa.')) return;
