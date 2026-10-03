@@ -4687,38 +4687,73 @@ function updateSyaratAccessUI() {
 
 // ===================== LIHAT NILAI SAYA =====================
 const MAPEL_NILAI_ORDER = [
-  { code: 'PAI', label: 'Pendidikan Agama Islam', aliases: ['pai', 'pendidikan agama islam', 'pendidikan agama', 'agama islam', 'agama'] },
-  { code: 'B. IND', label: 'Bahasa Indonesia', aliases: ['b. ind', 'b.ind', 'b ind', 'b_ind', 'b-ind', 'bind', 'bindo', 'bahasa indonesia', 'bahasa indo', 'indonesia', 'indo'] },
-  { code: 'PP', label: 'Pendidikan Pancasila', aliases: ['pp', 'pendidikan pancasila', 'pancasila', 'ppkn', 'pkn', 'pendidikan kewarganegaraan'] },
-  { code: 'MTK', label: 'Matematika', aliases: ['mtk', 'matematika', 'math', 'mat'] },
-  { code: 'IPA', label: 'Ilmu Pengetahuan Alam', aliases: ['ipa', 'ilmu pengetahuan alam', 'sains'] },
-  { code: 'IPS', label: 'Ilmu Pengetahuan Sosial', aliases: ['ips', 'ilmu pengetahuan sosial'] },
-  { code: 'B. ING', label: 'Bahasa Inggris', aliases: ['b. ing', 'b.ing', 'b ing', 'bahasa inggris', 'english', 'bing'] },
-  { code: 'PENJAS', label: 'Pendidikan Jasmani', aliases: ['penjas', 'pjok', 'pendidikan jasmani', 'olahraga', 'penjaskes'] },
-  { code: 'TIK', label: 'Informatika', aliases: ['tik', 'informatika', 'komputer', 't.i.k'] },
-  { code: 'PKR', label: 'Seni Budaya & Prakarya', aliases: ['pkr', 'sbdp', 'seni budaya', 'seni budaya & prakarya', 'seni budaya dan prakarya', 'prakarya', 'senbud'] },
-  { code: 'B. SND', label: 'Bahasa Sunda', aliases: ['b. snd', 'b.snd', 'b snd', 'bahasa sunda', 'sunda'] },
+  { code: 'PAI', label: 'Pendidikan Agama Islam', aliases: ['pai', 'pendidikan agama islam', 'pendidikan agama', 'agama islam', 'pend. agama islam'] },
+  { code: 'B. IND', label: 'Bahasa Indonesia', aliases: ['b. ind', 'b.ind', 'b ind', 'b_ind', 'b-ind', 'bind', 'bindo', 'b indonesia', 'bahasa indonesia', 'bahasa indo'] },
+  { code: 'PP', label: 'Pendidikan Pancasila', aliases: ['pp', 'ppkn', 'pkn', 'pendidikan pancasila', 'pancasila', 'pendidikan kewarganegaraan'] },
+  { code: 'MTK', label: 'Matematika', aliases: ['mtk', 'matematika', 'matematik', 'math'] },
+  { code: 'IPA', label: 'Ilmu Pengetahuan Alam', aliases: ['ipa', 'ilmu pengetahuan alam', 'ilmu pengetahuan aalam', 'ipa ilmu pengetahuan alam', 'sains'] },
+  { code: 'IPS', label: 'Ilmu Pengetahuan Sosial', aliases: ['ips', 'ilmu pengetahuan sosial', 'ips ilmu pengetahuan sosial'] },
+  { code: 'B. ING', label: 'Bahasa Inggris', aliases: ['b. ing', 'b.ing', 'b ing', 'b_ing', 'b-ing', 'bing', 'b inggris', 'bahasa inggris', 'english'] },
+  { code: 'PENJAS', label: 'Pendidikan Jasmani', aliases: ['penjas', 'pjok', 'pendidikan jasmani', 'olahraga', 'penjaskes', 'jasmani'] },
+  { code: 'TIK', label: 'Informatika', aliases: ['tik', 't.i.k', 't i k', 'informatika', 'teknologi informasi', 'komputer', 'tik informatika'] },
+  { code: 'PKR', label: 'Seni Budaya & Prakarya', aliases: ['pkr', 'sbdp', 'sbd', 'seni budaya', 'prakarya', 'seni budaya & prakarya', 'seni budaya dan prakarya', 'pkr seni budaya', 'senbud'] },
+  { code: 'B. SND', label: 'Bahasa Sunda', aliases: ['b. snd', 'b.snd', 'b snd', 'b_snd', 'b-snd', 'bsnd', 'bsunda', 'b sunda', 'bahasa sunda', 'sunda'] },
 ];
 
+function _normMapel(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[()[\]{}]/g, ' ')
+    .replace(/[._\-/]+/g, ' ')
+    .replace(/&/g, ' dan ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function _compactMapel(s) {
+  return _normMapel(s).replace(/\s+/g, '');
+}
+
 function matchMapelOrder(mapelName) {
-  const raw = String(mapelName || '').toLowerCase().trim();
-  if (!raw) return -1;
-  const n = raw.replace(/[._\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  const nCompact = n.replace(/\s+/g, '');
+  const n = _normMapel(mapelName);
+  const c = _compactMapel(mapelName);
+  if (!n) return -1;
+
   for (let i = 0; i < MAPEL_NILAI_ORDER.length; i++) {
     const m = MAPEL_NILAI_ORDER[i];
+    if (c === _compactMapel(m.code) || n === _normMapel(m.label) || c === _compactMapel(m.label)) return i;
     for (const a of m.aliases) {
-      const aN = String(a).toLowerCase().replace(/[._\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-      const aC = aN.replace(/\s+/g, '');
-      if (n === aN || nCompact === aC || n === a || nCompact === String(a).toLowerCase().replace(/\s+/g, '')) return i;
+      if (n === _normMapel(a) || c === _compactMapel(a)) return i;
     }
   }
+
   for (let i = 0; i < MAPEL_NILAI_ORDER.length; i++) {
-    const m = MAPEL_NILAI_ORDER[i];
-    for (const a of m.aliases) {
-      const aN = String(a).toLowerCase().replace(/[._\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-      if (n.includes(aN) || aN.includes(n)) return i;
+    const codeC = _compactMapel(MAPEL_NILAI_ORDER[i].code);
+    if (codeC.length < 2) continue;
+    if (c === codeC || c.startsWith(codeC)) {
+      if (codeC.length === 2) {
+        const codeN = _normMapel(MAPEL_NILAI_ORDER[i].code);
+        if (n === codeN || n.startsWith(codeN + ' ')) return i;
+      } else return i;
     }
+  }
+
+  const candidates = [];
+  for (let i = 0; i < MAPEL_NILAI_ORDER.length; i++) {
+    for (const a of MAPEL_NILAI_ORDER[i].aliases) {
+      const aN = _normMapel(a);
+      const aC = _compactMapel(a);
+      if (aC.length < 5) continue;
+      if (n.includes(aN) || c.includes(aC) || aN.includes(n) || aC.includes(c)) {
+        candidates.push({ i, len: aC.length });
+      }
+    }
+    const labC = _compactMapel(MAPEL_NILAI_ORDER[i].label);
+    if (labC.length >= 5 && (c.includes(labC) || labC.includes(c) || n.includes(_normMapel(MAPEL_NILAI_ORDER[i].label)))) {
+      candidates.push({ i, len: labC.length });
+    }
+  }
+  if (candidates.length) {
+    candidates.sort((a, b) => b.len - a.len);
+    return candidates[0].i;
   }
   return -1;
 }
