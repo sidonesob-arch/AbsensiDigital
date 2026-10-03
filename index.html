@@ -12804,7 +12804,16 @@ function lihatDetailHasil(pengerjaanId) {
           if (fUrl) {
             html += `<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">📎 <a href="${fUrl}" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">${fName || 'File jawaban'}</a></div>`;
           } else {
-            html += `<div style="background:#fef2f2;padding:6px;border-radius:4px;margin:4px 0;color:#991b1b;"><i>Belum ada file diunggah</i></div>`;
+            const jid = (j && j.id) ? j.id : '';
+            const sid = s.id || '';
+            const pid = (p && p.id) ? p.id : '';
+            html += `<div style="background:#fef2f2;padding:8px;border-radius:6px;margin:4px 0;color:#991b1b;font-size:12px;">
+              <i>Belum ada file di database</i> (mungkin hanya di Drive). Tempel link GDrive:
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
+                <input type="url" id="pasteFileUrl_${jid || sid}" placeholder="https://drive.google.com/file/d/.../view" style="flex:1;min-width:180px;padding:6px 8px;border:1px solid #fca5a5;border-radius:6px;font-size:12px;">
+                <button type="button" class="btn-sm btn-primary" onclick="simpanFileUrlJawaban('${jid}','${pid}','${sid}')">Simpan link</button>
+              </div>
+            </div>`;
           }
           if (ket) html += `<div style="background:#f8f9fa;padding:6px;border-radius:4px;margin:4px 0;font-size:11px;">Keterangan: ${ket}</div>`;
         } else {
@@ -12838,6 +12847,30 @@ function simpanNilaiEsai(jawabanId, maxPoin) {
   if (isNaN(poin) || poin < 0 || poin > maxPoin) return showBigPopup('warning', 'Peringatan', `Poin 0–${maxPoin}`);
   sendRequest({ action: 'ujian_nilai_esai', jawaban_id: jawabanId, poin_diperoleh: poin }, res => {
     showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Info', res.message);
+  });
+}
+
+function simpanFileUrlJawaban(jawabanId, pengerjaanId, soalId) {
+  const key = jawabanId || soalId;
+  const inp = document.getElementById('pasteFileUrl_' + key);
+  const url = (inp && inp.value || '').trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return showBigPopup('warning', 'Peringatan', 'Tempel URL file yang valid (https://...).');
+  }
+  showBigPopup('info', 'Menyimpan', '⏳ Menyimpan link file...', 0);
+  sendRequest({
+    action: 'ujian_simpan_file_jawaban',
+    jawaban_id: jawabanId || null,
+    pengerjaan_id: pengerjaanId || null,
+    soal_id: soalId || null,
+    file_url: url,
+    file_name: 'File dari Drive',
+  }, res => {
+    closeBigPopup();
+    showBigPopup(res.status === 'success' ? 'success' : 'danger', 'Link File', res.message || 'Selesai');
+    if (res.status === 'success' && pengerjaanId) {
+      setTimeout(() => lihatDetailHasil(pengerjaanId), 600);
+    }
   });
 }
 
@@ -12948,6 +12981,9 @@ function mulaiUjianSiswa(ujianId) {
     closeBigPopup();
     if (res.status !== 'success') return showBigPopup('danger', 'Gagal', res.message);
     ujianKerjaState = res;
+    if (ujianKerjaState && !ujianKerjaState.ujian_id && res.ujian && res.ujian.id) {
+      ujianKerjaState.ujian_id = res.ujian.id;
+    }
     ujianSubmitInFlight = false;
     $('ujianSiswaList').innerHTML = '';
     $('ujianKerjaArea').style.display = 'block';
@@ -13101,14 +13137,37 @@ function uploadJawabanFileSiswa(inputEl) {
         status.innerHTML = '✅ <a href="'+res.file_url+'" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">' +
           (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>';
       }
-      // autosave segera
+      // autosave segera — kirim file_url eksplisit agar tidak hilang
       try {
-        if (typeof collectJawabanUjian === 'function' && peng.pengerjaan_id) {
+        if (peng.pengerjaan_id) {
+          const jawaban = (typeof collectJawabanUjian === 'function') ? collectJawabanUjian() : [];
+          // pastikan soal ini punya file_url
+          let found = false;
+          for (const j of jawaban) {
+            if (String(j.soal_id) === String(sid)) {
+              j.file_url = res.file_url;
+              j.file_name = res.file_name || file.name;
+              j.file_drive_id = res.file_drive_id || '';
+              found = true;
+            }
+          }
+          if (!found) {
+            jawaban.push({
+              soal_id: sid, teks: '', opsi_ids: [],
+              file_url: res.file_url,
+              file_name: res.file_name || file.name,
+              file_drive_id: res.file_drive_id || '',
+            });
+          }
           sendRequest({
             action: 'ujian_autosave',
             pengerjaan_id: peng.pengerjaan_id,
-            jawaban: collectJawabanUjian(),
-          }, function () {});
+            jawaban,
+          }, function (ar) {
+            if (ar && ar.status !== 'success' && status) {
+              status.innerHTML += ' <span style="color:#b45309;">(autosave: ' + (ar.message || 'gagal') + ')</span>';
+            }
+          });
         }
       } catch (err) { /* ignore */ }
     });
