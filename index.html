@@ -1709,7 +1709,6 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:var(--warning); color:#333;" onclick="moveToHistorisManual()">📦 Pindahkan Data Lama</button>
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:#0d9488;" onclick="jalankanAutoAbsenManual()">⏱️ Jalankan Auto Absen Sekarang</button>
-          <button class="btn-primary" style="width:auto; padding:8px 18px; background:#dc2626;" onclick="pulihkanAbsensiHariIni()">🔄 Pulihkan Absensi Hari Ini → TW</button>
           <button class="btn-primary" style="width:auto; padding:8px 18px; background:#7c3aed;" onclick="samakanSesiSiswa()">📐 Samakan Sesi Siswa → Target Real</button>
         </div>
         <div style="background:#f0fdf4; padding:10px 12px; border-radius:8px; border-left:4px solid #16a34a; margin-top:10px; font-size:12px; color:#166534;">
@@ -1717,8 +1716,90 @@ th { background: var(--primary-lighter); color: var(--primary); font-weight: bol
         </div>
         <div style="background:#fef2f2; padding:10px 12px; border-radius:8px; border-left:4px solid #dc2626; margin-top:10px; font-size:12px; color:#991b1b;">
           ⏱️ <b>Jalankan Auto Absen Sekarang</b>: mengisi status A/B untuk sesi yang sudah tutup (dan propagasi ke sisa sesi). Berjalan otomatis saat dashboard dibuka/refresh dan saat ada scan barcode (tanpa klik manual).
-          <br><br>
-          ⚠️ <b>Pulihkan Absensi Hari Ini</b>: mengembalikan SEMUA sesi absensi hari ini (siswa &amp; guru) ke status <b>TW</b> — menimpa A/B/Sakit/Izin/TL yang ada. Gunakan hanya jika data hilang/rusak karena bug.
+        </div>
+
+        <!-- PULIHKAN ABSENSI (filter) -->
+        <div style="margin-top:14px; background:#fff; border:1px solid #fecaca; border-radius:10px; padding:14px;">
+          <h4 style="margin:0 0 10px; color:#b91c1c; font-size:13px;">🔄 Pulihkan Absensi → TW (Filter)</h4>
+          <p style="font-size:11px; color:#7f1d1d; margin:0 0 12px; line-height:1.45;">
+            Set status terpilih menjadi <b>TW</b> (atau status target lain). Filter tanggal, sesi, status, peran, kelas, lalu centang nama.
+            Baris lama untuk user×sesi×tanggal dihapus lalu diganti. Gunakan hati-hati.
+          </p>
+          <div class="download-filter" style="margin-bottom:10px;">
+            <div class="form-group">
+              <label>Tanggal:</label>
+              <input type="date" id="pulihTanggal">
+            </div>
+            <div class="form-group">
+              <label>Peran:</label>
+              <select id="pulihPeran" onchange="togglePulihKelas()">
+                <option value="all">Semua</option>
+                <option value="siswa">Siswa</option>
+                <option value="guru">Guru</option>
+              </select>
+            </div>
+            <div class="form-group" id="pulihKelasWrap">
+              <label>Kelas:</label>
+              <select id="pulihKelas"><option value="">-- Semua --</option></select>
+            </div>
+            <div class="form-group">
+              <label>Cari nama / ID:</label>
+              <input type="text" id="pulihSearch" placeholder="Nama atau NISN/NIP" oninput="loadPulihPreviewDebounced()">
+            </div>
+            <div class="form-group">
+              <label>Status target:</label>
+              <select id="pulihTargetStatus">
+                <option value="TW" selected>TW</option>
+                <option value="TL">TL</option>
+                <option value="H">H</option>
+                <option value="A">A (Alpa)</option>
+                <option value="B">B (Bolos)</option>
+                <option value="SAKIT">Sakit</option>
+                <option value="IZIN">Izin</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px;">
+            <div>
+              <label style="font-weight:700; font-size:12px;">Sesi (kosong = semua):</label>
+              <div id="pulihSesiChecks" class="checkbox-grid" style="max-height:120px;"></div>
+            </div>
+            <div>
+              <label style="font-weight:700; font-size:12px;">Filter status saat ini (kosong = semua + tanpa record):</label>
+              <div id="pulihStatusChecks" class="checkbox-grid" style="max-height:120px;">
+                <label><input type="checkbox" value="TW"> TW</label>
+                <label><input type="checkbox" value="TL"> TL</label>
+                <label><input type="checkbox" value="H"> H</label>
+                <label><input type="checkbox" value="A"> A</label>
+                <label><input type="checkbox" value="B"> B</label>
+                <label><input type="checkbox" value="SAKIT"> Sakit</label>
+                <label><input type="checkbox" value="IZIN"> Izin</label>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="btn-primary btn-sm" style="width:auto; background:#b91c1c;" onclick="loadPulihPreview()">🔍 Muat Daftar</button>
+            <button type="button" class="btn-primary btn-sm" style="width:auto; background:#16a34a;" onclick="prosesPulihAbsensi(false)">✅ Pulihkan Terpilih</button>
+            <button type="button" class="btn-primary btn-sm" style="width:auto; background:#dc2626;" onclick="prosesPulihAbsensi(true)">⚡ Pulihkan Semua Hasil Filter</button>
+          </div>
+          <div id="pulihSummary" style="display:none; background:#fef2f2; padding:8px 12px; border-radius:8px; font-size:12px; color:#991b1b; margin-bottom:8px;"></div>
+          <div class="table-responsive" style="max-height:320px; overflow-y:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px;"><input type="checkbox" id="pulihCheckAll" onchange="togglePulihSelectAll(this.checked)"></th>
+                  <th>ID</th>
+                  <th>Nama</th>
+                  <th>Peran</th>
+                  <th>Kelas</th>
+                  <th>Status per sesi</th>
+                </tr>
+              </thead>
+              <tbody id="tablePulihBody">
+                <tr><td colspan="6" style="text-align:center; color:#94a3b8;">Pilih filter lalu klik Muat Daftar.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div style="background:#f5f3ff; padding:10px 12px; border-radius:8px; border-left:4px solid #7c3aed; margin-top:8px; font-size:12px; color:#5b21b6;">
           📐 <b>Samakan Sesi Siswa</b>: mengisi sesi yang belum tercatat agar sama dengan total sesi efektif real (mis. 40).
@@ -5200,6 +5281,7 @@ function togglePengaturanPanel(tab) {
   if (tab === 'reset-pin') loadResetPinList();
   if (tab === 'pin-guru') loadPinGuruList();
   if (tab === 'seting-absen') loadSettingAbsen();
+  if (tab === 'historis') { try { initPulihAbsensiPanel(); } catch (e) {} }
   if (tab === 'historis') loadHistorisInfo();
   if (tab === 'izin') loadAllowedUsers();
   if (tab === 'buka-blokir-alpa') loadSiswaBlokirAlpa();
@@ -5957,17 +6039,174 @@ function moveToHistorisManual() {
     if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
   });
 }
-function pulihkanAbsensiHariIni() {
-  if (!confirm('PULIHKAN absensi HARI INI?\n\nSemua sesi siswa & guru hari ini akan di-set ke status TW (termasuk yang Alpa/Bolos/Sakit/Izin/TL).\n\nTindakan ini tidak bisa dibatalkan otomatis.')) return;
-  if (!confirm('Konfirmasi sekali lagi: set SEMUA absensi hari ini → TW?')) return;
-  showBigPopup('info', 'Pemulihan', '⏳ Memulihkan absensi hari ini ke TW...', 0);
-  sendRequest({ action: 'pulihkan_absensi_hari_ini' }, res => {
+let _pulihDebounce = null;
+let _pulihCache = [];
+
+function initPulihAbsensiPanel() {
+  const tgl = document.getElementById('pulihTanggal');
+  if (tgl && !tgl.value) {
+    try {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      tgl.value = y + '-' + m + '-' + d;
+    } catch (e) {}
+  }
+  sendRequest({ action: 'get_kelas' }, res => {
+    const sel = document.getElementById('pulihKelas');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">-- Semua --</option>';
+    (res.data || []).forEach(k => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = k;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  });
+  sendRequest({ action: 'get_pengaturan' }, res => {
+    const box = document.getElementById('pulihSesiChecks');
+    if (!box) return;
+    let rows = [];
+    if (res && res.status === 'success' && Array.isArray(res.data)) {
+      rows = res.data.map(s => s.sesi || s.nama_sesi || s.nama || '').filter(Boolean);
+    }
+    if (!rows.length && res && Array.isArray(res.sesi)) {
+      rows = res.sesi.map(s => (typeof s === 'string' ? s : (s.sesi || s.nama_sesi || ''))).filter(Boolean);
+    }
+    if (!rows.length) {
+      box.innerHTML = '<span style="font-size:11px;color:#94a3b8;">Sesi belum dimuat — backend akan memakai semua sesi konfigurasi.</span>';
+      return;
+    }
+    box.innerHTML = rows.map(n =>
+      '<label><input type="checkbox" class="pulih-sesi-cb" value="' + String(n).replace(/"/g, '&quot;') + '"> ' + n + '</label>'
+    ).join('');
+  });
+  togglePulihKelas();
+}
+
+function togglePulihKelas() {
+  const peran = (document.getElementById('pulihPeran') || {}).value || 'all';
+  const wrap = document.getElementById('pulihKelasWrap');
+  if (wrap) wrap.style.display = (peran === 'guru') ? 'none' : '';
+}
+
+function loadPulihPreviewDebounced() {
+  clearTimeout(_pulihDebounce);
+  _pulihDebounce = setTimeout(loadPulihPreview, 400);
+}
+
+function collectPulihFilters() {
+  const sesi = Array.from(document.querySelectorAll('.pulih-sesi-cb:checked')).map(c => c.value);
+  const status = Array.from(document.querySelectorAll('#pulihStatusChecks input:checked')).map(c => c.value);
+  return {
+    action: 'pulihkan_absensi',
+    mode: 'preview',
+    tanggal: (document.getElementById('pulihTanggal') || {}).value || '',
+    peran: (document.getElementById('pulihPeran') || {}).value || 'all',
+    kelas: (document.getElementById('pulihKelas') || {}).value || '',
+    search: (document.getElementById('pulihSearch') || {}).value || '',
+    sesi,
+    status,
+    target_status: (document.getElementById('pulihTargetStatus') || {}).value || 'TW',
+  };
+}
+
+function loadPulihPreview() {
+  const tbody = document.getElementById('tablePulihBody');
+  const sum = document.getElementById('pulihSummary');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">⏳ Memuat...</td></tr>';
+  const payload = collectPulihFilters();
+  if (!payload.tanggal) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b91c1c;">Isi tanggal dulu.</td></tr>';
+    return;
+  }
+  sendRequest(payload, res => {
+    if (!tbody) return;
+    if (!res || res.status !== 'success') {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b91c1c;">' + ((res && res.message) || 'Gagal') + '</td></tr>';
+      if (sum) { sum.style.display = 'block'; sum.textContent = res && res.message ? res.message : 'Gagal'; }
+      return;
+    }
+    _pulihCache = res.data || [];
+    if (sum) {
+      sum.style.display = 'block';
+      sum.innerHTML = '<b>' + _pulihCache.length + ' orang</b> · Tanggal <b>' + (res.tanggal || payload.tanggal) +
+        '</b> · Sesi: ' + (res.sesi || []).join(', ') +
+        ' · Target: <b>' + (res.target_status || 'TW') + '</b>';
+    }
+    if (!_pulihCache.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Tidak ada data sesuai filter.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _pulihCache.map(r => {
+      const uid = String(r.user_id || '').replace(/"/g, '&quot;');
+      return '<tr>' +
+        '<td style="text-align:center;"><input type="checkbox" class="pulih-check" value="' + uid + '" style="width:16px;height:16px;"></td>' +
+        '<td>' + (r.user_id || '') + '</td>' +
+        '<td>' + (r.nama || '') + '</td>' +
+        '<td>' + (r.peran || '') + '</td>' +
+        '<td>' + (r.kelas || '—') + '</td>' +
+        '<td style="font-size:11px;">' + (r.status_ringkas || '') + '</td>' +
+        '</tr>';
+    }).join('');
+    const ca = document.getElementById('pulihCheckAll');
+    if (ca) ca.checked = false;
+  });
+}
+
+function togglePulihSelectAll(checked) {
+  document.querySelectorAll('.pulih-check').forEach(c => { c.checked = !!checked; });
+}
+
+function prosesPulihAbsensi(semua) {
+  const payload = collectPulihFilters();
+  payload.mode = 'proses';
+  payload.semua = !!semua;
+  payload.target_status = (document.getElementById('pulihTargetStatus') || {}).value || 'TW';
+  if (!payload.tanggal) return showBigPopup('warning', 'Peringatan', 'Isi tanggal terlebih dahulu.');
+  const ids = Array.from(document.querySelectorAll('.pulih-check:checked')).map(c => c.value);
+  if (!semua && !ids.length) {
+    return showBigPopup('warning', 'Peringatan', 'Centang minimal 1 nama, atau gunakan Pulihkan Semua Hasil Filter.');
+  }
+  payload.ids = ids;
+  const n = semua ? (_pulihCache.length || 'semua hasil filter') : ids.length;
+  const sesiLabel = payload.sesi.length ? payload.sesi.join(', ') : 'semua sesi';
+  const msg =
+    'Pulihkan ' + n + ' orang pada ' + payload.tanggal +
+    '\nSesi: ' + sesiLabel +
+    '\nStatus target: ' + payload.target_status +
+    '\n\nBaris lama user×sesi di tanggal ini akan diganti. Lanjutkan?';
+  if (!confirm(msg)) return;
+  if (!confirm('Konfirmasi sekali lagi: set ke ' + payload.target_status + '?')) return;
+  showBigPopup('info', 'Pemulihan', '⏳ Memulihkan absensi...', 0);
+  sendRequest(payload, res => {
     closeBigPopup();
     const ok = res && res.status === 'success';
     showBigPopup(ok ? 'success' : 'danger', 'Pemulihan Absensi', (res && res.message) || (ok ? 'Selesai' : 'Gagal'));
-    if (ok && typeof fetchDashboardData === 'function') fetchDashboardData();
+    if (ok) {
+      loadPulihPreview();
+      if (typeof fetchDashboardData === 'function') try { fetchDashboardData(); } catch (e) {}
+    }
   });
 }
+
+/** Kompatibilitas tombol lama */
+function pulihkanAbsensiHariIni() {
+  initPulihAbsensiPanel();
+  const tgl = document.getElementById('pulihTanggal');
+  if (tgl && !tgl.value) {
+    const now = new Date();
+    tgl.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  }
+  showBigPopup('info', 'Pulihkan Absensi', 'Gunakan panel filter di Manajemen Historis: pilih tanggal/sesi/status, muat daftar, centang nama, lalu Pulihkan.', 3500);
+  try {
+    if (typeof togglePengaturanPanel === 'function') togglePengaturanPanel('historis');
+  } catch (e) {}
+  setTimeout(loadPulihPreview, 200);
+}
+
 function samakanSesiSiswa() {
   if (!confirm('Samakan jumlah sesi setiap siswa ke total sesi efektif real?\n\n• Sesi baru: ~80% TW + ~20% Alpa\n• Data TL/Izin/Sakit/B tidak dihapus\n• Diproses per batch (otomatis lanjut) agar tidak timeout\n\nProses bisa 1–3 menit jika siswa banyak.')) return;
   const state = {
