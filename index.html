@@ -13134,8 +13134,44 @@ function uploadJawabanFileSiswa(inputEl) {
     inputEl.value = '';
     return;
   }
+
+  // Validasi: sudah ada file → konfirmasi ganti
+  const urlEl0 = document.querySelector('.uji-jawab-file-url[data-soal="'+sid+'"]');
+  const nameEl0 = document.querySelector('.uji-jawab-file-name[data-soal="'+sid+'"]');
+  const driveEl0 = document.querySelector('.uji-jawab-file-drive[data-soal="'+sid+'"]');
+  let existingUrl = (urlEl0 && urlEl0.value) ? urlEl0.value.trim() : '';
+  let existingName = (nameEl0 && nameEl0.value) ? nameEl0.value.trim() : '';
+  let existingDriveId = (driveEl0 && driveEl0.value) ? driveEl0.value.trim() : '';
+  if (!existingUrl) {
+    try {
+      const peng0 = window.ujianKerjaState || {};
+      const pid0 = peng0.pengerjaan_id || inputEl.getAttribute('data-pengerjaan') || '';
+      const raw = localStorage.getItem('ujian_file_' + pid0 + '_' + sid);
+      if (raw) {
+        const o = JSON.parse(raw);
+        if (o && o.file_url) {
+          existingUrl = o.file_url;
+          existingName = o.file_name || existingName;
+          existingDriveId = o.file_drive_id || existingDriveId;
+        }
+      }
+    } catch (e) {}
+  }
+  if (existingUrl) {
+    const label = existingName ? ('"' + existingName + '"') : 'file sebelumnya';
+    const ok = confirm(
+      'Yakin mengganti jawabanmu?\n\n' +
+      'File lama: ' + label + '\n' +
+      'Jika Ya, file lama akan dihapus dan diganti file baru.'
+    );
+    if (!ok) {
+      inputEl.value = '';
+      return;
+    }
+  }
+
   const status = document.querySelector('.uji-file-status[data-soal="'+sid+'"]');
-  if (status) status.innerHTML = '⏳ Mengunggah ' + file.name + '...';
+  if (status) status.innerHTML = '⏳ Mengunggah ' + file.name + (existingUrl ? ' (mengganti file lama)...' : '') + '...';
   // Ambil pengerjaan_id dari state / DOM / sessionStorage (jangan sampai kosong)
   let peng = window.ujianKerjaState || {};
   let pengerjaanId = String(peng.pengerjaan_id || inputEl.getAttribute('data-pengerjaan') || '').trim();
@@ -13167,6 +13203,9 @@ function uploadJawabanFileSiswa(inputEl) {
       ujian_id: ujianId || peng.ujian_id || '',
       soal_id: sid,
       pengerjaan_id: pengerjaanId,
+      replace_old_url: existingUrl || '',
+      replace_old_drive_id: existingDriveId || '',
+      replace_old_name: existingName || '',
     }, res => {
       if (res.status !== 'success' || !res.file_url) {
         if (status) status.innerHTML = '<span style="color:#b91c1c;">❌ ' + (res.message || 'Upload gagal') + '</span>';
@@ -13192,9 +13231,12 @@ function uploadJawabanFileSiswa(inputEl) {
       const dbHint = (res.db_saved === false)
         ? ' <span style="color:#b45309;">⚠ DB: ' + (res.db_error || 'meta belum tersimpan') + '</span>'
         : (res.db_saved ? ' <span style="color:#166534;">· DB OK</span>' : '');
+      const delHint = res.old_file_deleted
+        ? ' <span style="color:#166534;">· file lama dihapus</span>'
+        : (res.old_file_delete_error ? ' <span style="color:#b45309;">· file lama: ' + res.old_file_delete_error + '</span>' : '');
       if (status) {
         status.innerHTML = '✅ <a href="'+res.file_url+'" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">' +
-          (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>' + dbHint;
+          (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>' + dbHint + delHint;
       }
       // autosave segera — kirim file_url eksplisit agar tidak hilang
       try {
