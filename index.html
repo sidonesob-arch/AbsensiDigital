@@ -4789,6 +4789,36 @@ function loadNilaiSaya() {
     const cols = res.columns || { rnh: true, pts: false, pas: false, pat: false, us: false, nr: true };
     const serverRows = res.data || [];
 
+    // Info mapel mentah dari DB (untuk cek matching)
+    try {
+      let info = document.getElementById('nilaiSayaMapelInfo');
+      if (!info) {
+        const content = $('nilaiSayaContent');
+        if (content) {
+          info = document.createElement('div');
+          info.id = 'nilaiSayaMapelInfo';
+          info.style.cssText = 'font-size:11px;color:#64748b;margin:0 0 10px;line-height:1.45;';
+          const tableWrap = content.querySelector('.table-responsive') || content.querySelector('table') || content.lastElementChild;
+          if (tableWrap) content.insertBefore(info, tableWrap);
+          else content.appendChild(info);
+        }
+      }
+      if (info) {
+        const mentah = res.mapel_di_db || [];
+        const unmatched = res.mapel_unmatched || [];
+        const fb = res.periode_fallback ? ' · <span style="color:#b45309;">periode: menampilkan semua data (filter semester tidak cocok)</span>' : '';
+        if (!mentah.length) {
+          info.innerHTML = 'Belum ada baris nilai di database untuk NISN ini.' + fb;
+        } else if (unmatched.length) {
+          info.innerHTML = 'Mapel di DB yang belum cocok template: <b style="color:#b45309;">' +
+            unmatched.map(m => String(m)).join(', ') +
+            '</b>. Samakan nama di menu Input Nilai / SQL agar digabung ke baris standar.' + fb;
+        } else {
+          info.innerHTML = 'Semua mapel di DB berhasil dicocokkan (' + mentah.length + ' nama).' + fb;
+        }
+      }
+    } catch (e) {}
+
     let headHtml = `<tr>
       <th style="width:36px;">No</th>
       <th>Mata Pelajaran</th>
