@@ -13093,6 +13093,21 @@ function collectJawabanUjian() {
     map[sid].file_name = nm ? nm.value : '';
     map[sid].file_drive_id = dr ? dr.value : '';
   });
+  // Merge backup localStorage (jika hidden input kosong)
+  try {
+    const pid = (window.ujianKerjaState && window.ujianKerjaState.pengerjaan_id) || '';
+    Object.keys(map).forEach(sid => {
+      if (map[sid].file_url) return;
+      const raw = localStorage.getItem('ujian_file_' + pid + '_' + sid);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      if (o && o.file_url) {
+        map[sid].file_url = o.file_url;
+        map[sid].file_name = o.file_name || '';
+        map[sid].file_drive_id = o.file_drive_id || '';
+      }
+    });
+  } catch (e) {}
   return Object.values(map);
 }
 
@@ -13132,10 +13147,23 @@ function uploadJawabanFileSiswa(inputEl) {
       if (urlEl) urlEl.value = res.file_url;
       if (nameEl) nameEl.value = res.file_name || file.name;
       if (driveEl) driveEl.value = res.file_drive_id || '';
+      // Backup lokal agar submit tetap bawa file_url
+      try {
+        const key = 'ujian_file_' + (peng.pengerjaan_id || 'x') + '_' + sid;
+        localStorage.setItem(key, JSON.stringify({
+          file_url: res.file_url,
+          file_name: res.file_name || file.name,
+          file_drive_id: res.file_drive_id || '',
+          at: Date.now(),
+        }));
+      } catch (e) {}
       const where = res.storage === 'google_drive' ? 'Google Drive' : 'Storage';
+      const dbHint = (res.db_saved === false)
+        ? ' <span style="color:#b45309;">⚠ DB: ' + (res.db_error || 'meta belum tersimpan') + '</span>'
+        : (res.db_saved ? ' <span style="color:#166534;">· DB OK</span>' : '');
       if (status) {
         status.innerHTML = '✅ <a href="'+res.file_url+'" target="_blank" rel="noopener" style="color:#05285e;font-weight:700;">' +
-          (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>';
+          (res.file_name || file.name) + '</a> <span style="color:#64748b;font-weight:500;">('+where+')</span>' + dbHint;
       }
       // autosave segera — kirim file_url eksplisit agar tidak hilang
       try {
